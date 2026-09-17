@@ -137,7 +137,6 @@ public class JdbcClientLedgerRepository implements LedgerRepository {
     List<Row> rows = jdbc.sql("""
         select a.public_id as account_public_id, p.direction, p.amount
         from ledger.journal_transaction t
-        left join ledger.journal_transaction r on r.id = t.reversal_of
         join ledger.journal_posting p on p.transaction_id = t.id
         join ledger.ledger_account a on a.id = p.account_id
         where t.public_id = :publicId

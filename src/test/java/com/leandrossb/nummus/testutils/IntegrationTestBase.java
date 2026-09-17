@@ -36,9 +36,12 @@ public abstract class IntegrationTestBase {
         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
   }
 
+  /** Password {@code LedgerRolesTest} grants to the {@code nummus_app} login in its {@code @BeforeAll}. */
+  protected static final String APP_ROLE_PASSWORD = "nummus-app-test";
+
   /** Least-privileged application-role connection; {@code LedgerRolesTest} enables this
    * login in its {@code @BeforeAll}. */
   protected static Connection appConnection() throws SQLException {
-    return DriverManager.getConnection(POSTGRES.getJdbcUrl(), "nummus_app", "nummus-app-test");
+    return DriverManager.getConnection(POSTGRES.getJdbcUrl(), "nummus_app", APP_ROLE_PASSWORD);
   }
 }

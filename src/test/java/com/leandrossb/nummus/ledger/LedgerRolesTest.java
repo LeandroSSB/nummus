@@ -21,12 +21,10 @@ import org.junit.jupiter.api.TestInstance;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LedgerRolesTest extends IntegrationTestBase {
 
-  private static final String APP_PASSWORD = "nummus-app-test";
-
   @BeforeAll
   static void enableAppRoleLogin() throws SQLException {
     try (Connection c = adminConnection(); Statement st = c.createStatement()) {
-      st.execute("ALTER ROLE nummus_app LOGIN PASSWORD '" + APP_PASSWORD + "'");
+      st.execute("ALTER ROLE nummus_app LOGIN PASSWORD '" + APP_ROLE_PASSWORD + "'");
     }
   }
 

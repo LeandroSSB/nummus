@@ -10,7 +10,6 @@ import com.leandrossb.nummus.ledger.domain.AccountType;
 import com.leandrossb.nummus.ledger.domain.Direction;
 import com.leandrossb.nummus.ledger.domain.LedgerAccount;
 import com.leandrossb.nummus.ledger.domain.Money;
-import com.leandrossb.nummus.ledger.domain.Page;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
 import com.leandrossb.nummus.ledger.domain.PostedPosting;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
