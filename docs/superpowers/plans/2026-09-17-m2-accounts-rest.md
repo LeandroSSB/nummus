@@ -110,7 +110,8 @@ class ModuleBoundaryTest {
   @ArchTest
   static final ArchRule accountsNeverTouchLedgerInfrastructure =
       noClasses().that().resideInAPackage("..accounts..")
-          .should().dependOnClassesThat().resideInAPackage("..ledger.infrastructure..");
+          .should().dependOnClassesThat().resideInAPackage("..ledger.infrastructure..")
+          .allowEmptyShould(true); // accounts does not exist yet in M1; enforces from Task 4 on
 
   @ArchTest
   static final ArchRule ledgerNeverTouchesAccounts =
@@ -125,7 +126,7 @@ class ModuleBoundaryTest {
 
   @ArchTest
   static final ArchRule persistenceTypesOnlyInInfrastructure =
-      noClasses().that().resideOutsidePackage("..infrastructure..")
+      noClasses().that().resideOutsideOfPackage("..infrastructure..")
           .should().dependOnClassesThat()
           .resideInAnyPackage("org.springframework.jdbc..", "java.sql..");
 }
