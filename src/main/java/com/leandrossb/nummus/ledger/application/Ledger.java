@@ -20,6 +20,12 @@ public interface Ledger {
 
   LedgerAccount closeAccount(UUID publicId);
 
+  /** Restores a FROZEN account to ACTIVE. CLOSED is terminal. */
+  LedgerAccount unfreezeAccount(UUID publicId);
+
+  /** The ledger account by public id. */
+  LedgerAccount getAccount(UUID publicId);
+
   /** Appends a balanced journal transaction atomically. */
   PostedTransaction post(PostTransactionCommand cmd);
 
