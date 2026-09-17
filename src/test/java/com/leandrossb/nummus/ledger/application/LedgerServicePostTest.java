@@ -142,6 +142,18 @@ class LedgerServicePostTest {
   }
 
   @Test
+  void reverseToNonActiveAccountThrowsDomainException() {
+    var asset = account("cash", AccountType.ASSET);
+    var liability = account("payable", AccountType.LIABILITY);
+    var posted = ledger.post(new PostTransactionCommand("funding", List.of(
+        new PostingDraft(asset.publicId(), Direction.DEBIT, Money.ofBrl("50.0000")),
+        new PostingDraft(liability.publicId(), Direction.CREDIT, Money.ofBrl("50.0000")))));
+    ledger.freezeAccount(liability.publicId());
+    assertThrows(AccountNotActiveException.class,
+        () -> ledger.reverse(posted.publicId(), "late undo"));
+  }
+
+  @Test
   void getTransactionRoundTrips() {
     var asset = account("cash", AccountType.ASSET);
     var liability = account("payable", AccountType.LIABILITY);

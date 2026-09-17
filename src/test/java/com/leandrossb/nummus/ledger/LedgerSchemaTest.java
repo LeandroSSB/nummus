@@ -25,8 +25,9 @@ class LedgerSchemaTest extends IntegrationTestBase {
             + counterPublicId + "', 'schema test', 'LIABILITY')");
         st.executeUpdate("INSERT INTO ledger.journal_transaction (public_id, memo) VALUES ('"
             + txPublicId + "', 'schema test')");
-        // Both legs in one statement: the deferred balance trigger fires at the
-        // statement's commit and would reject a lone posting.
+        // Both legs in one statement: the deferred balance trigger fires at
+        // transaction commit — under autocommit that is the statement's end —
+        // and would reject a lone posting.
         st.executeUpdate("INSERT INTO ledger.journal_posting (transaction_id, account_id, direction, amount) "
             + "SELECT t.id, a.id, 'DEBIT', 10.0000 FROM ledger.journal_transaction t, ledger.ledger_account a "
             + "WHERE t.public_id = '" + txPublicId + "' AND a.public_id = '" + accountPublicId + "' "

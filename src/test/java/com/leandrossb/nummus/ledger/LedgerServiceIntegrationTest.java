@@ -1,7 +1,6 @@
 package com.leandrossb.nummus.ledger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -49,8 +48,20 @@ class LedgerServiceIntegrationTest extends IntegrationTestBase {
 
     assertThrows(TransactionAlreadyReversedException.class, () -> ledger.reverse(tx.publicId(), "again"));
     var redo = ledger.reverse(reversal.publicId(), "redo funding");
-    assertNotNull(redo.reversalOf());
+    assertEquals(reversal.publicId(), redo.reversalOf());
     assertEquals(0, ledger.balance(asset.publicId()).compareTo(Money.ofBrl("150.0000")));
+  }
+
+  @Test
+  void reverseToNonActiveAccountThrowsDomainExceptionNotAnInfrastructureError() {
+    var asset = ledger.openAccount(new OpenAccountCommand("frozen-rev cash", AccountType.ASSET, BRL));
+    var liability = ledger.openAccount(
+        new OpenAccountCommand("frozen-rev payable", AccountType.LIABILITY, BRL));
+    var tx = ledger.post(new PostTransactionCommand("funding", List.of(
+        new PostingDraft(asset.publicId(), Direction.DEBIT, Money.ofBrl("25.0000")),
+        new PostingDraft(liability.publicId(), Direction.CREDIT, Money.ofBrl("25.0000")))));
+    ledger.freezeAccount(liability.publicId());
+    assertThrows(AccountNotActiveException.class, () -> ledger.reverse(tx.publicId(), "late undo"));
   }
 
   @Test

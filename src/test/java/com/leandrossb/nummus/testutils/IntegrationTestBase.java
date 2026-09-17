@@ -36,7 +36,8 @@ public abstract class IntegrationTestBase {
         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
   }
 
-  /** Least-privileged application-role connection (usable once Task 9 enables its login). */
+  /** Least-privileged application-role connection; {@code LedgerRolesTest} enables this
+   * login in its {@code @BeforeAll}. */
   protected static Connection appConnection() throws SQLException {
     return DriverManager.getConnection(POSTGRES.getJdbcUrl(), "nummus_app", "nummus-app-test");
   }

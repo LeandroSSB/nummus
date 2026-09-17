@@ -8,6 +8,7 @@ import com.leandrossb.nummus.ledger.domain.AccountType;
 import com.leandrossb.nummus.ledger.domain.LedgerAccount;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Currency;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -54,7 +55,10 @@ class LedgerRepositoryAccountsTest extends IntegrationTestBase {
     var closed = repository.findAccount(account.publicId()).orElseThrow();
     assertEquals(AccountStatus.CLOSED, closed.status());
     assertTrue(closed.closedAt() != null);
-    assertEquals(closedAt.toEpochMilli() / 1000, closed.closedAt().toEpochMilli() / 1000);
+    // timestamptz keeps microseconds while Instant.now() carries nanoseconds,
+    // so compare at the precision the database actually round-trips.
+    assertEquals(closedAt.truncatedTo(ChronoUnit.MILLIS),
+        closed.closedAt().truncatedTo(ChronoUnit.MILLIS));
 
     assertTrue(!repository.updateAccountStatus(UUID.randomUUID(), AccountStatus.FROZEN, null));
   }

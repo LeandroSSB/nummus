@@ -10,7 +10,7 @@ class ApplicationSmokeTest extends IntegrationTestBase {
   @Test
   void springContextStartsAndFlywayRuns() {
     assertDoesNotThrow(() -> {
-      // Context startup already ran Flyway (zero migrations is a valid state).
+      // Context startup already ran Flyway and applied the pending migrations.
       // Reaching here means datasource + Flyway wiring are correct.
     });
   }

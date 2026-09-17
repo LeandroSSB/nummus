@@ -89,6 +89,11 @@ public class LedgerServiceImpl implements Ledger {
     List<PostingDraft> mirrored = original.postings().stream()
         .map(p -> new PostingDraft(p.accountPublicId(), p.direction().opposite(), p.amount()))
         .toList();
+    // Mirrored postings are count/side/balance-valid by construction; validating
+    // them here reuses the account-existence/ACTIVE/currency checks so a frozen
+    // or closed account fails fast with a domain exception instead of surfacing
+    // the deferred trigger's commit-time error as raw infrastructure failure.
+    requireValidPostings(mirrored);
     try {
       return repository.insertTransaction(memo, transactionPublicId, mirrored);
     } catch (DataIntegrityViolationException e) {

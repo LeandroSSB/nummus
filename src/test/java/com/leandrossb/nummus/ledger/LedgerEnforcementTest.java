@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.UUID;
@@ -119,22 +120,52 @@ class LedgerEnforcementTest extends IntegrationTestBase {
 
   @Test
   void journalIsImmutableEvenForTheOwner() throws Exception {
+    // Row-level triggers only fire when a statement matches at least one row,
+    // so the probe seeds its own account, transaction, and balanced postings
+    // instead of relying on rows left behind by other tests.
+    String assetPublicId;
+    String txPublicId = UUID.randomUUID().toString();
+    try (Connection c = adminConnection();
+        Statement st = c.createStatement()) {
+      assetPublicId = insertAccount(c, "imm-asset");
+      insertAccount(c, "imm-liability");
+      st.executeUpdate("INSERT INTO ledger.journal_transaction (public_id, memo) VALUES ('"
+          + txPublicId + "', 'immutability test')");
+      // Both legs in one statement so the deferred balance trigger sees a
+      // balanced transaction when the statement's implicit transaction commits.
+      st.executeUpdate("INSERT INTO ledger.journal_posting (transaction_id, account_id, direction, amount) "
+          + "SELECT t.id, a.id, 'DEBIT', 10.0000 FROM ledger.journal_transaction t, ledger.ledger_account a "
+          + "WHERE t.public_id = '" + txPublicId + "' AND a.name = 'imm-asset' "
+          + "UNION ALL "
+          + "SELECT t.id, a.id, 'CREDIT', 10.0000 FROM ledger.journal_transaction t, ledger.ledger_account a "
+          + "WHERE t.public_id = '" + txPublicId + "' AND a.name = 'imm-liability'");
+    }
+    long debitPostingId;
+    try (Connection c = adminConnection();
+        Statement st = c.createStatement();
+        ResultSet rs = st.executeQuery(
+            "SELECT p.id FROM ledger.journal_posting p"
+                + " JOIN ledger.journal_transaction t ON t.id = p.transaction_id"
+                + " WHERE t.public_id = '" + txPublicId + "' AND p.direction = 'DEBIT'")) {
+      rs.next();
+      debitPostingId = rs.getLong(1);
+    }
     try (Connection c = adminConnection();
         Statement st = c.createStatement()) {
       try {
-        st.executeUpdate("UPDATE ledger.journal_posting SET amount = 1.0000");
+        st.executeUpdate("UPDATE ledger.journal_posting SET amount = 1.0000 WHERE id = " + debitPostingId);
         fail("UPDATE on journal_posting must be blocked");
       } catch (PSQLException e) {
         assertTrue(rootMessage(e).contains("append-only"), rootMessage(e));
       }
       try {
-        st.executeUpdate("DELETE FROM ledger.journal_transaction");
+        st.executeUpdate("DELETE FROM ledger.journal_transaction WHERE public_id = '" + txPublicId + "'");
         fail("DELETE on journal_transaction must be blocked");
       } catch (PSQLException e) {
         assertTrue(rootMessage(e).contains("append-only"), rootMessage(e));
       }
       try {
-        st.executeUpdate("DELETE FROM ledger.ledger_account");
+        st.executeUpdate("DELETE FROM ledger.ledger_account WHERE public_id = '" + assetPublicId + "'");
         fail("DELETE on ledger_account must be blocked");
       } catch (PSQLException e) {
         assertTrue(rootMessage(e).contains("append-only"), rootMessage(e));

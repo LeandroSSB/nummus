@@ -13,7 +13,6 @@ import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.Page;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
 import com.leandrossb.nummus.ledger.domain.PostedPosting;
-import com.leandrossb.nummus.ledger.domain.PostedTransaction;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.math.BigDecimal;
 import java.time.Instant;
