@@ -98,6 +98,7 @@ create index payment_account_holder_idx on accounts.payment_account (holder_name
 grant usage on schema accounts to nummus_app;
 grant select, insert on accounts.payment_account to nummus_app;
 grant update (status, closed_at) on accounts.payment_account to nummus_app;
+grant usage on all sequences in schema accounts to nummus_app;
 ```
 
 Least privilege mirrors V3: the app role can read, append, and transition
@@ -112,7 +113,9 @@ status — nothing else. Unlike the journal, this table legitimately mutates
   then inserts the accounts row with that `public_id` as ACTIVE.
 - **freeze** — CLOSED is terminal (`PaymentAccountNotActiveException`);
   otherwise dual-write FROZEN.
-- **unfreeze** — allowed only from FROZEN (CLOSED terminal); dual-write
+- **unfreeze** — allowed only from FROZEN; unfreezing an ACTIVE account
+  throws `IllegalArgumentException` (invalid transition, not a lifecycle
+  state), CLOSED is terminal (`PaymentAccountNotActiveException`); dual-write
   ACTIVE; `closed_at` remains null (a frozen account never had one).
 - **close** — CLOSED terminal; otherwise dual-write CLOSED with
   `closed_at = now()`.
@@ -165,11 +168,15 @@ already fail fast in the services; this catches the mid-flight race (account
 frozen between validation and COMMIT) and any future writer that bypasses
 the services. Unmatched commit failures rethrow as 500.
 
-## Ledger port change
+## Ledger port changes
 
-`Ledger.unfreezeAccount(UUID publicId)` → `LedgerAccount`; implemented in
-`LedgerServiceImpl.transitionStatus(publicId, ACTIVE, null)` — CLOSED still
-terminal. Unit tests (fake) + integration tests mirror freeze's.
+- `Ledger.unfreezeAccount(UUID publicId)` → `LedgerAccount`; implemented in
+  `LedgerServiceImpl.transitionStatus(publicId, ACTIVE, null)` — CLOSED still
+  terminal. Unit tests (fake) + integration tests mirror freeze's.
+- `Ledger.getAccount(UUID publicId)` → `LedgerAccount` (throws
+  `UnknownAccountException`) — the accounts service needs the backing
+  account's type to apply the natural-sign rule; this is the minimal read
+  that provides it.
 
 ## Testing
 
