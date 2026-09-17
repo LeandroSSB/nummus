@@ -1,0 +1,41 @@
+package com.leandrossb.nummus.testutils;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** Base class for integration tests: shared PostgreSQL container and Spring context. */
+@SpringBootTest
+public abstract class IntegrationTestBase {
+
+  static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18-alpine");
+
+  static {
+    POSTGRES.start();
+  }
+
+  @DynamicPropertySource
+  static void registerDataSource(DynamicPropertyRegistry registry) {
+    registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+    registry.add("spring.datasource.username", POSTGRES::getUsername);
+    registry.add("spring.datasource.password", POSTGRES::getPassword);
+    registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
+    registry.add("spring.flyway.user", POSTGRES::getUsername);
+    registry.add("spring.flyway.password", POSTGRES::getPassword);
+  }
+
+  /** Superuser connection — the Flyway/owner role. Use for raw-SQL probes. */
+  protected static Connection adminConnection() throws SQLException {
+    return DriverManager.getConnection(
+        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+  }
+
+  /** Least-privileged application-role connection (usable once Task 9 enables its login). */
+  protected static Connection appConnection() throws SQLException {
+    return DriverManager.getConnection(POSTGRES.getJdbcUrl(), "nummus_app", "nummus-app-test");
+  }
+}
