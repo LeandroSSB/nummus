@@ -3,6 +3,7 @@ package com.leandrossb.nummus.testutils;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.time.Duration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -12,7 +13,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @SpringBootTest
 public abstract class IntegrationTestBase {
 
-  static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18-alpine");
+  static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18-alpine")
+      .withStartupTimeout(Duration.ofMinutes(3));
 
   static {
     POSTGRES.start();
