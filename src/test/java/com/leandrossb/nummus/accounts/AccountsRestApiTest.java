@@ -16,6 +16,7 @@ import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -117,5 +118,45 @@ class AccountsRestApiTest extends IntegrationTestBase {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.lines.length()").value(1))
         .andExpect(jsonPath("$.lines[0].memo").value("stmt-2"));
+  }
+
+  @Test
+  void unknownAccountIdReturns404Problem() throws Exception {
+    mockMvc.perform(get("/v1/accounts/{id}", UUID.randomUUID()))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.title").exists())
+        .andExpect(jsonPath("$.detail").exists());
+  }
+
+  @Test
+  void blankHolderNameReturns400() throws Exception {
+    mockMvc.perform(post("/v1/accounts")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"holderName\":\"   \"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.detail").exists());
+  }
+
+  @Test
+  void malformedUuidReturns400() throws Exception {
+    mockMvc.perform(get("/v1/accounts/not-a-uuid"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void lifecycleConflictOnClosedAccountReturns409() throws Exception {
+    String location = createAccount("Conflict Merchant");
+    mockMvc.perform(post(location + "/close")).andExpect(status().isOk());
+    mockMvc.perform(post(location + "/freeze"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.detail").exists());
+  }
+
+  @Test
+  void paginationBeyondBoundsReturns400() throws Exception {
+    var account = accountsService.open(new OpenAccountCommand("Paged Merchant"));
+    mockMvc.perform(get("/v1/accounts/{id}/statement", account.publicId())
+            .queryParam("limit", "501"))
+        .andExpect(status().isBadRequest());
   }
 }
