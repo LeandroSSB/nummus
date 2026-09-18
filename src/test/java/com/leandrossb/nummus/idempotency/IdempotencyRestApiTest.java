@@ -104,15 +104,19 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
     String location = mockMvc.perform(post("/v1/accounts").header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Freeze Replay\"}"))
         .andReturn().getResponse().getHeader("Location");
-    mockMvc.perform(post(location + "/freeze").header(KEY, key))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("FROZEN"));
-    // Re-freezing for real would be a 409 (account not ACTIVE) — the replay
-    // must return the stored 200 instead.
-    mockMvc.perform(post(location + "/freeze").header(KEY, key))
+    var first = mockMvc.perform(post(location + "/freeze").header(KEY, key))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("FROZEN"))
-        .andExpect(header().string("Idempotency-Replayed", "true"));
+        .andReturn();
+    // Re-freezing for real would be a 409 (account not ACTIVE) — the replay
+    // must return the stored 200 instead.
+    var retry = mockMvc.perform(post(location + "/freeze").header(KEY, key))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("FROZEN"))
+        .andExpect(header().string("Idempotency-Replayed", "true"))
+        .andReturn();
+
+    assertEquals(first.getResponse().getContentAsString(), retry.getResponse().getContentAsString());
   }
 
   @Test
@@ -124,6 +128,7 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
         .andExpect(status().isNotFound());
     mockMvc.perform(post("/v1/payment-intents").header(KEY, key)
             .contentType(MediaType.APPLICATION_JSON).content(body))
-        .andExpect(status().isNotFound()); // re-executed, same deterministic 404 — no replay header
+        .andExpect(status().isNotFound()) // re-executed, same deterministic 404
+        .andExpect(header().doesNotExist("Idempotency-Replayed"));
   }
 }

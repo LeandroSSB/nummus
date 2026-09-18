@@ -1,14 +1,12 @@
 package com.leandrossb.nummus.interfaces.idempotency;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import java.net.URI;
 import java.time.Instant;
 import java.util.Arrays;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
-import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -93,22 +91,10 @@ public class IdempotencyAspect {
     if (!Arrays.equals(row.requestFingerprint(), fingerprint)) {
       throw new IdempotencyKeyReuseException(key);
     }
-    return replay(joinPoint, row.response());
+    return replay(row.response());
   }
 
-  /**
-   * The proxy requires the returned value to be assignable to the handler's
-   * declared return type. Handlers declaring ResponseEntity get the stored
-   * envelope back verbatim; handlers returning a DTO cannot receive one, so
-   * the stored body is deserialized and rendered through the normal MVC path
-   * (same 200, same JSON) with the replay flag set on the response directly.
-   */
-  private Object replay(ProceedingJoinPoint joinPoint, StoredResponse stored) {
-    Class<?> declared = ((MethodSignature) joinPoint.getSignature()).getReturnType();
-    if (!ResponseEntity.class.isAssignableFrom(declared)) {
-      currentResponse().setHeader("Idempotency-Replayed", "true");
-      return stored.body() == null ? null : objectMapper.readValue(stored.body(), declared);
-    }
+  private Object replay(StoredResponse stored) {
     ResponseEntity.BodyBuilder builder = ResponseEntity.status(stored.status())
         .header("Idempotency-Replayed", "true");
     if (stored.contentType() != null) {
@@ -135,9 +121,5 @@ public class IdempotencyAspect {
 
   private static HttpServletRequest currentRequest() {
     return ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
-  }
-
-  private static HttpServletResponse currentResponse() {
-    return ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getResponse();
   }
 }

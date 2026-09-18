@@ -58,19 +58,19 @@ class AccountsController {
 
   @Idempotent
   @PostMapping("/{id}/freeze")
-  AccountResponse freeze(@PathVariable UUID id) {
-    return AccountResponse.from(accounts.freeze(id));
+  ResponseEntity<AccountResponse> freeze(@PathVariable UUID id) {
+    return ResponseEntity.ok(AccountResponse.from(accounts.freeze(id)));
   }
 
   @Idempotent
   @PostMapping("/{id}/unfreeze")
-  AccountResponse unfreeze(@PathVariable UUID id) {
-    return AccountResponse.from(accounts.unfreeze(id));
+  ResponseEntity<AccountResponse> unfreeze(@PathVariable UUID id) {
+    return ResponseEntity.ok(AccountResponse.from(accounts.unfreeze(id)));
   }
 
   @Idempotent
   @PostMapping("/{id}/close")
-  AccountResponse close(@PathVariable UUID id) {
-    return AccountResponse.from(accounts.close(id));
+  ResponseEntity<AccountResponse> close(@PathVariable UUID id) {
+    return ResponseEntity.ok(AccountResponse.from(accounts.close(id)));
   }
 }
