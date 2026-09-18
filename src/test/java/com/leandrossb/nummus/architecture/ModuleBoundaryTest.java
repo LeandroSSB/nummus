@@ -35,4 +35,29 @@ class ModuleBoundaryTest {
       noClasses().that().resideOutsideOfPackage("..infrastructure..")
           .should().dependOnClassesThat()
           .resideInAnyPackage("org.springframework.jdbc..", "java.sql..");
+
+  @ArchTest
+  static final ArchRule paymentsNeverTouchForeignInfrastructure =
+      noClasses().that().resideInAPackage("..payments..")
+          .should().dependOnClassesThat()
+          .resideInAnyPackage("..ledger.infrastructure..", "..accounts.infrastructure..",
+              "..psp_simulator..");
+
+  @ArchTest
+  static final ArchRule simulatorTouchesOnlyTheNetworkPort =
+      noClasses().that().resideInAPackage("..psp_simulator..")
+          .should().dependOnClassesThat()
+          .resideInAnyPackage("..payments.domain..", "..payments.infrastructure..",
+              "..payments.interfaces..", "..accounts..");
+
+  @ArchTest
+  static final ArchRule foreignModulesNeverTouchPayments =
+      noClasses().that().resideInAnyPackage("..ledger..", "..accounts..")
+          .should().dependOnClassesThat().resideInAPackage("..payments..");
+
+  @ArchTest
+  static final ArchRule newDomainPackagesStayFrameworkFree =
+      noClasses().that().resideInAnyPackage("..payments.domain..", "..psp_simulator.domain..")
+          .should().dependOnClassesThat()
+          .resideInAnyPackage("org.springframework..", "java.sql..", "jakarta.persistence..");
 }
