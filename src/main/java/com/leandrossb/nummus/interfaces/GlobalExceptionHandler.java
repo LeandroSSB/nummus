@@ -1,4 +1,4 @@
-package com.leandrossb.nummus.accounts.interfaces;
+package com.leandrossb.nummus.interfaces;
 
 import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
 import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
- * RFC 7807 error surface for the REST skeleton. Commit-time failures raised
+ * Application-wide RFC 7807 error surface for the REST API. Commit-time failures raised
  * by the database's enforcement triggers surface as 409 conflicts — the
  * deterministic variants of the same violations already fail fast in the
  * services; this catches the mid-flight race (an account frozen between
