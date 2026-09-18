@@ -72,10 +72,14 @@ public class PaymentsServiceImpl implements PaymentsService {
       return intent;
     }
     if (Instant.now().isAfter(intent.expiresAt())) {
-      repository.transitionToExpired(publicId);
-      var expired = repository.findByPublicId(publicId).orElseThrow();
-      intentEvents.publish(toEvent(IntentEventTypes.EXPIRED, expired));
-      return expired;
+      // Publish only on a won transition; a racing winner already published
+      // its event for the terminal state — the loser returns it silently.
+      if (repository.transitionToExpired(publicId)) {
+        var expired = repository.findByPublicId(publicId).orElseThrow();
+        intentEvents.publish(toEvent(IntentEventTypes.EXPIRED, expired));
+        return expired;
+      }
+      return repository.findByPublicId(publicId).orElseThrow();
     }
     var charge = network.getCharge(intent.chargePublicId());
     if (charge.amount().compareTo(intent.amount()) != 0) {
@@ -84,10 +88,14 @@ public class PaymentsServiceImpl implements PaymentsService {
     return switch (charge.status()) {
       case PENDING -> intent;
       case FAILED -> {
-        repository.transitionToFailed(publicId);
-        var failed = repository.findByPublicId(publicId).orElseThrow();
-        intentEvents.publish(toEvent(IntentEventTypes.FAILED, failed));
-        yield failed;
+        // Publish only on a won transition; a racing winner already published
+        // its event for the terminal state — the loser returns it silently.
+        if (repository.transitionToFailed(publicId)) {
+          var failed = repository.findByPublicId(publicId).orElseThrow();
+          intentEvents.publish(toEvent(IntentEventTypes.FAILED, failed));
+          yield failed;
+        }
+        yield repository.findByPublicId(publicId).orElseThrow();
       }
       case SUCCEEDED -> settle(intent);
     };

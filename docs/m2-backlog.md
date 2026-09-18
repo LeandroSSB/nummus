@@ -146,3 +146,9 @@ deliberate:
   like every other endpoint until merchant auth lands.
 - **Receiver-side replay tolerance is documented, not enforced** — the
   signature carries `t=`, but tolerance windows are the receiver's choice.
+- **SSRF surface on webhook registration.** Endpoints accept any `http(s)`
+  URL and the worker POSTs to it, with `lastResponseStatus` observable via
+  the deliveries listing — a status-oracle primitive against loopback,
+  link-local, and RFC1918 targets. Consistent with the pre-auth stage (all
+  endpoints are unauthenticated today); when merchant auth lands, reject
+  internal target ranges at registration and consider https-only.

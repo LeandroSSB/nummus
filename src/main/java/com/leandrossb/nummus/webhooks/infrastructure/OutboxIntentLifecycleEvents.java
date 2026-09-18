@@ -7,13 +7,16 @@ import com.leandrossb.nummus.webhooks.application.WebhookStore;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 /**
  * Writes the serialized envelope and its fan-out delivery rows inside the
  * caller's transaction: the event commits with the state change or not at
- * all. The envelope is serialized exactly once — every delivery sends these
- * stored bytes.
+ * all ({@code MANDATORY} propagation fails fast on any caller that opens no
+ * transaction). The envelope is serialized exactly once — every delivery
+ * sends these stored bytes.
  */
 @Component
 public class OutboxIntentLifecycleEvents implements IntentLifecycleEvents {
@@ -27,6 +30,7 @@ public class OutboxIntentLifecycleEvents implements IntentLifecycleEvents {
   }
 
   @Override
+  @Transactional(propagation = Propagation.MANDATORY)
   public void publish(IntentLifecycleEvent event) {
     UUID eventId = UUID.randomUUID();
     String payload = objectMapper.writeValueAsString(new Envelope(
