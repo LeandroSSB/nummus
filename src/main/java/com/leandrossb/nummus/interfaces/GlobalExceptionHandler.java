@@ -8,6 +8,8 @@ import com.leandrossb.nummus.ledger.domain.InvalidMoneyException;
 import com.leandrossb.nummus.ledger.domain.TransactionAlreadyReversedException;
 import com.leandrossb.nummus.ledger.domain.UnknownAccountException;
 import com.leandrossb.nummus.ledger.domain.UnknownTransactionException;
+import com.leandrossb.nummus.psp_simulator.domain.ChargeNotPendingException;
+import com.leandrossb.nummus.psp_simulator.domain.UnknownChargeException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -28,13 +30,13 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 public class GlobalExceptionHandler {
 
   @ExceptionHandler({UnknownPaymentAccountException.class, UnknownAccountException.class,
-      UnknownTransactionException.class})
+      UnknownTransactionException.class, UnknownChargeException.class})
   public ProblemDetail notFound(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
   }
 
   @ExceptionHandler({PaymentAccountNotActiveException.class, AccountNotActiveException.class,
-      TransactionAlreadyReversedException.class})
+      TransactionAlreadyReversedException.class, ChargeNotPendingException.class})
   public ProblemDetail conflict(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }
