@@ -49,9 +49,11 @@ milestones take shape.
 
 ## From the M2 review
 
-M3 resolved the end-to-end commit-time trigger → 409 case and
-relocated the shared error advice; payment-intent state transitions
-are status-guarded. The items below remain open:
+M3 added the frozen-account settle → 409 path over HTTP (fail-fast)
+and relocated the shared error advice; payment-intent state
+transitions are status-guarded. The mid-flight commit-time
+trigger → 409 case remains covered at handler level only. The items
+below remain open:
 
 - **Status-guarded account transitions.** The M2-era TOCTOU on
   account status changes (`AccountsServiceImpl.transition` and the
@@ -60,5 +62,22 @@ are status-guarded. The items below remain open:
   or row lock when concurrent account transitions become real.
 - **Roles coverage.** Probe the `closed_at` column grant under `nummus_app`
   and assert SQLSTATE `42501` instead of message substrings.
-- **Error body consistency.** 500 bodies still use Boot's default error
-  JSON (problemdetails can unify later).
+- **Error body consistency.** Only unhandled 500s use Boot's default
+  error JSON — `ChargeAmountMismatchException` already returns
+  problem+json via the M3 `invariantBreach` handler (problemdetails
+  can unify the rest later).
+- **Amount magnitude bound.** `CreateIntentRequest.amount` has no upper
+  bound; an amount beyond `numeric(19,4)` fails at INSERT and surfaces
+  as 500. Add `@Digits(integer = 15, fraction = 4)` (or `@DecimalMax`)
+  for a clean 400.
+- **ArchUnit under-encoding.** The M3 rules leave three spec-stated
+  bans unchecked: psp-simulator → `..ledger.application..`;
+  ledger/accounts → `..psp_simulator..`; payments →
+  `..ledger.interfaces..`/`..accounts.interfaces..`. The code
+  complies; extend the rule lists when touched next.
+- **Write transaction across the network poll.** `PaymentsServiceImpl.get`
+  holds its write transaction across the `PaymentNetwork.getCharge`
+  call — invisible with the in-process simulator, but a real PSP
+  adapter would hold a pooled connection across an HTTP call. Bound
+  the hold or poll before opening the write transaction when a real
+  adapter lands.
