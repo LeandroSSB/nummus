@@ -128,3 +128,21 @@ none merge-blocking:
   `..interfaces.idempotency..` (controllers-only by convention). Extend
   the rules when the package is next touched — alongside the three M3
   bans still unchecked above.
+
+## From the M5 review
+
+M5 delivered the transactional outbox with write-time fan-out, signed
+at-least-once delivery, and bounded exponential backoff. Known bounds,
+deliberate:
+
+- **Single-process worker.** `fixedDelay` self-exclusivity is the only guard;
+  a second instance would double-deliver (still at-least-once-correct, but
+  wasteful). Scale-out needs `FOR UPDATE SKIP LOCKED` claiming.
+- **No delivery retention/pruning.** `webhook_delivery` rows accumulate;
+  add a retention job (and a `delete` grant) when volume demands it.
+- **No manual redrive.** FAILED deliveries stay failed; a retry API is a
+  natural follow-up.
+- **`GET /deliveries` is unpaginated** (fixed limit 50) and unauthenticated,
+  like every other endpoint until merchant auth lands.
+- **Receiver-side replay tolerance is documented, not enforced** — the
+  signature carries `t=`, but tolerance windows are the receiver's choice.
