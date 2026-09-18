@@ -49,17 +49,15 @@ milestones take shape.
 
 ## From the M2 review
 
-- **Status-guarded transitions.** `AccountsServiceImpl.transition` and the
-  repository UPDATE are unguarded against concurrent transitions (TOCTOU).
-  Postings stay safe — the ledger trigger is authoritative — but the
-  accounts row can diverge. Fix with a status-guarded UPDATE or
-  `SELECT ... FOR UPDATE` when M3 adds concurrent callers.
+Three of the five follow-ups from the M2 review were resolved while
+building M3: account-status transitions are now guarded against
+concurrent callers (status-guarded UPDATE instead of the TOCTOU
+read-then-write), the commit-time ledger trigger is exercised
+end-to-end as an HTTP 409 (the frozen-settle REST test), and the
+`GlobalExceptionHandler` was relocated so it is no longer app-global
+from a single module's package. Two items remain open:
+
 - **Roles coverage.** Probe the `closed_at` column grant under `nummus_app`
   and assert SQLSTATE `42501` instead of message substrings.
-- **End-to-end commit-time trigger → 409 HTTP test.** First reachable
-  through the real stack when M3 adds money movement.
-- **`GlobalExceptionHandler` scoping.** Relocate or `basePackages`-scope it
-  when a second module's controllers arrive; it is app-global today.
-- **Error body consistency.** Statement lines now carry `currency` per
-  spec; 500 bodies still use Boot's default error JSON (problemdetails
-  can unify later).
+- **Error body consistency.** 500 bodies still use Boot's default error
+  JSON (problemdetails can unify later).
