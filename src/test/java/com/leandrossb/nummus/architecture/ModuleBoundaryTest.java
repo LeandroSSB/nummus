@@ -60,4 +60,11 @@ class ModuleBoundaryTest {
       noClasses().that().resideInAnyPackage("..payments.domain..", "..psp_simulator.domain..")
           .should().dependOnClassesThat()
           .resideInAnyPackage("org.springframework..", "java.sql..", "jakarta.persistence..");
+
+  @ArchTest
+  static final ArchRule webhooksTouchesOnlyThePaymentsPort =
+      noClasses().that().resideInAPackage("..webhooks..")
+          .should().dependOnClassesThat()
+          .resideInAnyPackage("..payments.domain..", "..payments.infrastructure..",
+              "..payments.interfaces..", "..accounts..");
 }

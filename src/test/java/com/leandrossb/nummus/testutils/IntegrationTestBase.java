@@ -28,6 +28,9 @@ public abstract class IntegrationTestBase {
     registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
     registry.add("spring.flyway.user", POSTGRES::getUsername);
     registry.add("spring.flyway.password", POSTGRES::getPassword);
+    // No integration-test context may run the delivery scheduler against the network.
+    registry.add("nummus.webhooks.poll-delay-ms", () -> "3600000");
+    registry.add("nummus.webhooks.initial-delay-ms", () -> "3600000");
   }
 
   /** Superuser connection — the Flyway/owner role. Use for raw-SQL probes. */

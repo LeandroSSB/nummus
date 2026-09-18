@@ -15,6 +15,7 @@ import com.leandrossb.nummus.payments.domain.ConcurrentSettlementException;
 import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
 import com.leandrossb.nummus.psp_simulator.domain.ChargeNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownChargeException;
+import com.leandrossb.nummus.webhooks.domain.UnknownWebhookEndpointException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -36,7 +37,7 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler({UnknownPaymentAccountException.class, UnknownAccountException.class,
       UnknownTransactionException.class, UnknownChargeException.class,
-      UnknownPaymentIntentException.class})
+      UnknownPaymentIntentException.class, UnknownWebhookEndpointException.class})
   public ProblemDetail notFound(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
   }
