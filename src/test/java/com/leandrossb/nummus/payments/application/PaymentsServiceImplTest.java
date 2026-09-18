@@ -33,7 +33,9 @@ class PaymentsServiceImplTest {
       new AccountsServiceImpl(ledger, new InMemoryAccountsRepository());
   private final FakePaymentNetwork network = new FakePaymentNetwork();
   private final InMemoryPaymentsRepository repo = new InMemoryPaymentsRepository();
-  private final PaymentsService payments = new PaymentsServiceImpl(ledger, accounts, network, repo);
+  // Outbox publishing is covered by WebhookPublishTest; unit scope ignores events.
+  private final PaymentsService payments =
+      new PaymentsServiceImpl(ledger, accounts, network, repo, event -> { });
 
   PaymentsServiceImplTest() {
     // Test-scope composition layer: mirror the V5 clearing-asset seed so the fixed

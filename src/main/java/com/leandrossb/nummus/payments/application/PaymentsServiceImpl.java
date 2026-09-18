@@ -33,13 +33,15 @@ public class PaymentsServiceImpl implements PaymentsService {
   private final AccountsService accounts;
   private final PaymentNetwork network;
   private final PaymentsRepository repository;
+  private final IntentLifecycleEvents intentEvents;
 
   public PaymentsServiceImpl(Ledger ledger, AccountsService accounts, PaymentNetwork network,
-      PaymentsRepository repository) {
+      PaymentsRepository repository, IntentLifecycleEvents intentEvents) {
     this.ledger = ledger;
     this.accounts = accounts;
     this.network = network;
     this.repository = repository;
+    this.intentEvents = intentEvents;
   }
 
   @Override
@@ -71,7 +73,9 @@ public class PaymentsServiceImpl implements PaymentsService {
     }
     if (Instant.now().isAfter(intent.expiresAt())) {
       repository.transitionToExpired(publicId);
-      return repository.findByPublicId(publicId).orElseThrow();
+      var expired = repository.findByPublicId(publicId).orElseThrow();
+      intentEvents.publish(toEvent(IntentEventTypes.EXPIRED, expired));
+      return expired;
     }
     var charge = network.getCharge(intent.chargePublicId());
     if (charge.amount().compareTo(intent.amount()) != 0) {
@@ -81,7 +85,9 @@ public class PaymentsServiceImpl implements PaymentsService {
       case PENDING -> intent;
       case FAILED -> {
         repository.transitionToFailed(publicId);
-        yield repository.findByPublicId(publicId).orElseThrow();
+        var failed = repository.findByPublicId(publicId).orElseThrow();
+        intentEvents.publish(toEvent(IntentEventTypes.FAILED, failed));
+        yield failed;
       }
       case SUCCEEDED -> settle(intent);
     };
@@ -101,6 +107,14 @@ public class PaymentsServiceImpl implements PaymentsService {
       // transaction and let the caller re-read the SETTLED state.
       throw new ConcurrentSettlementException(intent.publicId());
     }
-    return repository.findByPublicId(intent.publicId()).orElseThrow();
+    var settled = repository.findByPublicId(intent.publicId()).orElseThrow();
+    intentEvents.publish(toEvent(IntentEventTypes.SETTLED, settled));
+    return settled;
+  }
+
+  private static IntentLifecycleEvent toEvent(String type, PaymentIntent intent) {
+    return new IntentLifecycleEvent(type, intent.publicId(), intent.accountPublicId(),
+        intent.amount(), intent.status().name(), intent.chargePublicId(),
+        intent.settledAt(), intent.journalTransactionPublicId());
   }
 }
