@@ -18,11 +18,12 @@ public record StatementResponse(BigDecimal balance, String currency, List<Line> 
 
   /** One posting with its originating transaction context, exactly as booked. */
   record Line(Instant bookedAt, UUID transactionPublicId, String memo, String direction,
-      BigDecimal amount) {
+      BigDecimal amount, String currency) {
 
     static Line from(com.leandrossb.nummus.ledger.domain.StatementLine line) {
       return new Line(line.bookedAt(), line.transactionPublicId(), line.memo(),
-          line.direction().name(), line.amount().amount());
+          line.direction().name(), line.amount().amount(),
+          line.amount().currency().getCurrencyCode());
     }
   }
 }

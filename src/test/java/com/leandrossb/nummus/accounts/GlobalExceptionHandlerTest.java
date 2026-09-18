@@ -3,8 +3,6 @@ package com.leandrossb.nummus.accounts;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.leandrossb.nummus.accounts.application.AccountsService;
-import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
 import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
 import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
 import com.leandrossb.nummus.accounts.interfaces.GlobalExceptionHandler;
@@ -16,7 +14,6 @@ import java.sql.SQLException;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ProblemDetail;
 import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.transaction.TransactionSystemException;
 

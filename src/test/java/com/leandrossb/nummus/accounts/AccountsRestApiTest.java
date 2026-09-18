@@ -2,6 +2,7 @@ package com.leandrossb.nummus.accounts;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -99,7 +100,8 @@ class AccountsRestApiTest extends IntegrationTestBase {
         .andExpect(jsonPath("$.balance").value(150.0000))
         .andExpect(jsonPath("$.currency").value("BRL"))
         .andExpect(jsonPath("$.lines.length()").value(1))
-        .andExpect(jsonPath("$.lines[0].direction").value("CREDIT"));
+        .andExpect(jsonPath("$.lines[0].direction").value("CREDIT"))
+        .andExpect(jsonPath("$.lines[0].currency").value("BRL"));
   }
 
   @Test
@@ -124,6 +126,7 @@ class AccountsRestApiTest extends IntegrationTestBase {
   void unknownAccountIdReturns404Problem() throws Exception {
     mockMvc.perform(get("/v1/accounts/{id}", UUID.randomUUID()))
         .andExpect(status().isNotFound())
+        .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
         .andExpect(jsonPath("$.title").exists())
         .andExpect(jsonPath("$.detail").exists());
   }

@@ -9,8 +9,7 @@ import com.tngtech.archunit.lang.ArchRule;
 
 /**
  * Machine-checked module boundaries of the modular monolith. Production
- * classes only — tests may use anything. Until the accounts module exists
- * (later tasks), its rules pass vacuously.
+ * classes only — tests may use anything.
  */
 @AnalyzeClasses(packages = "com.leandrossb.nummus", importOptions = ImportOption.DoNotIncludeTests.class)
 class ModuleBoundaryTest {
@@ -18,8 +17,7 @@ class ModuleBoundaryTest {
   @ArchTest
   static final ArchRule accountsNeverTouchLedgerInfrastructure =
       noClasses().that().resideInAPackage("..accounts..")
-          .should().dependOnClassesThat().resideInAPackage("..ledger.infrastructure..")
-          .allowEmptyShould(true);
+          .should().dependOnClassesThat().resideInAPackage("..ledger.infrastructure..");
 
   @ArchTest
   static final ArchRule ledgerNeverTouchesAccounts =
