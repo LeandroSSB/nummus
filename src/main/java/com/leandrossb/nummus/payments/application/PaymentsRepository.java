@@ -2,6 +2,7 @@ package com.leandrossb.nummus.payments.application;
 
 import com.leandrossb.nummus.payments.domain.PaymentIntent;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,4 +21,7 @@ public interface PaymentsRepository {
 
   /** CREATED → SETTLED with the exactly-once journal link. @return false when not CREATED. */
   boolean markSettled(UUID publicId, UUID journalTransactionPublicId, Instant settledAt);
+
+  /** SETTLED intents with settled_at in [from, to), ordered by settled_at then id. */
+  List<PaymentIntent> findSettledBetween(Instant from, Instant to);
 }

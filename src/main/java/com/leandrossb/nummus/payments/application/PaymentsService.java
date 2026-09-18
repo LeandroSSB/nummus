@@ -2,6 +2,8 @@ package com.leandrossb.nummus.payments.application;
 
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.payments.domain.PaymentIntent;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -14,4 +16,7 @@ public interface PaymentsService {
 
   /** Applies lazy expiry and lazy settlement, then returns the current state. */
   PaymentIntent get(UUID publicId);
+
+  /** Settled intents in [from, to) — conciliation's view of internal settlements. */
+  List<SettlementView> listSettlements(Instant from, Instant to);
 }

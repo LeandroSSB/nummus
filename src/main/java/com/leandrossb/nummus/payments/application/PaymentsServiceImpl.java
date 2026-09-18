@@ -101,6 +101,18 @@ public class PaymentsServiceImpl implements PaymentsService {
     };
   }
 
+  @Override
+  @Transactional
+  public List<SettlementView> listSettlements(Instant from, Instant to) {
+    Objects.requireNonNull(from, "from must not be null");
+    Objects.requireNonNull(to, "to must not be null");
+    return repository.findSettledBetween(from, to).stream()
+        .map(intent -> new SettlementView(intent.publicId(), intent.accountPublicId(),
+            intent.chargePublicId(), intent.amount(), intent.settledAt(),
+            intent.journalTransactionPublicId()))
+        .toList();
+  }
+
   private PaymentIntent settle(PaymentIntent intent) {
     var account = accounts.get(intent.accountPublicId());
     if (account.status() != AccountStatus.ACTIVE) {
