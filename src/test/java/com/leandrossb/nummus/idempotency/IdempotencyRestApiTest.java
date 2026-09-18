@@ -131,4 +131,13 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
         .andExpect(status().isNotFound()) // re-executed, same deterministic 404
         .andExpect(header().doesNotExist("Idempotency-Replayed"));
   }
+
+  @Test
+  void amountsBeyondTheColumnBoundsAreRejectedAs400() throws Exception {
+    mockMvc.perform(post("/v1/payment-intents").header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"accountId\":\"" + UUID.randomUUID() + "\",\"amount\":10000000000000000.0000}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.detail").value("amount must fit numeric(19,4): at most 15 integer and 4 fraction digits"));
+  }
 }
