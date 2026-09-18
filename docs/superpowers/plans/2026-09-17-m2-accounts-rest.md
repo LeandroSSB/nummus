@@ -1690,7 +1690,8 @@ class GlobalExceptionHandler {
   private static String rootMessage(Throwable t) {
     String message = t.getMessage();
     Throwable cause = t.getCause();
-    while (cause != null) {
+    int depth = 0;
+    while (cause != null && depth++ < 100) {
       message = cause.getMessage();
       cause = cause.getCause();
     }
