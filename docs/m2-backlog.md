@@ -46,3 +46,20 @@ milestones take shape.
 - The balanced-transaction trigger is `FOR EACH ROW` and deferred, so a
   transaction with N postings re-aggregates N times at commit (O(N²)).
   Irrelevant at two-leg entries; revisit for bulk postings.
+
+## From the M2 review
+
+- **Status-guarded transitions.** `AccountsServiceImpl.transition` and the
+  repository UPDATE are unguarded against concurrent transitions (TOCTOU).
+  Postings stay safe — the ledger trigger is authoritative — but the
+  accounts row can diverge. Fix with a status-guarded UPDATE or
+  `SELECT ... FOR UPDATE` when M3 adds concurrent callers.
+- **Roles coverage.** Probe the `closed_at` column grant under `nummus_app`
+  and assert SQLSTATE `42501` instead of message substrings.
+- **End-to-end commit-time trigger → 409 HTTP test.** First reachable
+  through the real stack when M3 adds money movement.
+- **`GlobalExceptionHandler` scoping.** Relocate or `basePackages`-scope it
+  when a second module's controllers arrive; it is app-global today.
+- **Error body consistency.** Statement lines now carry `currency` per
+  spec; 500 bodies still use Boot's default error JSON (problemdetails
+  can unify later).
