@@ -47,7 +47,7 @@ Java 25 (LTS) · Spring Boot · PostgreSQL · Maven (wrapper included) · JUnit 
 In active development. Current milestones:
 
 - [x] M1 — Ledger core: journal, invariants, derived balances
-- [ ] M2 — Accounts and REST API skeleton ([backlog notes](docs/m2-backlog.md))
+- [x] M2 — Accounts and REST API skeleton
 - [ ] M3 — Payment intents with the PSP simulator
 - [ ] M4 — Idempotency layer for merchant APIs
 - [ ] M5 — Webhooks via transactional outbox
