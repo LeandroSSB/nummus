@@ -8,6 +8,7 @@ import com.leandrossb.nummus.ledger.application.Ledger;
 import com.leandrossb.nummus.ledger.application.OpenAccountCommand;
 import com.leandrossb.nummus.ledger.application.PostTransactionCommand;
 import com.leandrossb.nummus.ledger.domain.AccountNotActiveException;
+import com.leandrossb.nummus.ledger.domain.AccountStatus;
 import com.leandrossb.nummus.ledger.domain.AccountType;
 import com.leandrossb.nummus.ledger.domain.Direction;
 import com.leandrossb.nummus.ledger.domain.Money;
@@ -98,5 +99,17 @@ class LedgerServiceIntegrationTest extends IntegrationTestBase {
     assertEquals(2, statement.lines().size());
     assertEquals("stmt-3", statement.lines().get(0).memo());
     assertTrue(statement.lines().get(0).bookedAt() != null);
+  }
+
+  @Test
+  void unfreezeAndAccountLookupWorkAgainstRealDatabase() {
+    var asset = ledger.openAccount(new OpenAccountCommand("unfreeze cash", AccountType.ASSET, BRL));
+    ledger.freezeAccount(asset.publicId());
+    var unfrozen = ledger.unfreezeAccount(asset.publicId());
+    assertEquals(AccountStatus.ACTIVE, unfrozen.status());
+
+    var lookedUp = ledger.getAccount(asset.publicId());
+    assertEquals(AccountType.ASSET, lookedUp.type());
+    assertThrows(UnknownAccountException.class, () -> ledger.getAccount(UUID.randomUUID()));
   }
 }

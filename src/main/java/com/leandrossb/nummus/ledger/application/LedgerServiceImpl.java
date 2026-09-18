@@ -63,6 +63,18 @@ public class LedgerServiceImpl implements Ledger {
     return transitionStatus(publicId, AccountStatus.CLOSED, Instant.now());
   }
 
+  @Override
+  @Transactional
+  public LedgerAccount unfreezeAccount(UUID publicId) {
+    return transitionStatus(publicId, AccountStatus.ACTIVE, null);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public LedgerAccount getAccount(UUID publicId) {
+    return requireAccount(publicId);
+  }
+
   private LedgerAccount transitionStatus(UUID publicId, AccountStatus target, Instant closedAt) {
     var current = repository.findAccount(publicId)
         .orElseThrow(() -> new UnknownAccountException(publicId));

@@ -73,4 +73,22 @@ class LedgerServiceAccountsTest {
     assertEquals(0, ledger.balance(account.publicId()).compareTo(
         com.leandrossb.nummus.ledger.domain.Money.ofBrl("0.0000")));
   }
+
+  @Test
+  void unfreezeRestoresActiveAndClosedIsTerminal() {
+    var account = ledger.openAccount(new OpenAccountCommand("a", AccountType.ASSET, BRL));
+    ledger.freezeAccount(account.publicId());
+    assertEquals(AccountStatus.ACTIVE, ledger.unfreezeAccount(account.publicId()).status());
+    ledger.closeAccount(account.publicId());
+    assertThrows(AccountNotActiveException.class, () -> ledger.unfreezeAccount(account.publicId()));
+    assertThrows(UnknownAccountException.class, () -> ledger.unfreezeAccount(UUID.randomUUID()));
+  }
+
+  @Test
+  void getAccountReturnsLedgerAccountOrThrows() {
+    var account = ledger.openAccount(new OpenAccountCommand("a", AccountType.ASSET, BRL));
+    assertEquals(account.publicId(), ledger.getAccount(account.publicId()).publicId());
+    assertEquals(AccountType.ASSET, ledger.getAccount(account.publicId()).type());
+    assertThrows(UnknownAccountException.class, () -> ledger.getAccount(UUID.randomUUID()));
+  }
 }

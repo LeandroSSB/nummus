@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.dao.DataIntegrityViolationException;
 
 /** In-memory fake for service unit tests; mirrors the database's unique reversal_of behavior. */
-class InMemoryLedgerRepository implements LedgerRepository {
+public class InMemoryLedgerRepository implements LedgerRepository {
 
   private final Map<UUID, LedgerAccount> accounts = new ConcurrentHashMap<>();
   private final Map<UUID, PostedTransaction> transactions = new ConcurrentHashMap<>();
