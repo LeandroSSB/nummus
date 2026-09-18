@@ -66,10 +66,6 @@ below remain open:
   error JSON — `ChargeAmountMismatchException` already returns
   problem+json via the M3 `invariantBreach` handler (problemdetails
   can unify the rest later).
-- **Amount magnitude bound.** `CreateIntentRequest.amount` has no upper
-  bound; an amount beyond `numeric(19,4)` fails at INSERT and surfaces
-  as 500. Add `@Digits(integer = 15, fraction = 4)` (or `@DecimalMax`)
-  for a clean 400.
 - **ArchUnit under-encoding.** The M3 rules leave three spec-stated
   bans unchecked: psp-simulator → `..ledger.application..`;
   ledger/accounts → `..psp_simulator..`; payments →
@@ -81,3 +77,9 @@ below remain open:
   adapter would hold a pooled connection across an HTTP call. Bound
   the hold or poll before opening the write transaction when a real
   adapter lands.
+
+M4 added the idempotency layer: stored responses replay verbatim, 2xx only —
+4xx paths roll back and re-execute deterministically, which is observationally
+equivalent to replay but is not storage; recorded here so nobody "fixes" the
+error paths into storage without revisiting the `UnexpectedRollbackException`
+hazard documented in the M4 spec.
