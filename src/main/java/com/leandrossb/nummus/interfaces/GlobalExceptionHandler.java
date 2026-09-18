@@ -1,4 +1,4 @@
-package com.leandrossb.nummus.accounts.interfaces;
+package com.leandrossb.nummus.interfaces;
 
 import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
 import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
@@ -8,6 +8,11 @@ import com.leandrossb.nummus.ledger.domain.InvalidMoneyException;
 import com.leandrossb.nummus.ledger.domain.TransactionAlreadyReversedException;
 import com.leandrossb.nummus.ledger.domain.UnknownAccountException;
 import com.leandrossb.nummus.ledger.domain.UnknownTransactionException;
+import com.leandrossb.nummus.payments.domain.ChargeAmountMismatchException;
+import com.leandrossb.nummus.payments.domain.ConcurrentSettlementException;
+import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
+import com.leandrossb.nummus.psp_simulator.domain.ChargeNotPendingException;
+import com.leandrossb.nummus.psp_simulator.domain.UnknownChargeException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -18,7 +23,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
- * RFC 7807 error surface for the REST skeleton. Commit-time failures raised
+ * Application-wide RFC 7807 error surface for the REST API. Commit-time failures raised
  * by the database's enforcement triggers surface as 409 conflicts — the
  * deterministic variants of the same violations already fail fast in the
  * services; this catches the mid-flight race (an account frozen between
@@ -28,15 +33,22 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 public class GlobalExceptionHandler {
 
   @ExceptionHandler({UnknownPaymentAccountException.class, UnknownAccountException.class,
-      UnknownTransactionException.class})
+      UnknownTransactionException.class, UnknownChargeException.class,
+      UnknownPaymentIntentException.class})
   public ProblemDetail notFound(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
   }
 
   @ExceptionHandler({PaymentAccountNotActiveException.class, AccountNotActiveException.class,
-      TransactionAlreadyReversedException.class})
+      TransactionAlreadyReversedException.class, ChargeNotPendingException.class,
+      ConcurrentSettlementException.class})
   public ProblemDetail conflict(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+  }
+
+  @ExceptionHandler(ChargeAmountMismatchException.class)
+  ProblemDetail invariantBreach(ChargeAmountMismatchException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
   }
 
   @ExceptionHandler({IllegalArgumentException.class, InvalidMoneyException.class,

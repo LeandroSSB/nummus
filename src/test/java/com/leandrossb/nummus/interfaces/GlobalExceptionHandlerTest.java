@@ -1,11 +1,10 @@
-package com.leandrossb.nummus.accounts;
+package com.leandrossb.nummus.interfaces;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
 import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
-import com.leandrossb.nummus.accounts.interfaces.GlobalExceptionHandler;
 import com.leandrossb.nummus.ledger.domain.UnknownAccountException;
 import com.leandrossb.nummus.ledger.domain.UnknownTransactionException;
 import com.leandrossb.nummus.ledger.domain.AccountNotActiveException;
