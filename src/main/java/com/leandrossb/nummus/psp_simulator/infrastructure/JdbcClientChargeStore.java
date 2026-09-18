@@ -6,9 +6,11 @@ import com.leandrossb.nummus.psp_simulator.application.ChargeStore;
 import com.leandrossb.nummus.psp_simulator.domain.SimulatedCharge;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Currency;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -61,6 +63,20 @@ public class JdbcClientChargeStore implements ChargeStore {
     return updated == 1;
   }
 
+  @Override
+  public List<SimulatedCharge> findSucceededBetween(Instant from, Instant to) {
+    return jdbc.sql("""
+        select public_id, amount, status, created_at, updated_at
+        from psp_simulator.charge
+        where status = 'SUCCEEDED' and updated_at >= :from and updated_at < :to
+        order by updated_at, id
+        """)
+        .param("from", toOffsetDateTime(from))
+        .param("to", toOffsetDateTime(to))
+        .query((rs, i) -> mapCharge(rs))
+        .list();
+  }
+
   private SimulatedCharge mapCharge(ResultSet rs) throws SQLException {
     return new SimulatedCharge(
         rs.getObject("public_id", UUID.class),
@@ -70,7 +86,7 @@ public class JdbcClientChargeStore implements ChargeStore {
         rs.getObject("updated_at", OffsetDateTime.class).toInstant());
   }
 
-  private static OffsetDateTime toOffsetDateTime(java.time.Instant instant) {
+  private static OffsetDateTime toOffsetDateTime(Instant instant) {
     return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
   }
 }
