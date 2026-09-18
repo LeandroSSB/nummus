@@ -101,8 +101,9 @@ verification — no read-then-write races between concurrent polls.
   Instant settledAt, UUID journalTransactionPublicId)`.
 - `CreateIntentCommand(UUID accountPublicId, Money amount, Duration ttl)`.
 - Exceptions: `UnknownPaymentIntentException(UUID)`,
-  `IntentNotActiveException(UUID, IntentStatus)` (acting on a terminal
-  intent), `ChargeAmountMismatchException(UUID, Money expected, Money actual)`.
+  `ConcurrentSettlementException(UUID)` (a racing settler lost the
+  status-guarded update; its posting rolled back — re-read settles),
+  `ChargeAmountMismatchException(UUID, Money expected, Money actual)`.
 
 ## Persistence — `V5__payments_schema.sql`
 
