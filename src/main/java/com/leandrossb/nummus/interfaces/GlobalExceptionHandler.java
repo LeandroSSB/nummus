@@ -2,6 +2,7 @@ package com.leandrossb.nummus.interfaces;
 
 import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
 import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
+import com.leandrossb.nummus.interfaces.idempotency.IdempotencyKeyReuseException;
 import com.leandrossb.nummus.ledger.domain.AccountNotActiveException;
 import com.leandrossb.nummus.ledger.domain.CurrencyMismatchException;
 import com.leandrossb.nummus.ledger.domain.InvalidMoneyException;
@@ -44,6 +45,11 @@ public class GlobalExceptionHandler {
       ConcurrentSettlementException.class})
   public ProblemDetail conflict(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+  }
+
+  @ExceptionHandler(IdempotencyKeyReuseException.class)
+  ProblemDetail idempotencyReuse(IdempotencyKeyReuseException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
   }
 
   @ExceptionHandler(ChargeAmountMismatchException.class)

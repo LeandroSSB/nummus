@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.payments.interfaces;
 
+import com.leandrossb.nummus.interfaces.idempotency.Idempotent;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
@@ -30,6 +31,7 @@ class PaymentsController {
     this.payments = payments;
   }
 
+  @Idempotent
   @PostMapping
   ResponseEntity<IntentResponse> create(@Valid @RequestBody CreateIntentRequest request) {
     var intent = payments.create(new CreateIntentCommand(request.accountId(),
