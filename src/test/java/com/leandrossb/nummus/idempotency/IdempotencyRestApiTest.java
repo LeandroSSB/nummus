@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
+import java.net.URI;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -139,5 +140,54 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
             .content("{\"accountId\":\"" + UUID.randomUUID() + "\",\"amount\":10000000000000000.0000}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.detail").value("amount must fit numeric(19,4): at most 15 integer and 4 fraction digits"));
+  }
+
+  @Test
+  void failedReexecutionAfterReclaimDoesNotPoisonTheKey() throws Exception {
+    String accountId = mockMvc.perform(post("/v1/accounts").header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Poison Guard\"}"))
+        .andExpect(status().isCreated())
+        .andReturn().getResponse().getHeader("Location");
+    String publicId = accountId.substring(accountId.lastIndexOf('/') + 1);
+    String key = UUID.randomUUID().toString();
+    mockMvc.perform(post("/v1/payment-intents").header(KEY, key)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"accountId\":\"" + publicId + "\",\"amount\":5.0000}"))
+        .andExpect(status().isCreated());
+
+    // Age the stored row past its expiry DB-side so the key is reclaimable.
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      st.executeUpdate("UPDATE idempotency.idempotency_keys SET expires_at = now() - interval '1 minute'"
+          + " WHERE key = '" + key + "'");
+    }
+
+    // Reclaim, then fail the re-execution inside the handler (unknown account
+    // → 404 from the domain, thrown inside the aspect's transaction).
+    mockMvc.perform(post("/v1/payment-intents").header(KEY, key)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"accountId\":\"" + UUID.randomUUID() + "\",\"amount\":5.0000}"))
+        .andExpect(status().isNotFound());
+
+    // The failed re-execution must have rolled the reclaim back too: the slot
+    // is still expired, so the next retry reclaims cleanly and runs as new —
+    // not a 422 from a poisoned response-less row with a fresh expiry.
+    mockMvc.perform(post("/v1/payment-intents").header(KEY, key)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"accountId\":\"" + publicId + "\",\"amount\":5.0000}"))
+        .andExpect(status().isCreated())
+        .andExpect(header().doesNotExist("Idempotency-Replayed"));
+  }
+
+  @Test
+  void encodedPathThatBypassesTheFilterStillFailsClosed() throws Exception {
+    // "/v%31/" decodes to "/v1/" after the filter's raw-URI prefix check. The
+    // URI overload keeps the raw percent-encoding in requestURI (a String
+    // template would be re-encoded to %2531); MVC still routes the decoded
+    // path to the handler, so the aspect runs without the filter's guard.
+    mockMvc.perform(post(URI.create("/v%31/accounts"))
+            .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Encoded Merchant\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.detail").value(
+            "Idempotency-Key header (1-255 characters) is required on merchant writes"));
   }
 }

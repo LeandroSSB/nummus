@@ -44,8 +44,14 @@ public class IdempotencyAspect {
   public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
     HttpServletRequest request = currentRequest();
     String key = request.getHeader(IdempotencyWebFilter.KEY_HEADER);
-    byte[] fingerprint = RequestFingerprinter.sha256(request.getMethod(), request.getRequestURI(),
-        (byte[]) request.getAttribute(IdempotencyWebFilter.CACHED_BODY_ATTRIBUTE));
+    if (key == null || key.isBlank() || key.length() > 255) {
+      throw new MissingIdempotencyKeyException();
+    }
+    byte[] body = (byte[]) request.getAttribute(IdempotencyWebFilter.CACHED_BODY_ATTRIBUTE);
+    if (body == null) {
+      body = new byte[0];
+    }
+    byte[] fingerprint = RequestFingerprinter.sha256(request.getMethod(), request.getRequestURI(), body);
     Instant expiresAt = Instant.now().plus(properties.ttl());
     try {
       return transactions.execute(txStatus -> {
@@ -81,12 +87,17 @@ public class IdempotencyAspect {
     var row = store.findByKey(key).orElseThrow(() -> raced);
     boolean expired = !row.expiresAt().isAfter(Instant.now());
     if (row.response() == null || expired) {
-      // An expired slot is free real estate: claim it and run as new. Losing
-      // the reclaim race means a concurrent request claimed it — treat as reuse.
-      if (!store.reclaimExpired(key, fingerprint, expiresAt)) {
-        throw new IdempotencyKeyReuseException(key);
-      }
-      return transactions.execute(txStatus -> proceedAndAttach(joinPoint, key));
+      // An expired slot is free real estate: claim it and run as new — inside
+      // the same transaction, so a failed re-execution rolls the row back to
+      // its still-expired state and the next retry can reclaim cleanly.
+      return transactions.execute(txStatus -> {
+        if (!store.reclaimExpired(key, fingerprint, expiresAt)) {
+          // Lost the reclaim race (a concurrent retry of the same expired key
+          // claimed it first) — treat as reuse; the client retries shortly.
+          throw new IdempotencyKeyReuseException(key);
+        }
+        return proceedAndAttach(joinPoint, key);
+      });
     }
     if (!Arrays.equals(row.requestFingerprint(), fingerprint)) {
       throw new IdempotencyKeyReuseException(key);
