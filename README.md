@@ -49,6 +49,6 @@ In active development. Current milestones:
 - [x] M1 — Ledger core: journal, invariants, derived balances
 - [x] M2 — Accounts and REST API skeleton
 - [x] M3 — Payment intents with the PSP simulator
-- [ ] M4 — Idempotency layer for merchant APIs
+- [x] M4 — Idempotency layer for merchant APIs
 - [ ] M5 — Webhooks via transactional outbox
 - [ ] M6 — Conciliation reports

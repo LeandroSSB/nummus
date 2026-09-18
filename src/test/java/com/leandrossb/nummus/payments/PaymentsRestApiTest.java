@@ -37,6 +37,7 @@ class PaymentsRestApiTest extends IntegrationTestBase {
 
   private String createIntent(String accountId, String amountJson) throws Exception {
     MvcResult result = mockMvc.perform(post("/v1/payment-intents")
+            .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + accountId + "\",\"amount\":" + amountJson + "}"))
         .andExpect(status().isCreated())
@@ -48,6 +49,7 @@ class PaymentsRestApiTest extends IntegrationTestBase {
   void createReturns201WithIntentBody() throws Exception {
     String accountId = createAccount();
     mockMvc.perform(post("/v1/payment-intents")
+            .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + accountId + "\",\"amount\":10.0000}"))
         .andExpect(status().isCreated())
@@ -139,14 +141,17 @@ class PaymentsRestApiTest extends IntegrationTestBase {
   void validationFailuresReturn400() throws Exception {
     String accountId = createAccount();
     mockMvc.perform(post("/v1/payment-intents")
+            .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + accountId + "\",\"amount\":0.0000}"))
         .andExpect(status().isBadRequest());
     mockMvc.perform(post("/v1/payment-intents")
+            .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + accountId + "\",\"amount\":1.12345}"))
         .andExpect(status().isBadRequest());
     mockMvc.perform(post("/v1/payment-intents")
+            .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"amount\":5.0000}"))
         .andExpect(status().isBadRequest());
@@ -155,6 +160,7 @@ class PaymentsRestApiTest extends IntegrationTestBase {
   @Test
   void unknownAccountAndIntentReturn404() throws Exception {
     mockMvc.perform(post("/v1/payment-intents")
+            .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + UUID.randomUUID() + "\",\"amount\":5.0000}"))
         .andExpect(status().isNotFound());

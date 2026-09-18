@@ -66,10 +66,6 @@ below remain open:
   error JSON — `ChargeAmountMismatchException` already returns
   problem+json via the M3 `invariantBreach` handler (problemdetails
   can unify the rest later).
-- **Amount magnitude bound.** `CreateIntentRequest.amount` has no upper
-  bound; an amount beyond `numeric(19,4)` fails at INSERT and surfaces
-  as 500. Add `@Digits(integer = 15, fraction = 4)` (or `@DecimalMax`)
-  for a clean 400.
 - **ArchUnit under-encoding.** The M3 rules leave three spec-stated
   bans unchecked: psp-simulator → `..ledger.application..`;
   ledger/accounts → `..psp_simulator..`; payments →
@@ -81,3 +77,54 @@ below remain open:
   adapter would hold a pooled connection across an HTTP call. Bound
   the hold or poll before opening the write transaction when a real
   adapter lands.
+
+M4 added the idempotency layer: stored responses replay verbatim, 2xx only —
+4xx paths roll back and re-execute deterministically, which is observationally
+equivalent to replay but is not storage; recorded here so nobody "fixes" the
+error paths into storage without revisiting the `UnexpectedRollbackException`
+hazard documented in the M4 spec.
+
+## From the M4 review
+
+The final whole-branch review hardened the reclaim into the re-execution
+transaction (a failed re-execution can no longer leave a response-less,
+unexpired key that 422s until TTL), added the aspect's own fail-closed key
+guard (encoded-path filter bypasses now 400 instead of 500), and exercises
+the V7 grants under `nummus_app` (`IdempotencyRolesTest`). Remaining open,
+none merge-blocking:
+
+- **Expiry uses two clocks.** The aspect judges expiry by the JVM clock
+  while `reclaimExpired` judges by the database clock; a same-request retry
+  inside the skew window (measured ~5s here) gets 422 instead of a replay.
+  Judge both sides on the DB clock, or fall back to replay when the
+  fingerprint and stored response match.
+- **2xx-only storage is convention.** `toStoredResponse` stores whatever
+  the handler returns; only the throw-to-signal-error discipline keeps 4xx
+  out. A handler returning `ResponseEntity.badRequest()` would be stored
+  and replayed silently. Enforce or assert when a handler is added that
+  returns non-2xx envelopes.
+- **`@Idempotent` handlers must return `ResponseEntity`.** A DTO-declared
+  handler replays through a raw `ResponseEntity` and fails the proxy's
+  return-type check (`ClassCastException`). Convention not yet written into
+  the annotation's javadoc — add it when the file is next touched.
+- **Aspect catches `DuplicateKeyException` from any statement** in the
+  transaction, not only `store.insert`; a business unique-constraint
+  violation would surface as the raw DKE (500). Unreachable today (all
+  unique columns are server-generated UUIDs); revisit when a
+  merchant-influenced unique column lands. Related: a purge racing the
+  replay lookup can make `findByKey` empty after a lost insert — the DKE
+  rethrows (500), self-healing on retry.
+- **Unbounded request-body buffering** in `IdempotencyWebFilter`
+  (`readAllBytes` with no cap). Add a 413 guard together with auth and
+  rate limiting.
+- **Idempotency and the web layer.** Duplicate `Idempotency-Key` headers
+  are silently first-wins; the filter's 400 charset is implicit
+  (ASCII-only message today); replayed `Content-Type` and the
+  `application/problem+json` content type of the 400s are unasserted in
+  tests; `nummus.idempotency.ttl` binding is untested since the expiry
+  test moved to DB-side aging; the fingerprint hashes the raw URI, so one
+  key reused across path encodings is a mismatch 422 (fail-closed, fine).
+- **ArchUnit.** Nothing bans business modules from depending on
+  `..interfaces.idempotency..` (controllers-only by convention). Extend
+  the rules when the package is next touched — alongside the three M3
+  bans still unchecked above.

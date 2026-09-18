@@ -6,6 +6,7 @@ import com.leandrossb.nummus.accounts.interfaces.dto.AccountResponse;
 import com.leandrossb.nummus.accounts.interfaces.dto.BalanceResponse;
 import com.leandrossb.nummus.accounts.interfaces.dto.OpenAccountRequest;
 import com.leandrossb.nummus.accounts.interfaces.dto.StatementResponse;
+import com.leandrossb.nummus.interfaces.idempotency.Idempotent;
 import com.leandrossb.nummus.ledger.domain.Page;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -29,6 +30,7 @@ class AccountsController {
     this.accounts = accounts;
   }
 
+  @Idempotent
   @PostMapping
   ResponseEntity<AccountResponse> create(@Valid @RequestBody OpenAccountRequest request) {
     var account = accounts.open(new OpenAccountCommand(request.holderName()));
@@ -54,18 +56,21 @@ class AccountsController {
     return StatementResponse.from(accounts.statement(id, new Page(offset, limit)));
   }
 
+  @Idempotent
   @PostMapping("/{id}/freeze")
-  AccountResponse freeze(@PathVariable UUID id) {
-    return AccountResponse.from(accounts.freeze(id));
+  ResponseEntity<AccountResponse> freeze(@PathVariable UUID id) {
+    return ResponseEntity.ok(AccountResponse.from(accounts.freeze(id)));
   }
 
+  @Idempotent
   @PostMapping("/{id}/unfreeze")
-  AccountResponse unfreeze(@PathVariable UUID id) {
-    return AccountResponse.from(accounts.unfreeze(id));
+  ResponseEntity<AccountResponse> unfreeze(@PathVariable UUID id) {
+    return ResponseEntity.ok(AccountResponse.from(accounts.unfreeze(id)));
   }
 
+  @Idempotent
   @PostMapping("/{id}/close")
-  AccountResponse close(@PathVariable UUID id) {
-    return AccountResponse.from(accounts.close(id));
+  ResponseEntity<AccountResponse> close(@PathVariable UUID id) {
+    return ResponseEntity.ok(AccountResponse.from(accounts.close(id)));
   }
 }
