@@ -39,6 +39,7 @@ class AccountsRestApiTest extends IntegrationTestBase {
 
   private String createAccount(String holderName) throws Exception {
     MvcResult result = mockMvc.perform(post("/v1/accounts")
+            .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"holderName\":\"" + holderName + "\"}"))
         .andExpect(status().isCreated())
@@ -49,6 +50,7 @@ class AccountsRestApiTest extends IntegrationTestBase {
   @Test
   void createReturns201WithLocationAndAccountBody() throws Exception {
     mockMvc.perform(post("/v1/accounts")
+            .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"holderName\":\"Merchant One\"}"))
         .andExpect(status().isCreated())
@@ -72,11 +74,17 @@ class AccountsRestApiTest extends IntegrationTestBase {
   void lifecycleEndpointsTransitionStatus() throws Exception {
     String location = createAccount("Merchant Three");
 
-    mockMvc.perform(post(location + "/freeze")).andExpect(status().isOk())
+    mockMvc.perform(post(location + "/freeze")
+            .header("Idempotency-Key", UUID.randomUUID().toString()))
+        .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("FROZEN"));
-    mockMvc.perform(post(location + "/unfreeze")).andExpect(status().isOk())
+    mockMvc.perform(post(location + "/unfreeze")
+            .header("Idempotency-Key", UUID.randomUUID().toString()))
+        .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("ACTIVE"));
-    mockMvc.perform(post(location + "/close")).andExpect(status().isOk())
+    mockMvc.perform(post(location + "/close")
+            .header("Idempotency-Key", UUID.randomUUID().toString()))
+        .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("CLOSED"))
         .andExpect(jsonPath("$.closedAt").exists());
   }
@@ -134,6 +142,7 @@ class AccountsRestApiTest extends IntegrationTestBase {
   @Test
   void blankHolderNameReturns400() throws Exception {
     mockMvc.perform(post("/v1/accounts")
+            .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"holderName\":\"   \"}"))
         .andExpect(status().isBadRequest())
@@ -149,8 +158,11 @@ class AccountsRestApiTest extends IntegrationTestBase {
   @Test
   void lifecycleConflictOnClosedAccountReturns409() throws Exception {
     String location = createAccount("Conflict Merchant");
-    mockMvc.perform(post(location + "/close")).andExpect(status().isOk());
-    mockMvc.perform(post(location + "/freeze"))
+    mockMvc.perform(post(location + "/close")
+            .header("Idempotency-Key", UUID.randomUUID().toString()))
+        .andExpect(status().isOk());
+    mockMvc.perform(post(location + "/freeze")
+            .header("Idempotency-Key", UUID.randomUUID().toString()))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.detail").exists());
   }
