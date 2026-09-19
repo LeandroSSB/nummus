@@ -2,6 +2,8 @@ package com.leandrossb.nummus.interfaces;
 
 import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
 import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
+import com.leandrossb.nummus.conciliation.application.DuplicateSettlementLinesException;
+import com.leandrossb.nummus.conciliation.application.UnknownConciliationReportException;
 import com.leandrossb.nummus.interfaces.idempotency.IdempotencyKeyReuseException;
 import com.leandrossb.nummus.interfaces.idempotency.MissingIdempotencyKeyException;
 import com.leandrossb.nummus.ledger.domain.AccountNotActiveException;
@@ -37,7 +39,8 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler({UnknownPaymentAccountException.class, UnknownAccountException.class,
       UnknownTransactionException.class, UnknownChargeException.class,
-      UnknownPaymentIntentException.class, UnknownWebhookEndpointException.class})
+      UnknownPaymentIntentException.class, UnknownWebhookEndpointException.class,
+      UnknownConciliationReportException.class})
   public ProblemDetail notFound(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
   }
@@ -52,6 +55,11 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(IdempotencyKeyReuseException.class)
   ProblemDetail idempotencyReuse(IdempotencyKeyReuseException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
+  }
+
+  @ExceptionHandler(DuplicateSettlementLinesException.class)
+  ProblemDetail duplicateSettlementLines(DuplicateSettlementLinesException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
   }
 
   @ExceptionHandler(MissingIdempotencyKeyException.class)
