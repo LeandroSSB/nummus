@@ -67,4 +67,13 @@ class ModuleBoundaryTest {
           .should().dependOnClassesThat()
           .resideInAnyPackage("..payments.domain..", "..payments.infrastructure..",
               "..payments.interfaces..", "..accounts..");
+
+  @ArchTest
+  static final ArchRule conciliationTouchesOnlyModuleApis =
+      noClasses().that().resideInAPackage("..conciliation..")
+          .should().dependOnClassesThat()
+          .resideInAnyPackage("..payments.domain..", "..payments.infrastructure..",
+              "..payments.interfaces..", "..psp_simulator.domain..",
+              "..psp_simulator.infrastructure..", "..psp_simulator.interfaces..",
+              "..accounts..", "..webhooks..");
 }
