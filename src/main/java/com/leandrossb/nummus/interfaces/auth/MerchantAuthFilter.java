@@ -5,6 +5,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.List;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -30,8 +31,8 @@ public class MerchantAuthFilter extends OncePerRequestFilter {
   private static final String BEARER_PREFIX = "Bearer ";
 
   /** Routes that require an authenticated merchant (headerless → 401, not a later 400). */
-  private static final java.util.List<String> MERCHANT_ROUTES =
-      java.util.List.of("/v1/me", "/v1/accounts", "/v1/payment-intents", "/v1/webhook-endpoints");
+  private static final List<String> MERCHANT_ROUTES =
+      List.of("/v1/me", "/v1/accounts", "/v1/payment-intents", "/v1/webhook-endpoints");
 
   private final MerchantAuthenticationPort authentication;
   private final ObjectMapper objectMapper;
@@ -74,6 +75,7 @@ public class MerchantAuthFilter extends OncePerRequestFilter {
     ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED,
         new MerchantUnauthorizedException().getMessage());
     response.setStatus(HttpStatus.UNAUTHORIZED.value());
+    response.setHeader("WWW-Authenticate", "Bearer");
     response.setContentType("application/problem+json");
     response.getWriter().write(objectMapper.writeValueAsString(problem));
   }

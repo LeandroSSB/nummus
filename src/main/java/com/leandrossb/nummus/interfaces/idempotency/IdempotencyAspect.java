@@ -60,7 +60,7 @@ public class IdempotencyAspect {
     try {
       return transactions.execute(txStatus -> {
         store.insert(merchant, key, fingerprint, expiresAt);
-        return proceedAndAttach(joinPoint, key);
+        return proceedAndAttach(joinPoint, merchant, key);
       });
     } catch (DuplicateKeyException raced) {
       return raced(joinPoint, merchant, key, fingerprint, expiresAt, raced);
@@ -78,7 +78,7 @@ public class IdempotencyAspect {
   }
 
   /** Runs the handler and attaches the serialized response — call inside an open transaction. */
-  private Object proceedAndAttach(ProceedingJoinPoint joinPoint, String key) {
+  private Object proceedAndAttach(ProceedingJoinPoint joinPoint, UUID merchant, String key) {
     Object result;
     try {
       result = joinPoint.proceed();
@@ -87,7 +87,7 @@ public class IdempotencyAspect {
     } catch (Throwable t) {
       throw new IllegalStateException(t);
     }
-    store.attachResponse(key, toStoredResponse(result));
+    store.attachResponse(merchant, key, toStoredResponse(result));
     return result;
   }
 
@@ -105,12 +105,12 @@ public class IdempotencyAspect {
       // the same transaction, so a failed re-execution rolls the row back to
       // its still-expired state and the next retry can reclaim cleanly.
       return transactions.execute(txStatus -> {
-        if (!store.reclaimExpired(key, fingerprint, expiresAt)) {
+        if (!store.reclaimExpired(merchant, key, fingerprint, expiresAt)) {
           // Lost the reclaim race (a concurrent retry of the same expired key
           // claimed it first) — treat as reuse; the client retries shortly.
           throw new IdempotencyKeyReuseException(key);
         }
-        return proceedAndAttach(joinPoint, key);
+        return proceedAndAttach(joinPoint, merchant, key);
       });
     }
     if (!Arrays.equals(row.requestFingerprint(), fingerprint)) {

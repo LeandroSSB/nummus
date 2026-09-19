@@ -19,15 +19,16 @@ public interface IdempotencyStore {
   /** Looks the slot up in the caller's namespace — never another merchant's. */
   Optional<StoredRow> findByKey(UUID merchantPublicId, String key);
 
-  /** Attaches the response to a row that has none yet; false if one is already attached. */
-  boolean attachResponse(String key, StoredResponse response);
+  /** Attaches the response to the caller's namespace row; false if one is already attached. */
+  boolean attachResponse(UUID merchantPublicId, String key, StoredResponse response);
 
   /**
-   * Claims an expired slot for a new execution: rewrites the fingerprint and
-   * expiry and clears any stale response. Returns false when the row is not
-   * (or no longer) expired — someone else claimed it first.
+   * Claims an expired slot in the caller's namespace for a new execution:
+   * rewrites the fingerprint and expiry and clears any stale response.
+   * Returns false when the row is not (or no longer) expired — someone else
+   * claimed it first.
    */
-  boolean reclaimExpired(String key, byte[] newFingerprint, Instant newExpiresAt);
+  boolean reclaimExpired(UUID merchantPublicId, String key, byte[] newFingerprint, Instant newExpiresAt);
 
   /** Deletes every row past its expiry; returns the number of rows removed. */
   int purgeExpired(Instant now);

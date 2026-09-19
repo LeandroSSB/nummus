@@ -3,6 +3,7 @@ package com.leandrossb.nummus.payments.application;
 import com.leandrossb.nummus.accounts.application.AccountsService;
 import com.leandrossb.nummus.accounts.domain.AccountStatus;
 import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
+import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
 import com.leandrossb.nummus.ledger.application.Ledger;
 import com.leandrossb.nummus.ledger.application.PostTransactionCommand;
 import com.leandrossb.nummus.ledger.domain.Direction;
@@ -69,8 +70,13 @@ public class PaymentsServiceImpl implements PaymentsService {
         .orElseThrow(() -> new UnknownPaymentIntentException(publicId));
     // Ownership precedes every lazy transition and the charge poll: never act
     // on another merchant's intent — for them it is indistinguishable from
-    // an unknown one.
-    accounts.get(merchantPublicId, intent.accountPublicId());
+    // an unknown one, down to the vocabulary: the 404 names the intent they
+    // addressed, never the owning account's id.
+    try {
+      accounts.get(merchantPublicId, intent.accountPublicId());
+    } catch (UnknownPaymentAccountException e) {
+      throw new UnknownPaymentIntentException(publicId);
+    }
     if (intent.status() != IntentStatus.CREATED) {
       return intent;
     }

@@ -9,7 +9,6 @@ import com.leandrossb.nummus.merchants.application.ApiKeysService;
 import com.leandrossb.nummus.merchants.application.IssuedApiKey;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -57,6 +56,8 @@ class MerchantStoreTest extends IntegrationTestBase {
   void secretsAreUniqueAndHashesAreStoredNotSecrets() throws Exception {
     var merchant = merchants.create("Hash Merchant");
     var issued = keys.create(merchant.publicId());
+    var another = keys.create(merchant.publicId());
+    assertNotEquals(issued.secret(), another.secret());
     try (var c = adminConnection(); var st = c.createStatement();
         var rs = st.executeQuery(
             "SELECT key_hash FROM merchants.api_key WHERE public_id = '" + issued.key().publicId() + "'")) {
@@ -64,6 +65,5 @@ class MerchantStoreTest extends IntegrationTestBase {
       assertTrue(!rs.getString(1).contains("nummus_sk_"), "the secret itself must never be stored");
       assertTrue(rs.getString(1).matches("[0-9a-f]{64}"));
     }
-    UUID.randomUUID(); // silence unused-import adjustments during transcription
   }
 }
