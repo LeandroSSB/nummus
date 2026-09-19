@@ -29,10 +29,11 @@ public class JdbcClientWebhookStore implements WebhookStore {
   public WebhookEndpoint insertEndpoint(WebhookEndpoint endpoint) {
     jdbc.sql("""
         insert into webhooks.webhook_endpoint
-          (public_id, url, secret, event_types, status, created_at)
-        values (:publicId, :url, :secret, :eventTypes::jsonb, :status, :createdAt)
+          (public_id, merchant_public_id, url, secret, event_types, status, created_at)
+        values (:publicId, :merchantPublicId, :url, :secret, :eventTypes::jsonb, :status, :createdAt)
         """)
         .param("publicId", endpoint.publicId())
+        .param("merchantPublicId", endpoint.merchantPublicId())
         .param("url", endpoint.url().toString())
         .param("secret", endpoint.secret())
         .param("eventTypes", typesJson(endpoint.eventTypes()))
@@ -43,30 +44,36 @@ public class JdbcClientWebhookStore implements WebhookStore {
   }
 
   @Override
-  public List<WebhookEndpoint> listActiveEndpoints() {
+  public List<WebhookEndpoint> listActiveEndpoints(UUID merchantPublicId) {
     return jdbc.sql("""
-        select public_id, url, secret, event_types::text, status, created_at
-        from webhooks.webhook_endpoint where status = 'ACTIVE' order by created_at, id
+        select public_id, merchant_public_id, url, secret, event_types::text, status, created_at
+        from webhooks.webhook_endpoint
+        where merchant_public_id = :merchantPublicId and status = 'ACTIVE'
+        order by created_at, id
         """)
+        .param("merchantPublicId", merchantPublicId)
         .query((rs, i) -> mapEndpoint(rs)).list();
   }
 
   @Override
-  public Optional<WebhookEndpoint> findActiveEndpoint(UUID publicId) {
+  public Optional<WebhookEndpoint> findActiveEndpoint(UUID merchantPublicId, UUID publicId) {
     return jdbc.sql("""
-        select public_id, url, secret, event_types::text, status, created_at
-        from webhooks.webhook_endpoint where public_id = :publicId and status = 'ACTIVE'
+        select public_id, merchant_public_id, url, secret, event_types::text, status, created_at
+        from webhooks.webhook_endpoint
+        where merchant_public_id = :merchantPublicId and public_id = :publicId and status = 'ACTIVE'
         """)
+        .param("merchantPublicId", merchantPublicId)
         .param("publicId", publicId)
         .query((rs, i) -> mapEndpoint(rs)).optional();
   }
 
   @Override
-  public boolean markEndpointDeleted(UUID publicId) {
+  public boolean markEndpointDeleted(UUID merchantPublicId, UUID publicId) {
     return jdbc.sql("""
         update webhooks.webhook_endpoint set status = 'DELETED'
-        where public_id = :publicId and status = 'ACTIVE'
+        where merchant_public_id = :merchantPublicId and public_id = :publicId and status = 'ACTIVE'
         """)
+        .param("merchantPublicId", merchantPublicId)
         .param("publicId", publicId).update() == 1;
   }
 
@@ -153,18 +160,20 @@ public class JdbcClientWebhookStore implements WebhookStore {
   }
 
   @Override
-  public List<DeliveryRecord> listDeliveries(UUID endpointPublicId, String status, int limit) {
+  public List<DeliveryRecord> listDeliveries(UUID merchantPublicId, UUID endpointPublicId, String status, int limit) {
     return jdbc.sql("""
         select d.id, e.public_id, e.type, d.status, d.attempts,
                d.last_response_status, d.next_attempt_at
         from webhooks.webhook_delivery d
         join webhooks.webhook_event e on e.id = d.event_id
         join webhooks.webhook_endpoint p on p.id = d.endpoint_id
-        where p.public_id = :endpointPublicId
+        where p.merchant_public_id = :merchantPublicId
+          and p.public_id = :endpointPublicId
           and (:status::text is null or d.status = :status)
         order by d.id desc
         limit :limit
         """)
+        .param("merchantPublicId", merchantPublicId)
         .param("endpointPublicId", endpointPublicId)
         .param("status", status)
         .param("limit", limit)
@@ -176,7 +185,8 @@ public class JdbcClientWebhookStore implements WebhookStore {
   }
 
   private static WebhookEndpoint mapEndpoint(ResultSet rs) throws SQLException {
-    return new WebhookEndpoint(rs.getObject("public_id", UUID.class), URI.create(rs.getString("url")),
+    return new WebhookEndpoint(rs.getObject("merchant_public_id", UUID.class),
+        rs.getObject("public_id", UUID.class), URI.create(rs.getString("url")),
         rs.getString("secret"), typesFromJson(rs.getString("event_types")),
         EndpointStatus.valueOf(rs.getString("status")),
         toInstant(rs.getObject("created_at", OffsetDateTime.class)));

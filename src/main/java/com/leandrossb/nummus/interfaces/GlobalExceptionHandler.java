@@ -4,8 +4,11 @@ import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
 import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
 import com.leandrossb.nummus.conciliation.application.DuplicateSettlementLinesException;
 import com.leandrossb.nummus.conciliation.application.UnknownConciliationReportException;
+import com.leandrossb.nummus.interfaces.auth.MerchantUnauthorizedException;
 import com.leandrossb.nummus.interfaces.idempotency.IdempotencyKeyReuseException;
 import com.leandrossb.nummus.interfaces.idempotency.MissingIdempotencyKeyException;
+import com.leandrossb.nummus.merchants.application.UnknownApiKeyException;
+import com.leandrossb.nummus.merchants.application.UnknownMerchantException;
 import com.leandrossb.nummus.ledger.domain.AccountNotActiveException;
 import com.leandrossb.nummus.ledger.domain.CurrencyMismatchException;
 import com.leandrossb.nummus.ledger.domain.InvalidMoneyException;
@@ -41,9 +44,15 @@ public class GlobalExceptionHandler {
   @ExceptionHandler({UnknownPaymentAccountException.class, UnknownAccountException.class,
       UnknownTransactionException.class, UnknownChargeException.class,
       UnknownPaymentIntentException.class, UnknownWebhookEndpointException.class,
-      UnknownConciliationReportException.class})
+      UnknownConciliationReportException.class, UnknownMerchantException.class,
+      UnknownApiKeyException.class})
   public ProblemDetail notFound(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+  }
+
+  @ExceptionHandler(MerchantUnauthorizedException.class)
+  ProblemDetail merchantUnauthorized(MerchantUnauthorizedException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
   }
 
   @ExceptionHandler({PaymentAccountNotActiveException.class, AccountNotActiveException.class,

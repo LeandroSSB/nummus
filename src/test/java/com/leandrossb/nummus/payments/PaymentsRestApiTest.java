@@ -8,9 +8,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.leandrossb.nummus.accounts.application.AccountsService;
 import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
+import com.leandrossb.nummus.merchants.application.ApiKeysService;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -30,13 +33,29 @@ class PaymentsRestApiTest extends IntegrationTestBase {
   @Autowired
   private SimulatorService simulator;
 
+  @Autowired
+  private ApiKeysService apiKeys;
+
+  private String seedMerchantKey;
+
+  /**
+   * Payment intents are merchant-scoped: this class keeps every fixture under
+   * the seed merchant and authenticates each payment call with a freshly
+   * minted seed-merchant key.
+   */
+  @BeforeEach
+  void mintSeedMerchantKey() {
+    seedMerchantKey = apiKeys.create(SeedMerchant.PUBLIC_ID).secret();
+  }
+
   private String createAccount() {
-    return accountsService.open(new OpenAccountCommand("Rest Merchant"))
+    return accountsService.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("Rest Merchant"))
         .publicId().toString();
   }
 
   private String createIntent(String accountId, String amountJson) throws Exception {
     MvcResult result = mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey)
             .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + accountId + "\",\"amount\":" + amountJson + "}"))
@@ -49,6 +68,7 @@ class PaymentsRestApiTest extends IntegrationTestBase {
   void createReturns201WithIntentBody() throws Exception {
     String accountId = createAccount();
     mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey)
             .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + accountId + "\",\"amount\":10.0000}"))
@@ -67,15 +87,17 @@ class PaymentsRestApiTest extends IntegrationTestBase {
     String location = createIntent(accountId, "10.0000");
 
     String chargeId = com.jayway.jsonpath.JsonPath.read(
-        mockMvc.perform(get(location)).andReturn().getResponse().getContentAsString(), "$.chargeId");
+        mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
+            .andReturn().getResponse().getContentAsString(), "$.chargeId");
     simulator.pay(UUID.fromString(chargeId));
 
-    mockMvc.perform(get(location))
+    mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SETTLED"))
         .andExpect(jsonPath("$.settledAt").exists());
 
-    mockMvc.perform(get("/v1/accounts/{id}/balance", UUID.fromString(accountId)))
+    mockMvc.perform(get("/v1/accounts/{id}/balance", UUID.fromString(accountId))
+            .header("Authorization", "Bearer " + seedMerchantKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.amount").value(10.0000))
         .andExpect(jsonPath("$.currency").value("BRL"));
@@ -86,7 +108,8 @@ class PaymentsRestApiTest extends IntegrationTestBase {
     String accountId = createAccount();
     String location = createIntent(accountId, "5.0000");
     String chargeId = com.jayway.jsonpath.JsonPath.read(
-        mockMvc.perform(get(location)).andReturn().getResponse().getContentAsString(), "$.chargeId");
+        mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
+            .andReturn().getResponse().getContentAsString(), "$.chargeId");
 
     // age the intent past its expiry through the database (60s minimum ttl)
     try (var c = adminConnection(); var st = c.createStatement()) {
@@ -94,7 +117,7 @@ class PaymentsRestApiTest extends IntegrationTestBase {
     }
     simulator.pay(UUID.fromString(chargeId));
 
-    mockMvc.perform(get(location))
+    mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("EXPIRED"));
   }
@@ -104,10 +127,11 @@ class PaymentsRestApiTest extends IntegrationTestBase {
     String accountId = createAccount();
     String location = createIntent(accountId, "5.0000");
     String chargeId = com.jayway.jsonpath.JsonPath.read(
-        mockMvc.perform(get(location)).andReturn().getResponse().getContentAsString(), "$.chargeId");
+        mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
+            .andReturn().getResponse().getContentAsString(), "$.chargeId");
     simulator.fail(UUID.fromString(chargeId));
 
-    mockMvc.perform(get(location))
+    mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("FAILED"));
   }
@@ -117,22 +141,24 @@ class PaymentsRestApiTest extends IntegrationTestBase {
     String accountId = createAccount();
     String location = createIntent(accountId, "5.0000");
     String chargeId = com.jayway.jsonpath.JsonPath.read(
-        mockMvc.perform(get(location)).andReturn().getResponse().getContentAsString(), "$.chargeId");
+        mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
+            .andReturn().getResponse().getContentAsString(), "$.chargeId");
     simulator.pay(UUID.fromString(chargeId));
-    accountsService.freeze(UUID.fromString(accountId));
+    accountsService.freeze(SeedMerchant.PUBLIC_ID, UUID.fromString(accountId));
 
-    mockMvc.perform(get(location))
+    mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.detail").exists());
 
-    mockMvc.perform(get(location))
+    mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
         .andExpect(status().isConflict());
 
-    accountsService.unfreeze(UUID.fromString(accountId));
-    mockMvc.perform(get(location))
+    accountsService.unfreeze(SeedMerchant.PUBLIC_ID, UUID.fromString(accountId));
+    mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SETTLED"));
-    mockMvc.perform(get("/v1/accounts/{id}/balance", UUID.fromString(accountId)))
+    mockMvc.perform(get("/v1/accounts/{id}/balance", UUID.fromString(accountId))
+            .header("Authorization", "Bearer " + seedMerchantKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.amount").value(5.0000));
   }
@@ -141,16 +167,19 @@ class PaymentsRestApiTest extends IntegrationTestBase {
   void validationFailuresReturn400() throws Exception {
     String accountId = createAccount();
     mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey)
             .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + accountId + "\",\"amount\":0.0000}"))
         .andExpect(status().isBadRequest());
     mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey)
             .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + accountId + "\",\"amount\":1.12345}"))
         .andExpect(status().isBadRequest());
     mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey)
             .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"amount\":5.0000}"))
@@ -160,11 +189,13 @@ class PaymentsRestApiTest extends IntegrationTestBase {
   @Test
   void unknownAccountAndIntentReturn404() throws Exception {
     mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey)
             .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + UUID.randomUUID() + "\",\"amount\":5.0000}"))
         .andExpect(status().isNotFound());
-    mockMvc.perform(get("/v1/payment-intents/{id}", UUID.randomUUID()))
+    mockMvc.perform(get("/v1/payment-intents/{id}", UUID.randomUUID())
+            .header("Authorization", "Bearer " + seedMerchantKey))
         .andExpect(status().isNotFound());
   }
 }

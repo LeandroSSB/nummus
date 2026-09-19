@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.webhooks.interfaces;
 
+import com.leandrossb.nummus.interfaces.auth.AuthenticatedMerchant;
 import com.leandrossb.nummus.webhooks.application.WebhookEndpointsService;
 import com.leandrossb.nummus.webhooks.application.WebhookStore;
 import com.leandrossb.nummus.webhooks.interfaces.dto.DeliveryResponse;
@@ -21,9 +22,10 @@ class WebhookDeliveriesController {
   }
 
   @GetMapping("/v1/webhook-endpoints/{id}/deliveries")
-  java.util.List<DeliveryResponse> deliveries(@PathVariable UUID id,
+  java.util.List<DeliveryResponse> deliveries(AuthenticatedMerchant merchant, @PathVariable UUID id,
       @RequestParam(required = false) String status) {
-    endpoints.get(id); // 404 for unknown or deleted endpoints
-    return store.listDeliveries(id, status, 50).stream().map(DeliveryResponse::from).toList();
+    endpoints.get(merchant.merchantPublicId(), id); // 404 for unknown, deleted, or foreign endpoints
+    return store.listDeliveries(merchant.merchantPublicId(), id, status, 50).stream()
+        .map(DeliveryResponse::from).toList();
   }
 }

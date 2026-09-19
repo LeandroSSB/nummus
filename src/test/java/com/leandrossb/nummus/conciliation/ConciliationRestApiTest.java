@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.leandrossb.nummus.accounts.application.AccountsService;
 import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
 import com.leandrossb.nummus.ledger.domain.Money;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
@@ -64,17 +65,17 @@ class ConciliationRestApiTest extends IntegrationTestBase {
     // relative to this JVM clock. Other classes' now-window fixtures cannot
     // leak in, whatever order JUnit runs methods or classes in.
     Instant start = Instant.now();
-    var account = accountsService.open(new OpenAccountCommand("Concile Merchant"));
-    var first = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("11.0000"), null));
-    var second = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("12.0000"), null));
+    var account = accountsService.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("Concile Merchant"));
+    var first = payments.create(SeedMerchant.PUBLIC_ID, new CreateIntentCommand(account.publicId(), Money.ofBrl("11.0000"), null));
+    var second = payments.create(SeedMerchant.PUBLIC_ID, new CreateIntentCommand(account.publicId(), Money.ofBrl("12.0000"), null));
     settledIntents.add(first.publicId());
     settledIntents.add(second.publicId());
     networkCharges.add(first.chargePublicId());
     networkCharges.add(second.chargePublicId());
     simulator.pay(first.chargePublicId());
     simulator.pay(second.chargePublicId());
-    payments.get(first.publicId());
-    payments.get(second.publicId());
+    payments.get(SeedMerchant.PUBLIC_ID, first.publicId());
+    payments.get(SeedMerchant.PUBLIC_ID, second.publicId());
 
     String from = start.minusSeconds(30).toString();
     String to = Instant.now().plusSeconds(60).toString();
@@ -117,17 +118,17 @@ class ConciliationRestApiTest extends IntegrationTestBase {
     // asserted, so an earlier method's settlements may add MATCHED lines but
     // cannot fabricate or hide this test's divergences.
     Instant start = Instant.now();
-    var account = accountsService.open(new OpenAccountCommand("Divergence Merchant"));
+    var account = accountsService.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("Divergence Merchant"));
     // MISSING_INTERNAL: the network settled a charge no intent knows about.
     var orphan = simulator.create(Money.ofBrl("77.0000"));
     networkCharges.add(orphan.publicId());
     simulator.pay(orphan.publicId());
     // AMOUNT_MISMATCH: settle internally, then tamper the network's amount DB-side.
-    var tampered = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("20.0000"), null));
+    var tampered = payments.create(SeedMerchant.PUBLIC_ID, new CreateIntentCommand(account.publicId(), Money.ofBrl("20.0000"), null));
     settledIntents.add(tampered.publicId());
     networkCharges.add(tampered.chargePublicId());
     simulator.pay(tampered.chargePublicId());
-    payments.get(tampered.publicId());
+    payments.get(SeedMerchant.PUBLIC_ID, tampered.publicId());
     try (var c = adminConnection(); var st = c.createStatement()) {
       st.executeUpdate("UPDATE psp_simulator.charge SET amount = amount + 1"
           + " WHERE public_id = '" + tampered.chargePublicId() + "'");
@@ -135,11 +136,11 @@ class ConciliationRestApiTest extends IntegrationTestBase {
     // MISSING_EXTERNAL: the intent settles inside the window, but the network's
     // line for its charge sits outside the report window (DB-side rewrite of the
     // charge's settlement timestamp only — the intent's settled_at stays now).
-    var excluded = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("30.0000"), null));
+    var excluded = payments.create(SeedMerchant.PUBLIC_ID, new CreateIntentCommand(account.publicId(), Money.ofBrl("30.0000"), null));
     settledIntents.add(excluded.publicId());
     networkCharges.add(excluded.chargePublicId());
     simulator.pay(excluded.chargePublicId());
-    payments.get(excluded.publicId());
+    payments.get(SeedMerchant.PUBLIC_ID, excluded.publicId());
     try (var c = adminConnection(); var st = c.createStatement()) {
       st.executeUpdate("UPDATE psp_simulator.charge SET updated_at = now() - interval '2 hours'"
           + " WHERE public_id = '" + excluded.chargePublicId() + "'");

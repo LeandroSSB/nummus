@@ -18,9 +18,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * mechanism, and a future merchant POST without it still gets a 400 here rather
  * than a silently non-idempotent write. Renders problem+json itself because a
  * filter runs outside the @ControllerAdvice's reach.
+ * Authentication (MerchantAuthFilter) runs first.
  */
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(Ordered.HIGHEST_PRECEDENCE + 1000)
 public class IdempotencyWebFilter extends OncePerRequestFilter {
 
   public static final String KEY_HEADER = "Idempotency-Key";

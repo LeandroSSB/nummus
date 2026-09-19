@@ -17,6 +17,7 @@ import com.leandrossb.nummus.payments.application.IntentLifecycleEvent;
 import com.leandrossb.nummus.payments.application.IntentLifecycleEvents;
 import com.leandrossb.nummus.payments.application.InMemoryPaymentsRepository;
 import com.leandrossb.nummus.payments.application.PaymentsRepository;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.application.PaymentsServiceImpl;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
@@ -48,7 +49,7 @@ class PaymentsPublishRaceTest {
     var intent = createdIntent(payments);
     repo.agePastExpiry(intent.publicId());
 
-    var observed = payments.get(intent.publicId());
+    var observed = payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
 
     // The loser sees the winner's committed terminal state and stays silent.
     assertEquals(IntentStatus.SETTLED, observed.status());
@@ -62,7 +63,7 @@ class PaymentsPublishRaceTest {
     var intent = createdIntent(payments);
     network.fail(intent.chargePublicId());
 
-    var observed = payments.get(intent.publicId());
+    var observed = payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
 
     // The loser sees the winner's committed terminal state and stays silent.
     assertEquals(IntentStatus.EXPIRED, observed.status());
@@ -76,7 +77,7 @@ class PaymentsPublishRaceTest {
     var intent = createdIntent(payments);
     repo.agePastExpiry(intent.publicId());
 
-    var expired = payments.get(intent.publicId());
+    var expired = payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
 
     assertEquals(IntentStatus.EXPIRED, expired.status());
     assertEquals(1, intentEvents.published.size());
@@ -89,8 +90,8 @@ class PaymentsPublishRaceTest {
   }
 
   private PaymentIntent createdIntent(PaymentsService payments) {
-    var account = accounts.open(new OpenAccountCommand("merchant"));
-    return payments.create(
+    var account = accounts.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("merchant"));
+    return payments.create(SeedMerchant.PUBLIC_ID,
         new CreateIntentCommand(account.publicId(), Money.ofBrl("5.0000"), null));
   }
 

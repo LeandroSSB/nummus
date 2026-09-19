@@ -3,6 +3,8 @@ package com.leandrossb.nummus.idempotency;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import com.leandrossb.nummus.merchants.application.ApiKeysService;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import com.jayway.jsonpath.JsonPath;
 import java.util.ArrayList;
@@ -13,6 +15,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,10 +30,24 @@ class IdempotencyConcurrencyTest extends IntegrationTestBase {
   @Autowired
   private MockMvc mockMvc;
 
+  @Autowired
+  private ApiKeysService apiKeys;
+
+  private String seedMerchantKey;
+
+  /** Accounts and payment-intent routes are merchant routes; this class
+   *  keeps its fixtures under the seed merchant and authenticates as a
+   *  minted seed key. */
+  @BeforeEach
+  void mintSeedMerchantKey() {
+    seedMerchantKey = apiKeys.create(SeedMerchant.PUBLIC_ID).secret();
+  }
+
   @Test
   @Timeout(120)
   void racingIdenticalPostsExecuteOnceAndReplayTheSameResponse() throws Exception {
     String accountId = JsonPath.read(mockMvc.perform(post("/v1/accounts")
+            .header("Authorization", "Bearer " + seedMerchantKey)
             .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Race Key Merchant\"}"))
         .andReturn().getResponse().getContentAsString(), "$.publicId");
@@ -45,7 +62,9 @@ class IdempotencyConcurrencyTest extends IntegrationTestBase {
       for (int i = 0; i < workers; i++) {
         futures.add(pool.submit(() -> {
           start.await();
-          return mockMvc.perform(post("/v1/payment-intents").header("Idempotency-Key", key)
+          return mockMvc.perform(post("/v1/payment-intents")
+                  .header("Authorization", "Bearer " + seedMerchantKey)
+                  .header("Idempotency-Key", key)
                   .contentType(MediaType.APPLICATION_JSON).content(body))
               .andReturn();
         }));
