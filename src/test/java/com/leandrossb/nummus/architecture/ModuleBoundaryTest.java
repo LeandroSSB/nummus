@@ -76,4 +76,18 @@ class ModuleBoundaryTest {
               "..payments.interfaces..", "..psp_simulator.domain..",
               "..psp_simulator.infrastructure..", "..psp_simulator.interfaces..",
               "..accounts..", "..webhooks..", "..ledger.infrastructure..");
+
+  @ArchTest
+  static final ArchRule merchantsStaySelfContained =
+      noClasses().that().resideInAPackage("..merchants..")
+          .should().dependOnClassesThat()
+          .resideInAnyPackage("..accounts..", "..ledger..", "..payments..",
+              "..webhooks..", "..conciliation..", "..psp_simulator..");
+
+  @ArchTest
+  static final ArchRule businessModulesNeverTouchMerchants =
+      noClasses().that().resideInAnyPackage("..accounts..", "..payments..", "..webhooks..")
+          .should().dependOnClassesThat()
+          .resideInAnyPackage("..merchants.domain..", "..merchants.infrastructure..",
+              "..merchants.interfaces..");
 }
