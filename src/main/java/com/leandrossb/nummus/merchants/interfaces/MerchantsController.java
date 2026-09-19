@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.merchants.interfaces;
 
+import com.leandrossb.nummus.interfaces.auth.AuthenticatedOperator;
 import com.leandrossb.nummus.interfaces.idempotency.Idempotent;
 import com.leandrossb.nummus.merchants.application.ApiKeysService;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
@@ -33,7 +34,8 @@ class MerchantsController {
 
   @Idempotent
   @PostMapping
-  ResponseEntity<CreateMerchantResponse> create(@Valid @RequestBody CreateMerchantRequest request) {
+  ResponseEntity<CreateMerchantResponse> create(AuthenticatedOperator operator,
+      @Valid @RequestBody CreateMerchantRequest request) {
     var merchant = merchants.create(request.name());
     var firstKey = keys.create(merchant.publicId());
     return ResponseEntity
@@ -42,7 +44,7 @@ class MerchantsController {
   }
 
   @GetMapping("/{id}")
-  MerchantResponse get(@PathVariable UUID id) {
+  MerchantResponse get(AuthenticatedOperator operator, @PathVariable UUID id) {
     return MerchantResponse.from(merchants.find(id).orElseThrow(() -> new UnknownMerchantException(id)));
   }
 }

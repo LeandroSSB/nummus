@@ -7,6 +7,7 @@ import com.leandrossb.nummus.conciliation.application.ConciliationStore;
 import com.leandrossb.nummus.conciliation.interfaces.dto.CreateReportRequest;
 import com.leandrossb.nummus.conciliation.interfaces.dto.ReportLineResponse;
 import com.leandrossb.nummus.conciliation.interfaces.dto.ReportSummaryResponse;
+import com.leandrossb.nummus.interfaces.auth.AuthenticatedOperator;
 import com.leandrossb.nummus.interfaces.idempotency.Idempotent;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -35,7 +36,8 @@ class ConciliationReportsController {
 
   @Idempotent
   @PostMapping
-  ResponseEntity<ReportSummaryResponse> create(@Valid @RequestBody CreateReportRequest request) {
+  ResponseEntity<ReportSummaryResponse> create(AuthenticatedOperator operator,
+      @Valid @RequestBody CreateReportRequest request) {
     var summary = conciliation.ingest(Instant.parse(request.from()), Instant.parse(request.to()));
     return ResponseEntity
         .created(URI.create("/v1/conciliation/reports/" + summary.publicId()))
@@ -43,12 +45,12 @@ class ConciliationReportsController {
   }
 
   @GetMapping
-  List<ReportSummaryResponse> list() {
+  List<ReportSummaryResponse> list(AuthenticatedOperator operator) {
     return store.listSummaries(50).stream().map(ReportSummaryResponse::from).toList();
   }
 
   @GetMapping("/{id}")
-  ReportDetailResponse get(@PathVariable UUID id) {
+  ReportDetailResponse get(AuthenticatedOperator operator, @PathVariable UUID id) {
     var summary = store.findSummary(id).orElseThrow(() -> new UnknownConciliationReportException(id));
     return new ReportDetailResponse(ReportSummaryResponse.from(summary),
         store.findLines(id).stream().map(ReportLineResponse::from).toList());

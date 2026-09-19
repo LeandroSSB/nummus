@@ -15,6 +15,7 @@ import com.leandrossb.nummus.ledger.domain.AccountType;
 import com.leandrossb.nummus.ledger.domain.Direction;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
+import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.List;
 import java.util.UUID;
@@ -38,13 +39,19 @@ class AccountsRestApiTest extends IntegrationTestBase {
   @Autowired
   private Ledger ledger;
 
+  @Autowired
+  private OperatorKeysService operatorKeys;
+
   private String merchantKey;
   private UUID merchantId;
 
-  /** Fresh merchant per test: every account this class touches belongs to it. */
+  /** Fresh merchant per test: every account this class touches belongs to it.
+   *  Creation is operator-gated — one operator key per fixture mint. */
   @BeforeEach
   void createMerchantFixture() throws Exception {
+    String operatorAuth = "Bearer " + operatorKeys.create().secret();
     MvcResult created = mockMvc.perform(post("/v1/merchants")
+            .header("Authorization", operatorAuth)
             .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"name\":\"Accounts Fixture Merchant\"}"))
