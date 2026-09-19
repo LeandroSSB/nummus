@@ -28,12 +28,12 @@ public class InMemoryPaymentsRepository implements PaymentsRepository {
 
   @Override
   public boolean transitionToExpired(UUID publicId) {
-    return guarded(publicId, IntentStatus.EXPIRED, null, null);
+    return guarded(publicId, IntentStatus.EXPIRED, null, null, null);
   }
 
   @Override
   public boolean transitionToFailed(UUID publicId) {
-    return guarded(publicId, IntentStatus.FAILED, null, null);
+    return guarded(publicId, IntentStatus.FAILED, null, null, null);
   }
 
   @Override
