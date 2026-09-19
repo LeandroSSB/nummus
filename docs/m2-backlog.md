@@ -199,3 +199,21 @@ Known bounds, deliberate:
 - **Merchants.application remains reachable** from business modules for the
   `SeedMerchant` bridge; retire it when a real migration-era consumer audit
   lands (or scope it behind a query port).
+
+## From the M8 review
+
+M8 delivered operator authentication: one-time env bootstrap, operator-key
+lifecycle (mint/list/revoke), merchant creation and conciliation gated
+(401 keyless, 403 role-mismatch both directions), simulator open by design.
+Known bounds, deliberate:
+
+- **Operators are role-level, not person-level.** One key equals "an
+  operator"; no per-operator identity, audit attribution, or RBAC.
+- **Bootstrap lockout is operational.** Revoking every operator key
+  re-arms the bootstrap — recovery requires redeploying with the env
+  token set; a stolen token plus a full revoke is a takeover path (token
+  handling is deployment security).
+- **No key expiry or last_used_at**; constant-time compare covers the
+  bootstrap token only — key hashes are exact-match indexed lookups.
+- **Simulator stays unauthenticated** (non-production harness); a real
+  deployment replaces the network boundary entirely.
