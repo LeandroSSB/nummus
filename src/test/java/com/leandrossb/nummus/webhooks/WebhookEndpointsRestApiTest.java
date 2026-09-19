@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -24,8 +25,23 @@ class WebhookEndpointsRestApiTest extends IntegrationTestBase {
   @Autowired
   private MockMvc mockMvc;
 
+  private String merchantKey;
+
+  /** Fresh merchant per test: every endpoint this class touches belongs to it. */
+  @BeforeEach
+  void createMerchantFixture() throws Exception {
+    MvcResult created = mockMvc.perform(post("/v1/merchants")
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Webhooks Fixture Merchant\"}"))
+        .andExpect(status().isCreated())
+        .andReturn();
+    merchantKey = com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.apiKey.secret");
+  }
+
   private String createEndpoint(String body) throws Exception {
     MvcResult result = mockMvc.perform(post("/v1/webhook-endpoints")
+            .header("Authorization", "Bearer " + merchantKey)
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated())
@@ -37,14 +53,16 @@ class WebhookEndpointsRestApiTest extends IntegrationTestBase {
   void createReturnsTheSecretExactlyOnceAndReplaysIdentically() throws Exception {
     String key = UUID.randomUUID().toString();
     String body = "{\"url\":\"https://merchant.example/hook\",\"eventTypes\":[\"payment_intent.settled\"]}";
-    var first = mockMvc.perform(post("/v1/webhook-endpoints").header(KEY, key)
+    var first = mockMvc.perform(post("/v1/webhook-endpoints")
+            .header("Authorization", "Bearer " + merchantKey).header(KEY, key)
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.secret").exists())
         .andExpect(jsonPath("$.url").value("https://merchant.example/hook"))
         .andExpect(jsonPath("$.status").value("ACTIVE"))
         .andReturn();
-    var replay = mockMvc.perform(post("/v1/webhook-endpoints").header(KEY, key)
+    var replay = mockMvc.perform(post("/v1/webhook-endpoints")
+            .header("Authorization", "Bearer " + merchantKey).header(KEY, key)
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated())
         .andExpect(header().string("Idempotency-Replayed", "true"))
@@ -54,19 +72,23 @@ class WebhookEndpointsRestApiTest extends IntegrationTestBase {
 
     // The secret never appears again: get and list omit it.
     String location = first.getResponse().getHeader("Location");
-    mockMvc.perform(get(location)).andExpect(status().isOk())
+    mockMvc.perform(get(location).header("Authorization", "Bearer " + merchantKey))
+        .andExpect(status().isOk())
         .andExpect(jsonPath("$.secret").doesNotExist());
-    mockMvc.perform(get("/v1/webhook-endpoints")).andExpect(status().isOk())
+    mockMvc.perform(get("/v1/webhook-endpoints").header("Authorization", "Bearer " + merchantKey))
+        .andExpect(status().isOk())
         .andExpect(jsonPath("$[0].secret").doesNotExist());
   }
 
   @Test
   void createValidatesUrlSchemeAndEventTypeCatalog() throws Exception {
-    mockMvc.perform(post("/v1/webhook-endpoints").header(KEY, UUID.randomUUID().toString())
+    mockMvc.perform(post("/v1/webhook-endpoints")
+            .header("Authorization", "Bearer " + merchantKey).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"url\":\"ftp://merchant.example/hook\"}"))
         .andExpect(status().isBadRequest());
-    mockMvc.perform(post("/v1/webhook-endpoints").header(KEY, UUID.randomUUID().toString())
+    mockMvc.perform(post("/v1/webhook-endpoints")
+            .header("Authorization", "Bearer " + merchantKey).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"url\":\"https://merchant.example/hook\",\"eventTypes\":[\"nope.event\"]}"))
         .andExpect(status().isBadRequest());
@@ -75,6 +97,7 @@ class WebhookEndpointsRestApiTest extends IntegrationTestBase {
   @Test
   void createRequiresAnIdempotencyKey() throws Exception {
     mockMvc.perform(post("/v1/webhook-endpoints")
+            .header("Authorization", "Bearer " + merchantKey)
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"url\":\"https://merchant.example/hook\"}"))
         .andExpect(status().isBadRequest());
@@ -82,28 +105,37 @@ class WebhookEndpointsRestApiTest extends IntegrationTestBase {
 
   @Test
   void unknownAndDeletedEndpointsAre404() throws Exception {
-    mockMvc.perform(get("/v1/webhook-endpoints/" + UUID.randomUUID()))
+    mockMvc.perform(get("/v1/webhook-endpoints/" + UUID.randomUUID())
+            .header("Authorization", "Bearer " + merchantKey))
         .andExpect(status().isNotFound());
     String location = createEndpoint("{\"url\":\"https://merchant.example/temp\"}");
-    mockMvc.perform(delete(location)).andExpect(status().isNoContent());
-    mockMvc.perform(get(location)).andExpect(status().isNotFound());
-    mockMvc.perform(delete(location)).andExpect(status().isNotFound());
+    mockMvc.perform(delete(location).header("Authorization", "Bearer " + merchantKey))
+        .andExpect(status().isNoContent());
+    mockMvc.perform(get(location).header("Authorization", "Bearer " + merchantKey))
+        .andExpect(status().isNotFound());
+    mockMvc.perform(delete(location).header("Authorization", "Bearer " + merchantKey))
+        .andExpect(status().isNotFound());
   }
 
   @Test
   void deliveriesAreListedPerEndpoint() throws Exception {
     String location = createEndpoint("{\"url\":\"https://merchant.example/dl\"}");
     String endpointId = location.substring(location.lastIndexOf('/') + 1);
-    mockMvc.perform(get(location + "/deliveries")).andExpect(status().isOk());
-    mockMvc.perform(get(location + "/deliveries?status=SUCCEEDED")).andExpect(status().isOk());
-    mockMvc.perform(get("/v1/webhook-endpoints/" + UUID.randomUUID() + "/deliveries"))
+    mockMvc.perform(get(location + "/deliveries").header("Authorization", "Bearer " + merchantKey))
+        .andExpect(status().isOk());
+    mockMvc.perform(get(location + "/deliveries?status=SUCCEEDED")
+            .header("Authorization", "Bearer " + merchantKey))
+        .andExpect(status().isOk());
+    mockMvc.perform(get("/v1/webhook-endpoints/" + UUID.randomUUID() + "/deliveries")
+            .header("Authorization", "Bearer " + merchantKey))
         .andExpect(status().isNotFound());
     org.junit.jupiter.api.Assertions.assertFalse(endpointId.isEmpty());
   }
 
   @Test
   void eventTypesDefaultToAllWhenOmitted() throws Exception {
-    mockMvc.perform(post("/v1/webhook-endpoints").header(KEY, UUID.randomUUID().toString())
+    mockMvc.perform(post("/v1/webhook-endpoints")
+            .header("Authorization", "Bearer " + merchantKey).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"url\":\"https://merchant.example/all\"}"))
         .andExpect(status().isCreated())

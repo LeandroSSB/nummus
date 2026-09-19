@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import com.leandrossb.nummus.webhooks.application.EventDeliveryClient;
 import com.leandrossb.nummus.webhooks.application.WebhookDeliveryWorker;
@@ -89,7 +90,7 @@ class WebhookDeliveryClientTest extends IntegrationTestBase {
   @Test
   void endToEndSettledIntentIsDeliveredWithAValidSignature() throws Exception {
     try (ReceiverServer receiver = new ReceiverServer()) {
-      var endpoint = store.insertEndpoint(new WebhookEndpoint(UUID.randomUUID(),
+      var endpoint = store.insertEndpoint(new WebhookEndpoint(SeedMerchant.PUBLIC_ID, UUID.randomUUID(),
           URI.create(receiver.url("/merchant")), "whsec_flow", List.of(),
           EndpointStatus.ACTIVE, Instant.now()));
       store.insertEvent(UUID.randomUUID(), "payment_intent.settled",
@@ -102,7 +103,7 @@ class WebhookDeliveryClientTest extends IntegrationTestBase {
       var received = receiver.requests.get(0);
       assertTrue(received.body().contains("\"amount\":\"7.0000\""));
       assertEquals("SUCCEEDED",
-          store.listDeliveries(endpoint.publicId(), null, 50).get(0).status());
+          store.listDeliveries(SeedMerchant.PUBLIC_ID, endpoint.publicId(), null, 50).get(0).status());
     }
   }
 }

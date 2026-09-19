@@ -3,6 +3,7 @@ package com.leandrossb.nummus.webhooks;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import com.leandrossb.nummus.webhooks.application.DeliveryRecord;
 import com.leandrossb.nummus.webhooks.application.DueDelivery;
@@ -34,7 +35,7 @@ class WebhookStoreTest extends IntegrationTestBase {
   }
 
   private WebhookEndpoint endpoint(String path, List<String> types) {
-    return store.insertEndpoint(new WebhookEndpoint(UUID.randomUUID(),
+    return store.insertEndpoint(new WebhookEndpoint(SeedMerchant.PUBLIC_ID, UUID.randomUUID(),
         URI.create("https://merchant.example/" + path), "whsec_" + path,
         types, EndpointStatus.ACTIVE, Instant.now()));
   }
@@ -47,15 +48,15 @@ class WebhookStoreTest extends IntegrationTestBase {
   void endpointRoundTripAndSoftDelete() {
     var created = endpoint("roundtrip", List.of("payment_intent.settled"));
     assertEquals(EndpointStatus.ACTIVE, created.status());
-    assertTrue(store.listActiveEndpoints().stream()
+    assertTrue(store.listActiveEndpoints(SeedMerchant.PUBLIC_ID).stream()
         .anyMatch(e -> e.publicId().equals(created.publicId())));
-    assertTrue(store.findActiveEndpoint(created.publicId()).isPresent());
+    assertTrue(store.findActiveEndpoint(SeedMerchant.PUBLIC_ID, created.publicId()).isPresent());
 
-    assertTrue(store.markEndpointDeleted(created.publicId()));
-    assertTrue(store.findActiveEndpoint(created.publicId()).isEmpty());
-    assertTrue(store.listActiveEndpoints().stream()
+    assertTrue(store.markEndpointDeleted(SeedMerchant.PUBLIC_ID, created.publicId()));
+    assertTrue(store.findActiveEndpoint(SeedMerchant.PUBLIC_ID, created.publicId()).isEmpty());
+    assertTrue(store.listActiveEndpoints(SeedMerchant.PUBLIC_ID).stream()
         .noneMatch(e -> e.publicId().equals(created.publicId())));
-    assertTrue(!store.markEndpointDeleted(created.publicId()));
+    assertTrue(!store.markEndpointDeleted(SeedMerchant.PUBLIC_ID, created.publicId()));
   }
 
   @Test
@@ -63,15 +64,15 @@ class WebhookStoreTest extends IntegrationTestBase {
     var allTypes = endpoint("all", List.of());
     var settledOnly = endpoint("settled", List.of("payment_intent.settled"));
     var deleted = endpoint("gone", List.of());
-    store.markEndpointDeleted(deleted.publicId());
+    store.markEndpointDeleted(SeedMerchant.PUBLIC_ID, deleted.publicId());
 
     publish("payment_intent.settled");
     publish("payment_intent.failed");
 
-    var settledDeliveries = store.listDeliveries(allTypes.publicId(), null, 50);
-    assertEquals(1, store.listDeliveries(settledOnly.publicId(), null, 50).size());
+    var settledDeliveries = store.listDeliveries(SeedMerchant.PUBLIC_ID, allTypes.publicId(), null, 50);
+    assertEquals(1, store.listDeliveries(SeedMerchant.PUBLIC_ID, settledOnly.publicId(), null, 50).size());
     assertEquals(2, settledDeliveries.size()); // [] subscribes to every type
-    assertEquals(0, store.listDeliveries(deleted.publicId(), null, 50).size());
+    assertEquals(0, store.listDeliveries(SeedMerchant.PUBLIC_ID, deleted.publicId(), null, 50).size());
   }
 
   @Test
@@ -104,7 +105,7 @@ class WebhookStoreTest extends IntegrationTestBase {
         .filter(d -> d.url().toString().endsWith("/outcomes")).findFirst().orElseThrow().id();
 
     store.recordDeliveryRetry(deliveryId, 500, Instant.now().plusSeconds(30));
-    Optional<DeliveryRecord> retried = store.listDeliveries(target.publicId(), null, 50).stream()
+    Optional<DeliveryRecord> retried = store.listDeliveries(SeedMerchant.PUBLIC_ID, target.publicId(), null, 50).stream()
         .filter(d -> d.id() == deliveryId).findFirst();
     assertTrue(retried.isPresent());
     assertEquals("PENDING", retried.get().status());
@@ -112,12 +113,12 @@ class WebhookStoreTest extends IntegrationTestBase {
     assertEquals(500, retried.get().lastResponseStatus());
 
     store.recordDeliverySuccess(deliveryId, 200);
-    assertEquals("SUCCEEDED", store.listDeliveries(target.publicId(), null, 50).stream()
+    assertEquals("SUCCEEDED", store.listDeliveries(SeedMerchant.PUBLIC_ID, target.publicId(), null, 50).stream()
         .filter(d -> d.id() == deliveryId).findFirst().orElseThrow().status());
 
     // Guarded: a second outcome on a non-PENDING row is a no-op (rowcount 0, no exception).
     store.recordDeliveryRetry(deliveryId, 500, Instant.now());
-    assertEquals("SUCCEEDED", store.listDeliveries(target.publicId(), null, 50).stream()
+    assertEquals("SUCCEEDED", store.listDeliveries(SeedMerchant.PUBLIC_ID, target.publicId(), null, 50).stream()
         .filter(d -> d.id() == deliveryId).findFirst().orElseThrow().status());
   }
 
@@ -132,8 +133,8 @@ class WebhookStoreTest extends IntegrationTestBase {
         .filter(d -> d.url().toString().endsWith("/filter-a")).findFirst()
         .ifPresent(d -> store.recordDeliverySuccess(d.id(), null));
 
-    assertEquals(1, store.listDeliveries(a.publicId(), "SUCCEEDED", 50).size());
-    assertEquals(0, store.listDeliveries(a.publicId(), "FAILED", 50).size());
-    assertEquals(2, store.listDeliveries(b.publicId(), null, 50).size());
+    assertEquals(1, store.listDeliveries(SeedMerchant.PUBLIC_ID, a.publicId(), "SUCCEEDED", 50).size());
+    assertEquals(0, store.listDeliveries(SeedMerchant.PUBLIC_ID, a.publicId(), "FAILED", 50).size());
+    assertEquals(2, store.listDeliveries(SeedMerchant.PUBLIC_ID, b.publicId(), null, 50).size());
   }
 }

@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.webhooks.interfaces;
 
+import com.leandrossb.nummus.interfaces.auth.AuthenticatedMerchant;
 import com.leandrossb.nummus.interfaces.idempotency.Idempotent;
 import com.leandrossb.nummus.webhooks.application.WebhookEndpointsService;
 import com.leandrossb.nummus.webhooks.interfaces.dto.CreateEndpointRequest;
@@ -29,26 +30,27 @@ class WebhookEndpointsController {
 
   @Idempotent
   @PostMapping
-  ResponseEntity<CreateEndpointResponse> create(@Valid @RequestBody CreateEndpointRequest request) {
-    var endpoint = endpoints.register(URI.create(request.url()), request.eventTypes());
+  ResponseEntity<CreateEndpointResponse> create(AuthenticatedMerchant merchant,
+      @Valid @RequestBody CreateEndpointRequest request) {
+    var endpoint = endpoints.register(merchant.merchantPublicId(), URI.create(request.url()), request.eventTypes());
     return ResponseEntity
         .created(URI.create("/v1/webhook-endpoints/" + endpoint.publicId()))
         .body(CreateEndpointResponse.from(endpoint));
   }
 
   @GetMapping
-  java.util.List<EndpointResponse> list() {
-    return endpoints.list().stream().map(EndpointResponse::from).toList();
+  java.util.List<EndpointResponse> list(AuthenticatedMerchant merchant) {
+    return endpoints.list(merchant.merchantPublicId()).stream().map(EndpointResponse::from).toList();
   }
 
   @GetMapping("/{id}")
-  EndpointResponse get(@PathVariable UUID id) {
-    return EndpointResponse.from(endpoints.get(id));
+  EndpointResponse get(AuthenticatedMerchant merchant, @PathVariable UUID id) {
+    return EndpointResponse.from(endpoints.get(merchant.merchantPublicId(), id));
   }
 
   @DeleteMapping("/{id}")
-  ResponseEntity<Void> delete(@PathVariable UUID id) {
-    endpoints.delete(id);
+  ResponseEntity<Void> delete(AuthenticatedMerchant merchant, @PathVariable UUID id) {
+    endpoints.delete(merchant.merchantPublicId(), id);
     return ResponseEntity.noContent().build();
   }
 }

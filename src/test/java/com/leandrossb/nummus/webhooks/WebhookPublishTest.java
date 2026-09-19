@@ -36,7 +36,7 @@ class WebhookPublishTest extends IntegrationTestBase {
   private WebhookStore store;
 
   private UUID registerEndpoint() {
-    return store.insertEndpoint(new WebhookEndpoint(UUID.randomUUID(),
+    return store.insertEndpoint(new WebhookEndpoint(SeedMerchant.PUBLIC_ID, UUID.randomUUID(),
         URI.create("https://merchant.example/publish-" + UUID.randomUUID()),
         "whsec_publish", List.of(), EndpointStatus.ACTIVE, Instant.now())).publicId();
   }
@@ -50,7 +50,7 @@ class WebhookPublishTest extends IntegrationTestBase {
 
     payments.get(SeedMerchant.PUBLIC_ID, intent.publicId()); // settles and publishes
 
-    var deliveries = store.listDeliveries(endpointId, null, 50);
+    var deliveries = store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, null, 50);
     assertEquals(1, deliveries.size());
     assertEquals("payment_intent.settled", deliveries.get(0).eventType());
     assertEquals("PENDING", deliveries.get(0).status());
@@ -103,7 +103,7 @@ class WebhookPublishTest extends IntegrationTestBase {
     }
     payments.get(SeedMerchant.PUBLIC_ID, expired.publicId());
 
-    var deliveries = store.listDeliveries(endpointId, null, 50);
+    var deliveries = store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, null, 50);
     assertEquals(2, deliveries.size());
     // listDeliveries orders by delivery id DESC: the expired event (published
     // second) comes first.

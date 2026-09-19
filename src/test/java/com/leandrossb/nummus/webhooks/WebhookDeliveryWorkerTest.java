@@ -2,6 +2,7 @@ package com.leandrossb.nummus.webhooks;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import com.leandrossb.nummus.webhooks.application.DeliveryResult;
 import com.leandrossb.nummus.webhooks.application.EventDeliveryClient;
@@ -75,7 +76,7 @@ class WebhookDeliveryWorkerTest extends IntegrationTestBase {
   }
 
   private UUID endpoint(String path) {
-    return store.insertEndpoint(new WebhookEndpoint(UUID.randomUUID(),
+    return store.insertEndpoint(new WebhookEndpoint(SeedMerchant.PUBLIC_ID, UUID.randomUUID(),
         URI.create("https://merchant.example/worker-" + path), "whsec_worker",
         List.of(), EndpointStatus.ACTIVE, Instant.now())).publicId();
   }
@@ -94,7 +95,7 @@ class WebhookDeliveryWorkerTest extends IntegrationTestBase {
     worker.deliverDue(); // nothing due anymore for this endpoint
 
     assertEquals(1, client.callsFor("/worker-success"));
-    assertEquals(1, store.listDeliveries(endpointId, "SUCCEEDED", 50).size());
+    assertEquals(1, store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, "SUCCEEDED", 50).size());
   }
 
   @Test
@@ -108,7 +109,7 @@ class WebhookDeliveryWorkerTest extends IntegrationTestBase {
     worker.deliverDue(); // still within the backoff window — no second attempt
 
     assertEquals(1, client.callsFor("/worker-backoff"));
-    var record = store.listDeliveries(endpointId, null, 50).get(0);
+    var record = store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, null, 50).get(0);
     assertEquals("PENDING", record.status());
     assertEquals(1, record.attempts());
     assertEquals(500, record.lastResponseStatus());
@@ -130,7 +131,7 @@ class WebhookDeliveryWorkerTest extends IntegrationTestBase {
       worker.deliverDue();
     }
 
-    var record = store.listDeliveries(endpointId, null, 50).get(0);
+    var record = store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, null, 50).get(0);
     assertEquals("FAILED", record.status());
     assertEquals(8, record.attempts());
     assertEquals(8, client.callsFor("/worker-exhaust"));
@@ -140,12 +141,12 @@ class WebhookDeliveryWorkerTest extends IntegrationTestBase {
   void deletedEndpointFailsDeliveryWithoutAnHttpRequest() {
     var endpointId = endpoint("deleted");
     publish();
-    store.markEndpointDeleted(endpointId);
+    store.markEndpointDeleted(SeedMerchant.PUBLIC_ID, endpointId);
     client.succeed = true;
 
     worker.deliverDue();
 
     assertEquals(0, client.callsFor("/worker-deleted"));
-    assertEquals(1, store.listDeliveries(endpointId, "FAILED", 50).size());
+    assertEquals(1, store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, "FAILED", 50).size());
   }
 }
