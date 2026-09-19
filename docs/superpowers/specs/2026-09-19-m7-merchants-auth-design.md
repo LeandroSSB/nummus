@@ -46,11 +46,15 @@ operator surfaces.
    never import the merchants module. Rejected: Spring Security (weight
    disproportionate to bearer-only), interceptor-only (no clean 401-before-
    400 ordering).
-5. **Operator idempotency namespace.** Idempotency reservations on operator
-   POSTs (`POST /v1/conciliation/reports` today) carry a NULL merchant and
-   are unique on `key` alone — partial unique indexes keep both worlds
-   exact: `unique(merchant_public_id, key) WHERE merchant_public_id IS NOT
-   NULL` and `unique(key) WHERE merchant_public_id IS NULL`.
+5. **Idempotency namespace follows the credential.** Credential-less POSTs
+   (`POST /v1/conciliation/reports` today) carry a NULL merchant and are
+   unique on `key` alone; a merchant key used on an operator POST reserves
+   in that merchant's namespace. Namespacing follows the credential, not
+   the route — either way a caller has a single namespace and replays are
+   same-caller only, so there is no security impact. Partial unique
+   indexes keep both worlds exact: `unique(merchant_public_id, key) WHERE
+   merchant_public_id IS NOT NULL` and `unique(key) WHERE
+   merchant_public_id IS NULL`.
 6. **A new `merchants` module.** The locked module list predates merchant
    identity; this milestone adds `merchants` as a peer (entity + keys +
    services + REST). Cross-module references use public ids with no
@@ -81,7 +85,7 @@ the outermost concern.
 the first `nummus_sk_…` secret appears exactly once, here. `POST
 /v1/me/api-keys` mints more (secret once, `@Idempotent`); `GET
 /v1/me/api-keys` lists `{keyId, prefix, status, createdAt}` (prefix = first
-8 chars, secrets never stored or shown again); `DELETE /v1/me/api-keys/{id}`
+12 chars, secrets never stored or shown again); `DELETE /v1/me/api-keys/{id}`
 soft-revokes (status REVOKED; subsequent use → 401 immediately). Key
 material beyond the prefix is unrecoverable by design.
 
