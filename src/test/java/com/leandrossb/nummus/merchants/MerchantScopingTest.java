@@ -1,0 +1,65 @@
+package com.leandrossb.nummus.merchants;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.leandrossb.nummus.testutils.IntegrationTestBase;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+
+@AutoConfigureMockMvc
+class MerchantScopingTest extends IntegrationTestBase {
+
+  private static final String KEY = "Idempotency-Key";
+
+  @Autowired
+  private MockMvc mockMvc;
+
+  private String createMerchantAndGetKey(String name) throws Exception {
+    MvcResult created = mockMvc.perform(post("/v1/merchants")
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
+        .andExpect(status().isCreated()).andReturn();
+    return com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.apiKey.secret");
+  }
+
+  private String openAccount(String bearer) throws Exception {
+    MvcResult opened = mockMvc.perform(post("/v1/accounts")
+            .header("Authorization", "Bearer " + bearer)
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Scoped Holder\"}"))
+        .andExpect(status().isCreated()).andReturn();
+    return opened.getResponse().getHeader("Location");
+  }
+
+  @Test
+  void merchantARoutesCannotSeeMerchantBResources() throws Exception {
+    String a = createMerchantAndGetKey("Merchant A");
+    String b = createMerchantAndGetKey("Merchant B");
+    String aLocation = openAccount(a);
+
+    // The owner sees it; the other merchant gets 404 on every surface.
+    mockMvc.perform(get(aLocation).header("Authorization", "Bearer " + a))
+        .andExpect(status().isOk());
+    mockMvc.perform(get(aLocation).header("Authorization", "Bearer " + b))
+        .andExpect(status().isNotFound());
+    mockMvc.perform(get(aLocation + "/balance").header("Authorization", "Bearer " + b))
+        .andExpect(status().isNotFound());
+    mockMvc.perform(get(aLocation + "/statement").header("Authorization", "Bearer " + b))
+        .andExpect(status().isNotFound());
+    mockMvc.perform(post(aLocation + "/freeze")
+            .header("Authorization", "Bearer " + b).header(KEY, UUID.randomUUID().toString()))
+        .andExpect(status().isNotFound());
+    // Unauthenticated access is 401, and authentication precedes idempotency.
+    mockMvc.perform(get(aLocation)).andExpect(status().isUnauthorized());
+    mockMvc.perform(post(aLocation + "/freeze")
+            .contentType(MediaType.APPLICATION_JSON))
+        .andExpect(status().isUnauthorized());
+  }
+}
