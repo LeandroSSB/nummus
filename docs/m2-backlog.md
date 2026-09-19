@@ -165,10 +165,14 @@ corrections are new reports). Known bounds, deliberate:
   changing the report's window — which is a new report.
 - **No fees.** Report lines carry the settled amount only; fee schedules,
   REVENUE accounts, and rounding remain deferred (M3's deferral carries on).
-- **Window boundaries rely on timestamps that are moved by DB-side rewrites
-  in tests only**; production `settled_at` and the simulator's `updated_at`
-  use the DB clock via `now()` — consistent, but a future real PSP adapter
-  must define its own settlement-timestamp contract.
+- **Two clock domains at the window edges.** `payment_intent.settled_at` is
+  written from the JVM clock while the simulator's `updated_at` uses the
+  database clock, and lazy settlement can legitimately trail the charge's
+  transition. Boundary-straddling settlements can therefore yield a spurious
+  MISSING_INTERNAL/MISSING_EXTERNAL on the first ingest; re-ingesting heals
+  it. Negligible on one NTP-synced host, but a real PSP adapter must define
+  its settlement-timestamp contract (single clock domain or explicit skew
+  budget) before the edge cases become money-relevant.
 - **Listings are unpaginated** (50 most recent) and unauthenticated, like
   every other endpoint until merchant auth lands.
 - **No scheduled reconciliation or divergence alerting** — ingest is manual

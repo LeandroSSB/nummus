@@ -45,9 +45,12 @@ class PaymentsSettlementQueryTest extends IntegrationTestBase {
     assertEquals(0, none.size());
 
     var all = payments.listSettlements(past, Instant.now().plusSeconds(60));
-    assertEquals(1, all.size());
-    var view = all.get(0);
-    assertEquals(settled, view.intentPublicId());
+    // Membership, not a global size pin: the shared container carries other
+    // classes' settlements inside any now-window, and method order is not
+    // specified. The pre-fixture past window (above) stays empty regardless.
+    assertTrue(all.stream().anyMatch(v -> v.intentPublicId().equals(settled)));
+    var view = all.stream().filter(v -> v.intentPublicId().equals(settled))
+        .findFirst().orElseThrow();
     assertEquals(Money.ofBrl("6.0000").amount(), view.amount().amount());
     assertTrue(view.journalTransactionPublicId() != null);
     assertTrue(view.settledAt() != null);

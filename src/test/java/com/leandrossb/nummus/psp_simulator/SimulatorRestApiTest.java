@@ -86,6 +86,8 @@ class SimulatorRestApiTest extends IntegrationTestBase {
         .andExpect(status().isOk())
         .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')].status", pending.publicId()))
             .doesNotExist())
+        .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')]", failed.publicId()))
+            .doesNotExist())
         .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')].amount", paid.publicId()))
             .value(8.0000));
 

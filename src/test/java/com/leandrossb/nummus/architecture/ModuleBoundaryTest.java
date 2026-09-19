@@ -75,5 +75,5 @@ class ModuleBoundaryTest {
           .resideInAnyPackage("..payments.domain..", "..payments.infrastructure..",
               "..payments.interfaces..", "..psp_simulator.domain..",
               "..psp_simulator.infrastructure..", "..psp_simulator.interfaces..",
-              "..accounts..", "..webhooks..");
+              "..accounts..", "..webhooks..", "..ledger.infrastructure..");
 }

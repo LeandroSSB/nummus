@@ -59,6 +59,11 @@ class ConciliationRestApiTest extends IntegrationTestBase {
 
   @Test
   void settledIntentsConcileAndReplayIdempotently() throws Exception {
+    // Scoped window: everything this test settles lands after `start`, and the
+    // 30s back-margin absorbs DB-lag on the simulator's `updated_at` (DB clock)
+    // relative to this JVM clock. Other classes' now-window fixtures cannot
+    // leak in, whatever order JUnit runs methods or classes in.
+    Instant start = Instant.now();
     var account = accountsService.open(new OpenAccountCommand("Concile Merchant"));
     var first = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("11.0000"), null));
     var second = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("12.0000"), null));
@@ -71,7 +76,7 @@ class ConciliationRestApiTest extends IntegrationTestBase {
     payments.get(first.publicId());
     payments.get(second.publicId());
 
-    String from = Instant.now().minusSeconds(3600).toString();
+    String from = start.minusSeconds(30).toString();
     String to = Instant.now().plusSeconds(60).toString();
     String body = "{\"from\":\"" + from + "\",\"to\":\"" + to + "\"}";
     var created = mockMvc.perform(post("/v1/conciliation/reports")
@@ -108,6 +113,10 @@ class ConciliationRestApiTest extends IntegrationTestBase {
 
   @Test
   void divergencesSurfacePerLine() throws Exception {
+    // Same scoping as the happy path: only fixtures created from here on are
+    // asserted, so an earlier method's settlements may add MATCHED lines but
+    // cannot fabricate or hide this test's divergences.
+    Instant start = Instant.now();
     var account = accountsService.open(new OpenAccountCommand("Divergence Merchant"));
     // MISSING_INTERNAL: the network settled a charge no intent knows about.
     var orphan = simulator.create(Money.ofBrl("77.0000"));
@@ -136,7 +145,7 @@ class ConciliationRestApiTest extends IntegrationTestBase {
           + " WHERE public_id = '" + excluded.chargePublicId() + "'");
     }
 
-    String body = ingest(Instant.now().minusSeconds(3600).toString(), Instant.now().plusSeconds(60).toString());
+    String body = ingest(start.minusSeconds(30).toString(), Instant.now().plusSeconds(60).toString());
     String reportId = com.jayway.jsonpath.JsonPath.read(body, "$.reportId");
 
     mockMvc.perform(get("/v1/conciliation/reports/" + reportId))
