@@ -1,0 +1,16 @@
+package com.leandrossb.nummus.merchants.interfaces.dto;
+
+import com.leandrossb.nummus.merchants.application.IssuedApiKey;
+import com.leandrossb.nummus.merchants.domain.Merchant;
+import java.time.Instant;
+import java.util.UUID;
+
+/** Merchant creation: the FIRST API key's secret appears here and nowhere else. */
+public record CreateMerchantResponse(
+    UUID merchantId, String name, Instant createdAt, CreateKeyResponse apiKey) {
+
+  public static CreateMerchantResponse from(Merchant merchant, IssuedApiKey firstKey) {
+    return new CreateMerchantResponse(merchant.publicId(), merchant.name(), merchant.createdAt(),
+        CreateKeyResponse.from(firstKey));
+  }
+}
