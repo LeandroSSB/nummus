@@ -20,18 +20,19 @@ public class InMemoryAccountsRepository implements AccountsRepository {
   }
 
   @Override
-  public Optional<PaymentAccount> findByPublicId(UUID publicId) {
-    return Optional.ofNullable(accounts.get(publicId));
+  public Optional<PaymentAccount> findByPublicId(UUID merchantPublicId, UUID publicId) {
+    return Optional.ofNullable(accounts.get(publicId))
+        .filter(account -> account.merchantPublicId().equals(merchantPublicId));
   }
 
   @Override
-  public boolean updateStatus(UUID publicId, AccountStatus status, Instant closedAt) {
+  public boolean updateStatus(UUID merchantPublicId, UUID publicId, AccountStatus status, Instant closedAt) {
     var current = accounts.get(publicId);
-    if (current == null) {
+    if (current == null || !current.merchantPublicId().equals(merchantPublicId)) {
       return false;
     }
-    accounts.put(publicId, new PaymentAccount(current.publicId(), current.holderName(),
-        status, current.openedAt(), closedAt, current.ledgerAccountPublicId()));
+    accounts.put(publicId, new PaymentAccount(current.merchantPublicId(), current.publicId(),
+        current.holderName(), status, current.openedAt(), closedAt, current.ledgerAccountPublicId()));
     return true;
   }
 }

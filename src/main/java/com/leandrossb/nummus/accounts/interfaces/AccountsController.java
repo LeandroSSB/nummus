@@ -6,6 +6,7 @@ import com.leandrossb.nummus.accounts.interfaces.dto.AccountResponse;
 import com.leandrossb.nummus.accounts.interfaces.dto.BalanceResponse;
 import com.leandrossb.nummus.accounts.interfaces.dto.OpenAccountRequest;
 import com.leandrossb.nummus.accounts.interfaces.dto.StatementResponse;
+import com.leandrossb.nummus.interfaces.auth.AuthenticatedMerchant;
 import com.leandrossb.nummus.interfaces.idempotency.Idempotent;
 import com.leandrossb.nummus.ledger.domain.Page;
 import jakarta.validation.Valid;
@@ -32,45 +33,47 @@ class AccountsController {
 
   @Idempotent
   @PostMapping
-  ResponseEntity<AccountResponse> create(@Valid @RequestBody OpenAccountRequest request) {
-    var account = accounts.open(new OpenAccountCommand(request.holderName()));
+  ResponseEntity<AccountResponse> create(AuthenticatedMerchant merchant,
+      @Valid @RequestBody OpenAccountRequest request) {
+    var account = accounts.open(merchant.merchantPublicId(), new OpenAccountCommand(request.holderName()));
     return ResponseEntity
         .created(URI.create("/v1/accounts/" + account.publicId()))
         .body(AccountResponse.from(account));
   }
 
   @GetMapping("/{id}")
-  AccountResponse get(@PathVariable UUID id) {
-    return AccountResponse.from(accounts.get(id));
+  AccountResponse get(AuthenticatedMerchant merchant, @PathVariable UUID id) {
+    return AccountResponse.from(accounts.get(merchant.merchantPublicId(), id));
   }
 
   @GetMapping("/{id}/balance")
-  BalanceResponse balance(@PathVariable UUID id) {
-    return BalanceResponse.from(accounts.balance(id));
+  BalanceResponse balance(AuthenticatedMerchant merchant, @PathVariable UUID id) {
+    return BalanceResponse.from(accounts.balance(merchant.merchantPublicId(), id));
   }
 
   @GetMapping("/{id}/statement")
-  StatementResponse statement(@PathVariable UUID id,
+  StatementResponse statement(AuthenticatedMerchant merchant, @PathVariable UUID id,
       @RequestParam(defaultValue = "0") int offset,
       @RequestParam(defaultValue = "50") int limit) {
-    return StatementResponse.from(accounts.statement(id, new Page(offset, limit)));
+    return StatementResponse.from(
+        accounts.statement(merchant.merchantPublicId(), id, new Page(offset, limit)));
   }
 
   @Idempotent
   @PostMapping("/{id}/freeze")
-  ResponseEntity<AccountResponse> freeze(@PathVariable UUID id) {
-    return ResponseEntity.ok(AccountResponse.from(accounts.freeze(id)));
+  ResponseEntity<AccountResponse> freeze(AuthenticatedMerchant merchant, @PathVariable UUID id) {
+    return ResponseEntity.ok(AccountResponse.from(accounts.freeze(merchant.merchantPublicId(), id)));
   }
 
   @Idempotent
   @PostMapping("/{id}/unfreeze")
-  ResponseEntity<AccountResponse> unfreeze(@PathVariable UUID id) {
-    return ResponseEntity.ok(AccountResponse.from(accounts.unfreeze(id)));
+  ResponseEntity<AccountResponse> unfreeze(AuthenticatedMerchant merchant, @PathVariable UUID id) {
+    return ResponseEntity.ok(AccountResponse.from(accounts.unfreeze(merchant.merchantPublicId(), id)));
   }
 
   @Idempotent
   @PostMapping("/{id}/close")
-  ResponseEntity<AccountResponse> close(@PathVariable UUID id) {
-    return ResponseEntity.ok(AccountResponse.from(accounts.close(id)));
+  ResponseEntity<AccountResponse> close(AuthenticatedMerchant merchant, @PathVariable UUID id) {
+    return ResponseEntity.ok(AccountResponse.from(accounts.close(merchant.merchantPublicId(), id)));
   }
 }

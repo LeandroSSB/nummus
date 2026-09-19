@@ -15,7 +15,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * Resolves Bearer credentials to a merchant before anything else runs (the
  * idempotency filter sits at HIGHEST_PRECEDENCE + 1000 — no auth means 401,
- * never a 400). Merchant routes (/v1/me and below) are rejected right here
+ * never a 400). Merchant routes (MERCHANT_ROUTES and their subpaths) are rejected right here
  * when credentials are missing, invalid, or revoked; elsewhere a failed
  * Bearer still 401s while credential-less requests pass through to the
  * operator surface. Renders 401 itself: a filter runs outside the advice's
@@ -28,7 +28,9 @@ public class MerchantAuthFilter extends OncePerRequestFilter {
 
   public static final String MERCHANT_ATTRIBUTE = "auth.merchant";
   private static final String BEARER_PREFIX = "Bearer ";
-  private static final String MERCHANT_ROUTE = "/v1/me";
+
+  /** Routes that require an authenticated merchant (headerless → 401, not a later 400). */
+  private static final java.util.List<String> MERCHANT_ROUTES = java.util.List.of("/v1/me", "/v1/accounts");
 
   private final MerchantAuthenticationPort authentication;
   private final ObjectMapper objectMapper;
@@ -43,7 +45,7 @@ public class MerchantAuthFilter extends OncePerRequestFilter {
       throws IOException, jakarta.servlet.ServletException {
     String header = request.getHeader("Authorization");
     if (header == null || !header.startsWith(BEARER_PREFIX)) {
-      if (isMerchantRoute(request)) {
+      if (isMerchantRoute(request.getRequestURI())) {
         reject(response);
         return;
       }
@@ -59,10 +61,12 @@ public class MerchantAuthFilter extends OncePerRequestFilter {
     chain.doFilter(request, response);
   }
 
-  /** {@code /v1/me} exactly or anything below it — not {@code /v1/merchants}, which shares the prefix. */
-  private static boolean isMerchantRoute(HttpServletRequest request) {
-    String path = request.getRequestURI();
-    return path.equals(MERCHANT_ROUTE) || path.startsWith(MERCHANT_ROUTE + "/");
+  /** Each route exactly or anything below it — never a longer path that merely
+   *  shares the prefix (e.g. {@code /v1/me} does not cover {@code /v1/merchants}):
+   *  the {@code prefix + "/"} guard is load-bearing. */
+  private static boolean isMerchantRoute(String uri) {
+    return MERCHANT_ROUTES.stream().anyMatch(
+        prefix -> uri.equals(prefix) || uri.startsWith(prefix + "/"));
   }
 
   private void reject(HttpServletResponse response) throws IOException {

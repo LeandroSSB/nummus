@@ -6,8 +6,8 @@ import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
 import com.leandrossb.nummus.ledger.application.Ledger;
 import com.leandrossb.nummus.ledger.application.PostTransactionCommand;
 import com.leandrossb.nummus.ledger.domain.Direction;
-import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.domain.ChargeAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.ConcurrentSettlementException;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
@@ -53,7 +53,8 @@ public class PaymentsServiceImpl implements PaymentsService {
       throw new IllegalArgumentException(
           "ttl must be between 60 and 86400 seconds: " + ttl.toSeconds());
     }
-    var account = accounts.get(cmd.accountPublicId());
+    // Seed-merchant stand-in until Task 5 threads the caller's merchant through.
+    var account = accounts.get(SeedMerchant.PUBLIC_ID, cmd.accountPublicId());
     if (account.status() != AccountStatus.ACTIVE) {
       throw new PaymentAccountNotActiveException(account.publicId(), account.status());
     }
@@ -114,7 +115,7 @@ public class PaymentsServiceImpl implements PaymentsService {
   }
 
   private PaymentIntent settle(PaymentIntent intent) {
-    var account = accounts.get(intent.accountPublicId());
+    var account = accounts.get(SeedMerchant.PUBLIC_ID, intent.accountPublicId());
     if (account.status() != AccountStatus.ACTIVE) {
       throw new PaymentAccountNotActiveException(account.publicId(), account.status());
     }

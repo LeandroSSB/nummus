@@ -26,10 +26,11 @@ public class JdbcClientAccountsRepository implements AccountsRepository {
   public PaymentAccount insert(PaymentAccount account) {
     jdbc.sql("""
         insert into accounts.payment_account
-          (public_id, holder_name, status, ledger_account_public_id, opened_at, closed_at)
-        values (:publicId, :holderName, :status, :ledgerAccountPublicId, :openedAt, :closedAt)
+          (public_id, merchant_public_id, holder_name, status, ledger_account_public_id, opened_at, closed_at)
+        values (:publicId, :merchantPublicId, :holderName, :status, :ledgerAccountPublicId, :openedAt, :closedAt)
         """)
         .param("publicId", account.publicId())
+        .param("merchantPublicId", account.merchantPublicId())
         .param("holderName", account.holderName())
         .param("status", account.status().name())
         .param("ledgerAccountPublicId", account.ledgerAccountPublicId())
@@ -40,25 +41,28 @@ public class JdbcClientAccountsRepository implements AccountsRepository {
   }
 
   @Override
-  public Optional<PaymentAccount> findByPublicId(UUID publicId) {
+  public Optional<PaymentAccount> findByPublicId(UUID merchantPublicId, UUID publicId) {
     return jdbc.sql("""
-        select public_id, holder_name, status, ledger_account_public_id, opened_at, closed_at
-        from accounts.payment_account where public_id = :publicId
+        select public_id, merchant_public_id, holder_name, status, ledger_account_public_id, opened_at, closed_at
+        from accounts.payment_account
+        where public_id = :publicId and merchant_public_id = :merchantPublicId
         """)
         .param("publicId", publicId)
+        .param("merchantPublicId", merchantPublicId)
         .query((rs, i) -> mapPaymentAccount(rs))
         .optional();
   }
 
   @Override
-  public boolean updateStatus(UUID publicId, AccountStatus status, Instant closedAt) {
+  public boolean updateStatus(UUID merchantPublicId, UUID publicId, AccountStatus status, Instant closedAt) {
     int updated = jdbc.sql("""
         update accounts.payment_account set status = :status, closed_at = :closedAt
-        where public_id = :publicId
+        where public_id = :publicId and merchant_public_id = :merchantPublicId
         """)
         .param("status", status.name())
         .param("closedAt", closedAt == null ? null : toOffsetDateTime(closedAt))
         .param("publicId", publicId)
+        .param("merchantPublicId", merchantPublicId)
         .update();
     return updated == 1;
   }
@@ -66,6 +70,7 @@ public class JdbcClientAccountsRepository implements AccountsRepository {
   private PaymentAccount mapPaymentAccount(ResultSet rs) throws SQLException {
     OffsetDateTime closedAt = rs.getObject("closed_at", OffsetDateTime.class);
     return new PaymentAccount(
+        rs.getObject("merchant_public_id", UUID.class),
         rs.getObject("public_id", UUID.class),
         rs.getString("holder_name"),
         AccountStatus.valueOf(rs.getString("status")),

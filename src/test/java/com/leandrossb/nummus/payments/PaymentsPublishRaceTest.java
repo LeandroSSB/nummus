@@ -17,6 +17,7 @@ import com.leandrossb.nummus.payments.application.IntentLifecycleEvent;
 import com.leandrossb.nummus.payments.application.IntentLifecycleEvents;
 import com.leandrossb.nummus.payments.application.InMemoryPaymentsRepository;
 import com.leandrossb.nummus.payments.application.PaymentsRepository;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.application.PaymentsServiceImpl;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
@@ -89,7 +90,7 @@ class PaymentsPublishRaceTest {
   }
 
   private PaymentIntent createdIntent(PaymentsService payments) {
-    var account = accounts.open(new OpenAccountCommand("merchant"));
+    var account = accounts.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("merchant"));
     return payments.create(
         new CreateIntentCommand(account.publicId(), Money.ofBrl("5.0000"), null));
   }

@@ -15,6 +15,7 @@ import com.leandrossb.nummus.ledger.domain.AccountStatus;
 import com.leandrossb.nummus.ledger.domain.AccountType;
 import com.leandrossb.nummus.ledger.domain.LedgerAccount;
 import com.leandrossb.nummus.ledger.domain.Money;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.domain.ChargeAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.payments.domain.IntentStatus;
@@ -47,7 +48,7 @@ class PaymentsServiceImplTest {
 
   @Test
   void createOpensChargeAndStoresCreatedIntent() {
-    var account = accounts.open(new OpenAccountCommand("merchant"));
+    var account = accounts.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("merchant"));
     var intent = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("10.0000"), null));
     assertNotNull(intent.publicId());
     assertEquals(IntentStatus.CREATED, intent.status());
@@ -58,7 +59,7 @@ class PaymentsServiceImplTest {
 
   @Test
   void createValidatesTtlBoundsAndAccount() {
-    var account = accounts.open(new OpenAccountCommand("merchant"));
+    var account = accounts.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("merchant"));
     assertThrows(IllegalArgumentException.class, () -> payments.create(
         new CreateIntentCommand(account.publicId(), Money.ofBrl("1.0000"), Duration.ofSeconds(59))));
     assertThrows(IllegalArgumentException.class, () -> payments.create(
@@ -70,15 +71,15 @@ class PaymentsServiceImplTest {
 
   @Test
   void frozenAccountRejectsCreation() {
-    var account = accounts.open(new OpenAccountCommand("merchant"));
-    accounts.freeze(account.publicId());
+    var account = accounts.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("merchant"));
+    accounts.freeze(SeedMerchant.PUBLIC_ID, account.publicId());
     assertThrows(com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException.class, () ->
         payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("1.0000"), null)));
   }
 
   @Test
   void succeededChargeSettlesExactlyOnceWithBalancedEntry() {
-    var account = accounts.open(new OpenAccountCommand("merchant"));
+    var account = accounts.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("merchant"));
     var intent = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("10.0000"), null));
     network.succeed(intent.chargePublicId());
 
@@ -97,7 +98,7 @@ class PaymentsServiceImplTest {
 
   @Test
   void failedChargeFailsTheIntent() {
-    var account = accounts.open(new OpenAccountCommand("merchant"));
+    var account = accounts.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("merchant"));
     var intent = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("5.0000"), null));
     network.fail(intent.chargePublicId());
     assertEquals(IntentStatus.FAILED, payments.get(intent.publicId()).status());
@@ -105,7 +106,7 @@ class PaymentsServiceImplTest {
 
   @Test
   void expiredIntentRefusesSettlementEvenAfterSuccess() {
-    var account = accounts.open(new OpenAccountCommand("merchant"));
+    var account = accounts.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("merchant"));
     var intent = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("5.0000"), null));
     repo.agePastExpiry(intent.publicId());
     network.succeed(intent.chargePublicId());
@@ -114,7 +115,7 @@ class PaymentsServiceImplTest {
 
   @Test
   void amountMismatchIsAnInvariantBreach() {
-    var account = accounts.open(new OpenAccountCommand("merchant"));
+    var account = accounts.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("merchant"));
     var intent = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("5.0000"), null));
     network.succeed(intent.chargePublicId());
     network.mutateAmount(intent.chargePublicId(), Money.ofBrl("6.0000"));
@@ -123,16 +124,16 @@ class PaymentsServiceImplTest {
 
   @Test
   void frozenAtSettleTimeLeavesIntentCreatedAndSettlesAfterUnfreeze() {
-    var account = accounts.open(new OpenAccountCommand("merchant"));
+    var account = accounts.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("merchant"));
     var intent = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("5.0000"), null));
     network.succeed(intent.chargePublicId());
-    accounts.freeze(account.publicId());
+    accounts.freeze(SeedMerchant.PUBLIC_ID, account.publicId());
 
     assertThrows(com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException.class,
         () -> payments.get(intent.publicId()));
     assertEquals(IntentStatus.CREATED, repo.findByPublicId(intent.publicId()).orElseThrow().status());
 
-    accounts.unfreeze(account.publicId());
+    accounts.unfreeze(SeedMerchant.PUBLIC_ID, account.publicId());
     assertEquals(IntentStatus.SETTLED, payments.get(intent.publicId()).status());
   }
 

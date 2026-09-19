@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import com.leandrossb.nummus.accounts.application.AccountsService;
 import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
 import com.leandrossb.nummus.ledger.domain.Money;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.payments.domain.IntentStatus;
@@ -36,7 +37,7 @@ class PaymentSettlementConcurrencyTest extends IntegrationTestBase {
   @Test
   @Timeout(120)
   void racingSettlersPostExactlyOneJournalEntry() throws Exception {
-    var account = accountsService.open(new OpenAccountCommand("Race Merchant"));
+    var account = accountsService.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("Race Merchant"));
     var intent = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("20.0000"), null));
     simulator.pay(intent.chargePublicId());
 
@@ -66,6 +67,6 @@ class PaymentSettlementConcurrencyTest extends IntegrationTestBase {
     // Exactly-once proof: the intent is settled and the merchant was credited
     // exactly the intent amount — a second settlement entry would double it.
     assertEquals(IntentStatus.SETTLED, payments.get(intent.publicId()).status());
-    assertEquals(0, accountsService.balance(account.publicId()).compareTo(Money.ofBrl("20.0000")));
+    assertEquals(0, accountsService.balance(SeedMerchant.PUBLIC_ID, account.publicId()).compareTo(Money.ofBrl("20.0000")));
   }
 }

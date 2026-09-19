@@ -8,9 +8,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.leandrossb.nummus.accounts.application.AccountsService;
 import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
+import com.leandrossb.nummus.merchants.application.ApiKeysService;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -30,8 +33,23 @@ class PaymentsRestApiTest extends IntegrationTestBase {
   @Autowired
   private SimulatorService simulator;
 
+  @Autowired
+  private ApiKeysService apiKeys;
+
+  private String seedMerchantKey;
+
+  /**
+   * Payments still operate as the seed merchant (Task 5 threads the real
+   * merchant through), so this class's accounts stay seed-owned and the
+   * balance reads authenticate with a freshly minted seed-merchant key.
+   */
+  @BeforeEach
+  void mintSeedMerchantKey() {
+    seedMerchantKey = apiKeys.create(SeedMerchant.PUBLIC_ID).secret();
+  }
+
   private String createAccount() {
-    return accountsService.open(new OpenAccountCommand("Rest Merchant"))
+    return accountsService.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("Rest Merchant"))
         .publicId().toString();
   }
 
@@ -75,7 +93,8 @@ class PaymentsRestApiTest extends IntegrationTestBase {
         .andExpect(jsonPath("$.status").value("SETTLED"))
         .andExpect(jsonPath("$.settledAt").exists());
 
-    mockMvc.perform(get("/v1/accounts/{id}/balance", UUID.fromString(accountId)))
+    mockMvc.perform(get("/v1/accounts/{id}/balance", UUID.fromString(accountId))
+            .header("Authorization", "Bearer " + seedMerchantKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.amount").value(10.0000))
         .andExpect(jsonPath("$.currency").value("BRL"));
@@ -119,7 +138,7 @@ class PaymentsRestApiTest extends IntegrationTestBase {
     String chargeId = com.jayway.jsonpath.JsonPath.read(
         mockMvc.perform(get(location)).andReturn().getResponse().getContentAsString(), "$.chargeId");
     simulator.pay(UUID.fromString(chargeId));
-    accountsService.freeze(UUID.fromString(accountId));
+    accountsService.freeze(SeedMerchant.PUBLIC_ID, UUID.fromString(accountId));
 
     mockMvc.perform(get(location))
         .andExpect(status().isConflict())
@@ -128,11 +147,12 @@ class PaymentsRestApiTest extends IntegrationTestBase {
     mockMvc.perform(get(location))
         .andExpect(status().isConflict());
 
-    accountsService.unfreeze(UUID.fromString(accountId));
+    accountsService.unfreeze(SeedMerchant.PUBLIC_ID, UUID.fromString(accountId));
     mockMvc.perform(get(location))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SETTLED"));
-    mockMvc.perform(get("/v1/accounts/{id}/balance", UUID.fromString(accountId)))
+    mockMvc.perform(get("/v1/accounts/{id}/balance", UUID.fromString(accountId))
+            .header("Authorization", "Bearer " + seedMerchantKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.amount").value(5.0000));
   }

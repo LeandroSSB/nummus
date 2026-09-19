@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.leandrossb.nummus.accounts.application.AccountsService;
 import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.ledger.domain.Money;
@@ -43,7 +44,7 @@ class WebhookPublishTest extends IntegrationTestBase {
   @Test
   void settledIntentPublishesOneEventAndOneDeliveryPerSubscriber() throws Exception {
     var endpointId = registerEndpoint();
-    var account = accountsService.open(new OpenAccountCommand("Publish Merchant"));
+    var account = accountsService.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("Publish Merchant"));
     var intent = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("9.0000"), null));
     simulator.pay(intent.chargePublicId());
 
@@ -69,10 +70,10 @@ class WebhookPublishTest extends IntegrationTestBase {
   @Test
   void rolledBackSettlementPublishesNothingForThatIntent() throws Exception {
     registerEndpoint();
-    var account = accountsService.open(new OpenAccountCommand("Rollback Merchant"));
+    var account = accountsService.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("Rollback Merchant"));
     var intent = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("4.0000"), null));
     simulator.pay(intent.chargePublicId());
-    accountsService.freeze(account.publicId()); // settle refuses, transaction rolls back
+    accountsService.freeze(SeedMerchant.PUBLIC_ID, account.publicId()); // settle refuses, transaction rolls back
 
     assertThrows(RuntimeException.class, () -> payments.get(intent.publicId()));
 
@@ -89,12 +90,12 @@ class WebhookPublishTest extends IntegrationTestBase {
   @Test
   void failedAndExpiredIntentsPublishTheirTypes() throws Exception {
     var endpointId = registerEndpoint();
-    var failedAccount = accountsService.open(new OpenAccountCommand("Failed Merchant"));
+    var failedAccount = accountsService.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("Failed Merchant"));
     var failed = payments.create(new CreateIntentCommand(failedAccount.publicId(), Money.ofBrl("3.0000"), null));
     simulator.fail(failed.chargePublicId());
     payments.get(failed.publicId());
 
-    var expiredAccount = accountsService.open(new OpenAccountCommand("Expired Merchant"));
+    var expiredAccount = accountsService.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("Expired Merchant"));
     var expired = payments.create(new CreateIntentCommand(expiredAccount.publicId(), Money.ofBrl("2.0000"), null));
     try (var c = adminConnection(); var st = c.createStatement()) {
       st.executeUpdate("UPDATE payments.payment_intent SET expires_at = now() - interval '1 second' "

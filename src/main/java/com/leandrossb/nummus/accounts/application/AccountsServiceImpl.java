@@ -35,7 +35,8 @@ public class AccountsServiceImpl implements AccountsService {
 
   @Override
   @Transactional
-  public PaymentAccount open(OpenAccountCommand cmd) {
+  public PaymentAccount open(UUID merchantPublicId, OpenAccountCommand cmd) {
+    Objects.requireNonNull(merchantPublicId, "merchantPublicId must not be null");
     Objects.requireNonNull(cmd, "command must not be null");
     String holderName = cmd.holderName() == null ? "" : cmd.holderName().trim();
     if (holderName.isEmpty()) {
@@ -47,68 +48,68 @@ public class AccountsServiceImpl implements AccountsService {
     UUID publicId = UUID.randomUUID();
     var backing = ledger.openAccount(new com.leandrossb.nummus.ledger.application.OpenAccountCommand(
         "payable " + publicId.toString().substring(0, 8), AccountType.LIABILITY, BRL));
-    return repository.insert(new PaymentAccount(publicId, holderName, AccountStatus.ACTIVE,
-        Instant.now(), null, backing.publicId()));
+    return repository.insert(new PaymentAccount(merchantPublicId, publicId, holderName,
+        AccountStatus.ACTIVE, Instant.now(), null, backing.publicId()));
   }
 
   @Override
   @Transactional(readOnly = true)
-  public PaymentAccount get(UUID publicId) {
-    return require(publicId);
+  public PaymentAccount get(UUID merchantPublicId, UUID publicId) {
+    return require(merchantPublicId, publicId);
   }
 
   @Override
   @Transactional
-  public PaymentAccount freeze(UUID publicId) {
-    return transition(publicId, AccountStatus.FROZEN, null, ledger::freezeAccount);
+  public PaymentAccount freeze(UUID merchantPublicId, UUID publicId) {
+    return transition(merchantPublicId, publicId, AccountStatus.FROZEN, null, ledger::freezeAccount);
   }
 
   @Override
   @Transactional
-  public PaymentAccount unfreeze(UUID publicId) {
-    var current = require(publicId);
+  public PaymentAccount unfreeze(UUID merchantPublicId, UUID publicId) {
+    var current = require(merchantPublicId, publicId);
     if (current.status() == AccountStatus.ACTIVE) {
       throw new IllegalArgumentException("payment account is not FROZEN: " + publicId);
     }
-    return transition(publicId, AccountStatus.ACTIVE, null, ledger::unfreezeAccount);
+    return transition(merchantPublicId, publicId, AccountStatus.ACTIVE, null, ledger::unfreezeAccount);
   }
 
   @Override
   @Transactional
-  public PaymentAccount close(UUID publicId) {
-    return transition(publicId, AccountStatus.CLOSED, Instant.now(), ledger::closeAccount);
+  public PaymentAccount close(UUID merchantPublicId, UUID publicId) {
+    return transition(merchantPublicId, publicId, AccountStatus.CLOSED, Instant.now(), ledger::closeAccount);
   }
 
   @Override
   @Transactional(readOnly = true)
-  public Money balance(UUID publicId) {
-    var account = require(publicId);
+  public Money balance(UUID merchantPublicId, UUID publicId) {
+    var account = require(merchantPublicId, publicId);
     return naturalSigned(account, ledger.balance(account.ledgerAccountPublicId()));
   }
 
   @Override
   @Transactional(readOnly = true)
-  public AccountStatement statement(UUID publicId, Page page) {
+  public AccountStatement statement(UUID merchantPublicId, UUID publicId, Page page) {
     Objects.requireNonNull(page, "page must not be null");
-    var account = require(publicId);
+    var account = require(merchantPublicId, publicId);
     var raw = ledger.statement(account.ledgerAccountPublicId(), page);
     return new AccountStatement(raw.account(), naturalSigned(account, raw.balance()), raw.lines());
   }
 
-  private PaymentAccount require(UUID publicId) {
-    return repository.findByPublicId(publicId)
+  private PaymentAccount require(UUID merchantPublicId, UUID publicId) {
+    return repository.findByPublicId(merchantPublicId, publicId)
         .orElseThrow(() -> new UnknownPaymentAccountException(publicId));
   }
 
-  private PaymentAccount transition(UUID publicId, AccountStatus target, Instant closedAt,
-      Consumer<UUID> ledgerTransition) {
-    var current = require(publicId);
+  private PaymentAccount transition(UUID merchantPublicId, UUID publicId, AccountStatus target,
+      Instant closedAt, Consumer<UUID> ledgerTransition) {
+    var current = require(merchantPublicId, publicId);
     if (current.status() == AccountStatus.CLOSED) {
       throw new PaymentAccountNotActiveException(publicId, current.status());
     }
     ledgerTransition.accept(current.ledgerAccountPublicId());
-    repository.updateStatus(publicId, target, closedAt);
-    return get(publicId);
+    repository.updateStatus(merchantPublicId, publicId, target, closedAt);
+    return get(merchantPublicId, publicId);
   }
 
   private Money naturalSigned(PaymentAccount account, Money raw) {

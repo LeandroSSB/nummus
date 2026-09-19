@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.leandrossb.nummus.accounts.application.AccountsService;
 import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
 import com.leandrossb.nummus.ledger.domain.Money;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
@@ -64,7 +65,7 @@ class ConciliationRestApiTest extends IntegrationTestBase {
     // relative to this JVM clock. Other classes' now-window fixtures cannot
     // leak in, whatever order JUnit runs methods or classes in.
     Instant start = Instant.now();
-    var account = accountsService.open(new OpenAccountCommand("Concile Merchant"));
+    var account = accountsService.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("Concile Merchant"));
     var first = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("11.0000"), null));
     var second = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl("12.0000"), null));
     settledIntents.add(first.publicId());
@@ -117,7 +118,7 @@ class ConciliationRestApiTest extends IntegrationTestBase {
     // asserted, so an earlier method's settlements may add MATCHED lines but
     // cannot fabricate or hide this test's divergences.
     Instant start = Instant.now();
-    var account = accountsService.open(new OpenAccountCommand("Divergence Merchant"));
+    var account = accountsService.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("Divergence Merchant"));
     // MISSING_INTERNAL: the network settled a charge no intent knows about.
     var orphan = simulator.create(Money.ofBrl("77.0000"));
     networkCharges.add(orphan.publicId());

@@ -8,25 +8,27 @@ import com.leandrossb.nummus.ledger.domain.Page;
 import java.util.UUID;
 
 /**
- * The accounts module's internal API. Every payment account wraps exactly one
- * LIABILITY ledger account; balances and statements are derived by the ledger
- * and presented with the holder's natural sign.
+ * The accounts module's internal API. Every payment account is owned by a
+ * merchant and wraps exactly one LIABILITY ledger account; balances and
+ * statements are derived by the ledger and presented with the holder's
+ * natural sign. Every lookup is scoped to the owning merchant — another
+ * merchant's account is indistinguishable from an unknown one.
  */
 public interface AccountsService {
 
-  PaymentAccount open(OpenAccountCommand cmd);
+  PaymentAccount open(UUID merchantPublicId, OpenAccountCommand cmd);
 
-  PaymentAccount get(UUID publicId);
+  PaymentAccount get(UUID merchantPublicId, UUID publicId);
 
-  PaymentAccount freeze(UUID publicId);
+  PaymentAccount freeze(UUID merchantPublicId, UUID publicId);
 
-  PaymentAccount unfreeze(UUID publicId);
+  PaymentAccount unfreeze(UUID merchantPublicId, UUID publicId);
 
-  PaymentAccount close(UUID publicId);
+  PaymentAccount close(UUID merchantPublicId, UUID publicId);
 
   /** Derived balance in natural sign: available funds read positive. */
-  Money balance(UUID publicId);
+  Money balance(UUID merchantPublicId, UUID publicId);
 
   /** Postings newest first with the natural-signed balance; lines stay as posted. */
-  AccountStatement statement(UUID publicId, Page page);
+  AccountStatement statement(UUID merchantPublicId, UUID publicId, Page page);
 }
