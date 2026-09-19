@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -21,8 +22,22 @@ class IdempotencyMerchantNamespaceTest extends IntegrationTestBase {
   @Autowired
   private MockMvc mockMvc;
 
+  @Autowired
+  private OperatorKeysService operatorKeys;
+
+  private String operatorAuth;
+
+  /** One operator key per test — merchant creation and conciliation ingest are operator-gated. */
+  private String operatorAuth() {
+    if (operatorAuth == null) {
+      operatorAuth = "Bearer " + operatorKeys.create().secret();
+    }
+    return operatorAuth;
+  }
+
   private String createMerchantAndGetKey(String name) throws Exception {
     MvcResult created = mockMvc.perform(post("/v1/merchants")
+            .header("Authorization", operatorAuth())
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
         .andExpect(status().isCreated()).andReturn();
@@ -74,9 +89,11 @@ class IdempotencyMerchantNamespaceTest extends IntegrationTestBase {
     String shared = UUID.randomUUID().toString();
     String body = "{\"from\":\"2026-09-19T10:00:00Z\",\"to\":\"2026-09-19T11:00:00Z\"}";
     mockMvc.perform(post("/v1/conciliation/reports")
+            .header("Authorization", operatorAuth())
             .header(KEY, shared).contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated());
     mockMvc.perform(post("/v1/conciliation/reports")
+            .header("Authorization", operatorAuth())
             .header(KEY, shared).contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated())
         .andExpect(header().string("Idempotency-Replayed", "true"));

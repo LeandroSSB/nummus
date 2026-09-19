@@ -4,9 +4,15 @@ import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
 import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
 import com.leandrossb.nummus.conciliation.application.DuplicateSettlementLinesException;
 import com.leandrossb.nummus.conciliation.application.UnknownConciliationReportException;
+import com.leandrossb.nummus.interfaces.auth.MerchantKeyRequiredException;
 import com.leandrossb.nummus.interfaces.auth.MerchantUnauthorizedException;
+import com.leandrossb.nummus.interfaces.auth.OperatorKeyRequiredException;
+import com.leandrossb.nummus.interfaces.auth.OperatorUnauthorizedException;
 import com.leandrossb.nummus.interfaces.idempotency.IdempotencyKeyReuseException;
 import com.leandrossb.nummus.interfaces.idempotency.MissingIdempotencyKeyException;
+import com.leandrossb.nummus.merchants.application.BootstrapAlreadyUsedException;
+import com.leandrossb.nummus.merchants.application.BootstrapUnavailableException;
+import com.leandrossb.nummus.merchants.application.InvalidBootstrapTokenException;
 import com.leandrossb.nummus.merchants.application.UnknownApiKeyException;
 import com.leandrossb.nummus.merchants.application.UnknownMerchantException;
 import com.leandrossb.nummus.ledger.domain.AccountNotActiveException;
@@ -50,8 +56,28 @@ public class GlobalExceptionHandler {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
   }
 
-  @ExceptionHandler(MerchantUnauthorizedException.class)
-  ProblemDetail merchantUnauthorized(MerchantUnauthorizedException e) {
+  @ExceptionHandler({MerchantUnauthorizedException.class, OperatorUnauthorizedException.class})
+  ProblemDetail unauthorized(RuntimeException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
+  }
+
+  @ExceptionHandler({MerchantKeyRequiredException.class, OperatorKeyRequiredException.class})
+  ProblemDetail keyRequired(RuntimeException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, e.getMessage());
+  }
+
+  @ExceptionHandler(BootstrapUnavailableException.class)
+  ProblemDetail bootstrapUnavailable(BootstrapUnavailableException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+  }
+
+  @ExceptionHandler(BootstrapAlreadyUsedException.class)
+  ProblemDetail bootstrapAlreadyUsed(BootstrapAlreadyUsedException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.GONE, e.getMessage());
+  }
+
+  @ExceptionHandler(InvalidBootstrapTokenException.class)
+  ProblemDetail invalidBootstrapToken(InvalidBootstrapTokenException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
   }
 

@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,12 +26,18 @@ class WebhookEndpointsRestApiTest extends IntegrationTestBase {
   @Autowired
   private MockMvc mockMvc;
 
+  @Autowired
+  private OperatorKeysService operatorKeys;
+
   private String merchantKey;
 
-  /** Fresh merchant per test: every endpoint this class touches belongs to it. */
+  /** Fresh merchant per test: every endpoint this class touches belongs to it.
+   *  Creation is operator-gated — one operator key per fixture mint. */
   @BeforeEach
   void createMerchantFixture() throws Exception {
+    String operatorAuth = "Bearer " + operatorKeys.create().secret();
     MvcResult created = mockMvc.perform(post("/v1/merchants")
+            .header("Authorization", operatorAuth)
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"name\":\"Webhooks Fixture Merchant\"}"))

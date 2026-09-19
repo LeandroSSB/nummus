@@ -7,27 +7,27 @@ import org.springframework.web.context.request.NativeWebRequest;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.method.support.ModelAndViewContainer;
 
-/** A handler parameter of type AuthenticatedMerchant marks a merchant route;
- *  reaching one without authenticated credentials is a 401, and reaching one
- *  authenticated as an operator is a 403 role mismatch (both via the advice). */
-public class MerchantArgumentResolver implements HandlerMethodArgumentResolver {
+/** A handler parameter of type AuthenticatedOperator marks an operator route;
+ *  reaching one without credentials is a 401, and reaching one authenticated
+ *  as a merchant is a 403 role mismatch (both via the advice). */
+public class OperatorArgumentResolver implements HandlerMethodArgumentResolver {
 
   @Override
   public boolean supportsParameter(MethodParameter parameter) {
-    return parameter.getParameterType().equals(AuthenticatedMerchant.class);
+    return parameter.getParameterType().equals(AuthenticatedOperator.class);
   }
 
   @Override
   public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
       NativeWebRequest webRequest, WebDataBinderFactory binderFactory) {
     HttpServletRequest request = webRequest.getNativeRequest(HttpServletRequest.class);
-    Object merchant = request == null ? null : request.getAttribute(MerchantAuthFilter.MERCHANT_ATTRIBUTE);
-    if (merchant == null) {
-      if (request != null && request.getAttribute(MerchantAuthFilter.OPERATOR_ATTRIBUTE) != null) {
-        throw new MerchantKeyRequiredException();
+    Object operator = request == null ? null : request.getAttribute(MerchantAuthFilter.OPERATOR_ATTRIBUTE);
+    if (operator == null) {
+      if (request != null && request.getAttribute(MerchantAuthFilter.MERCHANT_ATTRIBUTE) != null) {
+        throw new OperatorKeyRequiredException();
       }
-      throw new MerchantUnauthorizedException();
+      throw new OperatorUnauthorizedException();
     }
-    return merchant;
+    return operator;
   }
 }

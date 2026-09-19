@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -21,8 +22,22 @@ class MerchantScopingTest extends IntegrationTestBase {
   @Autowired
   private MockMvc mockMvc;
 
+  @Autowired
+  private OperatorKeysService operatorKeys;
+
+  private String operatorAuth;
+
+  /** One operator key per test — merchant creation is operator-gated. */
+  private String operatorAuth() {
+    if (operatorAuth == null) {
+      operatorAuth = "Bearer " + operatorKeys.create().secret();
+    }
+    return operatorAuth;
+  }
+
   private String createMerchantAndGetKey(String name) throws Exception {
     MvcResult created = mockMvc.perform(post("/v1/merchants")
+            .header("Authorization", operatorAuth())
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
         .andExpect(status().isCreated()).andReturn();

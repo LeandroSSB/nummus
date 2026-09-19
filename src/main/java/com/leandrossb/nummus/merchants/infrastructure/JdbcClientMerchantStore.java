@@ -102,6 +102,55 @@ public class JdbcClientMerchantStore implements MerchantStore {
         .query((rs, i) -> mapMerchant(rs)).optional();
   }
 
+  @Override
+  public void insertOperatorKey(String keyHash, String prefix) {
+    jdbc.sql("""
+        insert into merchants.operator_key (public_id, key_hash, prefix)
+        values (:keyId, :keyHash, :prefix)
+        """)
+        .param("keyId", UUID.randomUUID())
+        .param("keyHash", keyHash)
+        .param("prefix", prefix)
+        .update();
+  }
+
+  @Override
+  public Optional<ApiKey> findActiveOperatorKeyByHash(String keyHash) {
+    return jdbc.sql("""
+        select public_id, prefix, status, created_at from merchants.operator_key
+        where key_hash = :keyHash and status = 'ACTIVE'
+        """)
+        .param("keyHash", keyHash)
+        .query((rs, i) -> mapKey(rs)).optional();
+  }
+
+  @Override
+  public List<ApiKey> listOperatorKeys() {
+    return jdbc.sql("""
+        select public_id, prefix, status, created_at from merchants.operator_key
+        order by id desc
+        """)
+        .query((rs, i) -> mapKey(rs)).list();
+  }
+
+  @Override
+  public boolean revokeOperatorKey(UUID keyPublicId) {
+    return jdbc.sql("""
+        update merchants.operator_key set status = 'REVOKED'
+        where public_id = :keyPublicId and status = 'ACTIVE'
+        """)
+        .param("keyPublicId", keyPublicId)
+        .update() == 1;
+  }
+
+  @Override
+  public boolean hasActiveOperatorKey() {
+    return jdbc.sql("""
+        select exists(select 1 from merchants.operator_key where status = 'ACTIVE')
+        """)
+        .query(Boolean.class).single();
+  }
+
   private static Merchant mapMerchant(ResultSet rs) throws SQLException {
     return new Merchant(rs.getObject("public_id", UUID.class), rs.getString("name"),
         rs.getObject("created_at", OffsetDateTime.class).toInstant());

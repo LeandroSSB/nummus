@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.leandrossb.nummus.accounts.application.AccountsService;
 import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
 import com.leandrossb.nummus.ledger.domain.Money;
+import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
@@ -49,11 +50,26 @@ class ConciliationRestApiTest extends IntegrationTestBase {
   @Autowired
   private SimulatorService simulator;
 
+  @Autowired
+  private OperatorKeysService operatorKeys;
+
+  private String operatorAuth;
+
+  /** One operator key per test — conciliation is operator-gated. */
+  private String operatorAuth() {
+    if (operatorAuth == null) {
+      operatorAuth = "Bearer " + operatorKeys.create().secret();
+    }
+    return operatorAuth;
+  }
+
   private String ingest(String from, String to) throws Exception {
     MvcResult result = mockMvc.perform(post("/v1/conciliation/reports")
+            .header("Authorization", operatorAuth())
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"from\":\"" + from + "\",\"to\":\"" + to + "\"}"))
+        .andExpect(status().isCreated())
         .andReturn();
     return result.getResponse().getContentAsString();
   }
@@ -81,6 +97,7 @@ class ConciliationRestApiTest extends IntegrationTestBase {
     String to = Instant.now().plusSeconds(60).toString();
     String body = "{\"from\":\"" + from + "\",\"to\":\"" + to + "\"}";
     var created = mockMvc.perform(post("/v1/conciliation/reports")
+            .header("Authorization", operatorAuth())
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated())
@@ -93,21 +110,23 @@ class ConciliationRestApiTest extends IntegrationTestBase {
     // A fresh key executes a fresh ingest; replaying THAT key returns its stored
     // response verbatim (idempotency is key-scoped, not body-scoped).
     String replayKey = UUID.randomUUID().toString();
-    String executed = mockMvc.perform(post("/v1/conciliation/reports").header(KEY, replayKey)
+    String executed = mockMvc.perform(post("/v1/conciliation/reports")
+            .header("Authorization", operatorAuth()).header(KEY, replayKey)
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated())
         .andReturn().getResponse().getContentAsString();
     String executedReportId = com.jayway.jsonpath.JsonPath.read(executed, "$.reportId");
-    mockMvc.perform(post("/v1/conciliation/reports").header(KEY, replayKey)
+    mockMvc.perform(post("/v1/conciliation/reports")
+            .header("Authorization", operatorAuth()).header(KEY, replayKey)
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated())
         .andExpect(header().string("Idempotency-Replayed", "true"))
         .andExpect(jsonPath("$.reportId").value(executedReportId));
 
-    mockMvc.perform(get("/v1/conciliation/reports"))
+    mockMvc.perform(get("/v1/conciliation/reports").header("Authorization", operatorAuth()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[0].reportId").value(executedReportId));
-    mockMvc.perform(get("/v1/conciliation/reports/" + reportId))
+    mockMvc.perform(get("/v1/conciliation/reports/" + reportId).header("Authorization", operatorAuth()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.lines[?(@.matchStatus == 'MATCHED')]").isNotEmpty());
   }
@@ -149,7 +168,7 @@ class ConciliationRestApiTest extends IntegrationTestBase {
     String body = ingest(start.minusSeconds(30).toString(), Instant.now().plusSeconds(60).toString());
     String reportId = com.jayway.jsonpath.JsonPath.read(body, "$.reportId");
 
-    mockMvc.perform(get("/v1/conciliation/reports/" + reportId))
+    mockMvc.perform(get("/v1/conciliation/reports/" + reportId).header("Authorization", operatorAuth()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("OPEN"))
         .andExpect(jsonPath("$.lines[?(@.matchStatus == 'MISSING_INTERNAL')]").isNotEmpty())
@@ -159,14 +178,17 @@ class ConciliationRestApiTest extends IntegrationTestBase {
 
   @Test
   void unknownReportIs404AndInvertedWindowIs400() throws Exception {
-    mockMvc.perform(get("/v1/conciliation/reports/" + UUID.randomUUID()))
+    mockMvc.perform(get("/v1/conciliation/reports/" + UUID.randomUUID())
+            .header("Authorization", operatorAuth()))
         .andExpect(status().isNotFound());
     mockMvc.perform(post("/v1/conciliation/reports")
+            .header("Authorization", operatorAuth())
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"from\":\"2026-09-18T11:00:00Z\",\"to\":\"2026-09-18T10:00:00Z\"}"))
         .andExpect(status().isBadRequest());
     mockMvc.perform(post("/v1/conciliation/reports")
+            .header("Authorization", operatorAuth())
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"from\":\"not-an-instant\",\"to\":\"2026-09-18T11:00:00Z\"}"))
@@ -175,7 +197,9 @@ class ConciliationRestApiTest extends IntegrationTestBase {
 
   @Test
   void postRequiresAnIdempotencyKey() throws Exception {
+    // Authenticated as operator, but no Idempotency-Key: the idempotency 400.
     mockMvc.perform(post("/v1/conciliation/reports")
+            .header("Authorization", operatorAuth())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"from\":\"2026-09-18T10:00:00Z\",\"to\":\"2026-09-18T11:00:00Z\"}"))
         .andExpect(status().isBadRequest());

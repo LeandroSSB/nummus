@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.interfaces.idempotency;
 
+import com.leandrossb.nummus.interfaces.auth.MerchantAuthFilter;
 import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,7 +15,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Fails merchant writes closed: every POST under /v1 must carry a usable
- * Idempotency-Key. The path rule is defense in depth — @Idempotent is the real
+ * Idempotency-Key, except the operator bootstrap — it is one-time by its own
+ * table state, not by idempotent replay, and must stay reachable token-first.
+ * The path rule is defense in depth — @Idempotent is the real
  * mechanism, and a future merchant POST without it still gets a 400 here rather
  * than a silently non-idempotent write. Renders problem+json itself because a
  * filter runs outside the @ControllerAdvice's reach.
@@ -36,7 +39,9 @@ public class IdempotencyWebFilter extends OncePerRequestFilter {
 
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
-    return !"POST".equalsIgnoreCase(request.getMethod()) || !request.getRequestURI().startsWith("/v1/");
+    return MerchantAuthFilter.BOOTSTRAP_PATH.equals(request.getRequestURI())
+        || !"POST".equalsIgnoreCase(request.getMethod())
+        || !request.getRequestURI().startsWith("/v1/");
   }
 
   @Override

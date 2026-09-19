@@ -26,4 +26,18 @@ public interface MerchantStore {
 
   /** The merchant owning the ACTIVE key with this hash. */
   Optional<Merchant> findMerchantByKeyHash(String keyHash);
+
+  /** Stores an operator key hash + prefix; the secret never reaches the store. */
+  void insertOperatorKey(String keyHash, String prefix);
+
+  /** The ACTIVE operator key metadata for a hash, if any. */
+  Optional<ApiKey> findActiveOperatorKeyByHash(String keyHash);
+
+  List<ApiKey> listOperatorKeys();
+
+  /** @return false when the key is absent or not ACTIVE. */
+  boolean revokeOperatorKey(UUID keyPublicId);
+
+  /** Whether any operator key is ACTIVE — the one-time bootstrap is consumed. */
+  boolean hasActiveOperatorKey();
 }

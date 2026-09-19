@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -24,9 +25,23 @@ class MerchantsRestApiTest extends IntegrationTestBase {
   @Autowired
   private MockMvc mockMvc;
 
+  @Autowired
+  private OperatorKeysService operatorKeys;
+
+  private String operatorAuth;
+
+  /** One operator key per test — merchant creation is operator-gated. */
+  private String operatorAuth() {
+    if (operatorAuth == null) {
+      operatorAuth = "Bearer " + operatorKeys.create().secret();
+    }
+    return operatorAuth;
+  }
+
   @Test
   void createReturnsTheFirstKeyExactlyOnce() throws Exception {
     MvcResult created = mockMvc.perform(post("/v1/merchants")
+            .header("Authorization", operatorAuth())
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rest Merchant\"}"))
         .andExpect(status().isCreated())
@@ -36,9 +51,11 @@ class MerchantsRestApiTest extends IntegrationTestBase {
         .andReturn();
     String merchantId = com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.merchantId");
 
-    mockMvc.perform(get("/v1/merchants/" + merchantId)).andExpect(status().isOk())
+    mockMvc.perform(get("/v1/merchants/" + merchantId).header("Authorization", operatorAuth()))
+        .andExpect(status().isOk())
         .andExpect(jsonPath("$.apiKey").doesNotExist());
-    mockMvc.perform(get("/v1/merchants/" + UUID.randomUUID())).andExpect(status().isNotFound());
+    mockMvc.perform(get("/v1/merchants/" + UUID.randomUUID()).header("Authorization", operatorAuth()))
+        .andExpect(status().isNotFound());
   }
 
   @Test
@@ -74,6 +91,7 @@ class MerchantsRestApiTest extends IntegrationTestBase {
 
   private String createMerchant(String name) throws Exception {
     MvcResult created = mockMvc.perform(post("/v1/merchants")
+            .header("Authorization", operatorAuth())
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
         .andExpect(status().isCreated()).andReturn();
