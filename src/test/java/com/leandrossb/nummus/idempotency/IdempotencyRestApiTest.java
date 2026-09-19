@@ -206,14 +206,12 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
 
   @Test
   void encodedPathThatBypassesTheFilterStillFailsClosed() throws Exception {
-    // "/v%31/" decodes to "/v1/" after the filter's raw-URI prefix check. The
-    // URI overload keeps the raw percent-encoding in requestURI (a String
-    // template would be re-encoded to %2531); MVC still routes the decoded
-    // path to the handler, so the aspect runs without the filter's guard.
+    // "/v%31/" decodes to "/v1/" — an encoded take on a merchant route must
+    // never slip past the gates unauthenticated. Auth precedes idempotency
+    // (MerchantScopingTest pins the ordering), so the credential-less encoded
+    // POST fails closed with 401 here, not the idempotency 400.
     mockMvc.perform(post(URI.create("/v%31/accounts"))
             .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Encoded Merchant\"}"))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.detail").value(
-            "Idempotency-Key header (1-255 characters) is required on merchant writes"));
+        .andExpect(status().isUnauthorized());
   }
 }
