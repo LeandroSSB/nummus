@@ -23,12 +23,12 @@ class IdempotencyPurgeTest extends IntegrationTestBase {
   void purgeRemovesOnlyExpiredRows() {
     String expired = "purge-" + UUID.randomUUID();
     String alive = "purge-" + UUID.randomUUID();
-    store.insert(expired, new byte[] {1}, Instant.now().minusSeconds(1));
-    store.insert(alive, new byte[] {1}, Instant.now().plusSeconds(3600));
+    store.insert(null, expired, new byte[] {1}, Instant.now().minusSeconds(1));
+    store.insert(null, alive, new byte[] {1}, Instant.now().plusSeconds(3600));
 
     job.purge();
 
-    assertTrue(store.findByKey(expired).isEmpty());
-    assertFalse(store.findByKey(alive).isEmpty());
+    assertTrue(store.findByKey(null, expired).isEmpty());
+    assertFalse(store.findByKey(null, alive).isEmpty());
   }
 }

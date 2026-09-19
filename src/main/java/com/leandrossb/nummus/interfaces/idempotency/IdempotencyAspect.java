@@ -1,9 +1,12 @@
 package com.leandrossb.nummus.interfaces.idempotency;
 
+import com.leandrossb.nummus.interfaces.auth.AuthenticatedMerchant;
+import com.leandrossb.nummus.interfaces.auth.MerchantAuthFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.UUID;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -47,6 +50,7 @@ public class IdempotencyAspect {
     if (key == null || key.isBlank() || key.length() > 255) {
       throw new MissingIdempotencyKeyException();
     }
+    UUID merchant = merchantNamespace(request);
     byte[] body = (byte[]) request.getAttribute(IdempotencyWebFilter.CACHED_BODY_ATTRIBUTE);
     if (body == null) {
       body = new byte[0];
@@ -55,12 +59,22 @@ public class IdempotencyAspect {
     Instant expiresAt = Instant.now().plus(properties.ttl());
     try {
       return transactions.execute(txStatus -> {
-        store.insert(key, fingerprint, expiresAt);
+        store.insert(merchant, key, fingerprint, expiresAt);
         return proceedAndAttach(joinPoint, key);
       });
     } catch (DuplicateKeyException raced) {
-      return raced(joinPoint, key, fingerprint, expiresAt, raced);
+      return raced(joinPoint, merchant, key, fingerprint, expiresAt, raced);
     }
+  }
+
+  /**
+   * The caller's idempotency namespace: the authenticated merchant's, or the
+   * operator's (null) when the request carries no merchant. The same namespace
+   * reserves and replays — a merchant never sees another's stored response.
+   */
+  private static UUID merchantNamespace(HttpServletRequest request) {
+    Object merchant = request.getAttribute(MerchantAuthFilter.MERCHANT_ATTRIBUTE);
+    return merchant instanceof AuthenticatedMerchant authenticated ? authenticated.merchantPublicId() : null;
   }
 
   /** Runs the handler and attaches the serialized response — call inside an open transaction. */
@@ -82,9 +96,9 @@ public class IdempotencyAspect {
    * with its response attached; if the winner rolled back, our insert above
    * would have succeeded and we would not be here.
    */
-  private Object raced(ProceedingJoinPoint joinPoint, String key, byte[] fingerprint,
+  private Object raced(ProceedingJoinPoint joinPoint, UUID merchant, String key, byte[] fingerprint,
       Instant expiresAt, DuplicateKeyException raced) throws Throwable {
-    var row = store.findByKey(key).orElseThrow(() -> raced);
+    var row = store.findByKey(merchant, key).orElseThrow(() -> raced);
     boolean expired = !row.expiresAt().isAfter(Instant.now());
     if (row.response() == null || expired) {
       // An expired slot is free real estate: claim it and run as new — inside
