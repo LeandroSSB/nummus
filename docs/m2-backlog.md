@@ -217,3 +217,7 @@ Known bounds, deliberate:
   bootstrap token only — key hashes are exact-match indexed lookups.
 - **Simulator stays unauthenticated** (non-production harness); a real
   deployment replaces the network boundary entirely.
+- **Bootstrap one-time-ness is check-then-act** in the service, not a
+  database invariant — two concurrent requests holding the correct token
+  can both mint. No capability gain (a token holder can already self-serve
+  additional keys), so it stays a documented bound, not a schema constraint.
