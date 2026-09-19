@@ -178,3 +178,24 @@ corrections are new reports). Known bounds, deliberate:
 - **No scheduled reconciliation or divergence alerting** — ingest is manual
   (POST). A webhook-on-divergence is the natural follow-up once operators
   want push instead of pull.
+
+## From the M7 review
+
+M7 delivered merchant identity and API keys: operator-created merchants,
+Bearer authentication (SHA-256 at rest, secret shown once, soft revocation),
+and per-merchant scoping of accounts, intents, webhook endpoints, and
+idempotency namespaces (operator POSTs keep a NULL-merchant namespace).
+Known bounds, deliberate:
+
+- **Operator surfaces stay open.** Merchant creation, the simulator, and
+  conciliation require no credentials — an operator identity model is the
+  natural next debt.
+- **Key lifecycle minimums.** No expiry, rotation policy, or `last_used_at`
+  tracking (a write per request); prefixes are display-only.
+- **SSRF narrowed, not closed.** Webhook registration is now authenticated,
+  but any http(s) target is still accepted — range rejection stays backlog.
+- **No rate limiting** on authenticated routes; bearer lookups are one
+  indexed query per request.
+- **Merchants.application remains reachable** from business modules for the
+  `SeedMerchant` bridge; retire it when a real migration-era consumer audit
+  lands (or scope it behind a query port).
