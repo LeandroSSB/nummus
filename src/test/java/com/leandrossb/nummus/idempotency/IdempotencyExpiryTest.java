@@ -5,9 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.leandrossb.nummus.merchants.application.ApiKeysService;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import com.jayway.jsonpath.JsonPath;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -21,9 +24,22 @@ class IdempotencyExpiryTest extends IntegrationTestBase {
   @Autowired
   private MockMvc mockMvc;
 
+  @Autowired
+  private ApiKeysService apiKeys;
+
+  private String seedMerchantKey;
+
+  /** Accounts routes are merchant routes now; payments still act as the seed
+   *  merchant (Task 5), so this class authenticates as a minted seed key. */
+  @BeforeEach
+  void mintSeedMerchantKey() {
+    seedMerchantKey = apiKeys.create(SeedMerchant.PUBLIC_ID).secret();
+  }
+
   @Test
   void expiredKeyIsReclaimedAndReexecutedAsNew() throws Exception {
     String accountId = JsonPath.read(mockMvc.perform(post("/v1/accounts")
+            .header("Authorization", "Bearer " + seedMerchantKey)
             .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Expiry Merchant\"}"))
         .andReturn().getResponse().getContentAsString(), "$.publicId");

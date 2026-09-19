@@ -7,9 +7,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.leandrossb.nummus.merchants.application.ApiKeysService;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.net.URI;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -22,17 +25,31 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
   @Autowired
   private MockMvc mockMvc;
 
+  @Autowired
+  private ApiKeysService apiKeys;
+
   private static final String KEY = "Idempotency-Key";
+
+  private String seedMerchantKey;
+
+  /** Accounts routes are merchant routes now; payments still act as the seed
+   *  merchant (Task 5), so this class authenticates as a minted seed key. */
+  @BeforeEach
+  void mintSeedMerchantKey() {
+    seedMerchantKey = apiKeys.create(SeedMerchant.PUBLIC_ID).secret();
+  }
 
   @Test
   void missingOrMalformedKeyIsRejectedOnEveryMerchantPost() throws Exception {
     // No header at all.
-    mockMvc.perform(post("/v1/accounts").contentType(MediaType.APPLICATION_JSON)
+    mockMvc.perform(post("/v1/accounts").header("Authorization", "Bearer " + seedMerchantKey)
+            .contentType(MediaType.APPLICATION_JSON)
             .content("{\"holderName\":\"No Key Merchant\"}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value(400));
     // Blank header.
-    mockMvc.perform(post("/v1/accounts").header(KEY, "   ")
+    mockMvc.perform(post("/v1/accounts").header("Authorization", "Bearer " + seedMerchantKey)
+            .header(KEY, "   ")
             .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Blank Key Merchant\"}"))
         .andExpect(status().isBadRequest());
     // Over 255 characters.
@@ -41,13 +58,17 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
             .content("{\"accountId\":\"" + UUID.randomUUID() + "\",\"amount\":1.0000}"))
         .andExpect(status().isBadRequest());
     // The transition endpoints are merchant writes too: a real account + no key.
-    String accountId = mockMvc.perform(post("/v1/accounts").header(KEY, UUID.randomUUID().toString())
+    String accountId = mockMvc.perform(post("/v1/accounts").header("Authorization", "Bearer " + seedMerchantKey)
+            .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Valid Merchant\"}"))
         .andExpect(status().isCreated())
         .andReturn().getResponse().getHeader("Location");
-    mockMvc.perform(post(accountId + "/freeze")).andExpect(status().isBadRequest());
-    mockMvc.perform(post(accountId + "/unfreeze")).andExpect(status().isBadRequest());
-    mockMvc.perform(post(accountId + "/close")).andExpect(status().isBadRequest());
+    mockMvc.perform(post(accountId + "/freeze").header("Authorization", "Bearer " + seedMerchantKey))
+        .andExpect(status().isBadRequest());
+    mockMvc.perform(post(accountId + "/unfreeze").header("Authorization", "Bearer " + seedMerchantKey))
+        .andExpect(status().isBadRequest());
+    mockMvc.perform(post(accountId + "/close").header("Authorization", "Bearer " + seedMerchantKey))
+        .andExpect(status().isBadRequest());
   }
 
   @Test
@@ -58,7 +79,8 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
 
   @Test
   void retryReplaysTheStoredResponseVerbatimWithoutReExecuting() throws Exception {
-    String accountId = mockMvc.perform(post("/v1/accounts").header(KEY, UUID.randomUUID().toString())
+    String accountId = mockMvc.perform(post("/v1/accounts").header("Authorization", "Bearer " + seedMerchantKey)
+            .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Replay Merchant\"}"))
         .andReturn().getResponse().getHeader("Location");
     String body = "{\"accountId\":\"" + accountId.substring(accountId.lastIndexOf('/') + 1) + "\",\"amount\":12.5000}";
@@ -90,10 +112,10 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
   @Test
   void sameKeyWithADifferentRequestIsRejected() throws Exception {
     String key = UUID.randomUUID().toString();
-    mockMvc.perform(post("/v1/accounts").header(KEY, key)
+    mockMvc.perform(post("/v1/accounts").header("Authorization", "Bearer " + seedMerchantKey).header(KEY, key)
             .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"First Op\"}"))
         .andExpect(status().isCreated());
-    mockMvc.perform(post("/v1/accounts").header(KEY, key)
+    mockMvc.perform(post("/v1/accounts").header("Authorization", "Bearer " + seedMerchantKey).header(KEY, key)
             .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Second Op\"}"))
         .andExpect(status().isUnprocessableEntity())
         .andExpect(jsonPath("$.status").value(422));
@@ -102,16 +124,19 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
   @Test
   void accountTransitionsReplayTheirStored200() throws Exception {
     String key = UUID.randomUUID().toString();
-    String location = mockMvc.perform(post("/v1/accounts").header(KEY, UUID.randomUUID().toString())
+    String location = mockMvc.perform(post("/v1/accounts").header("Authorization", "Bearer " + seedMerchantKey)
+            .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Freeze Replay\"}"))
         .andReturn().getResponse().getHeader("Location");
-    var first = mockMvc.perform(post(location + "/freeze").header(KEY, key))
+    var first = mockMvc.perform(post(location + "/freeze")
+            .header("Authorization", "Bearer " + seedMerchantKey).header(KEY, key))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("FROZEN"))
         .andReturn();
     // Re-freezing for real would be a 409 (account not ACTIVE) — the replay
     // must return the stored 200 instead.
-    var retry = mockMvc.perform(post(location + "/freeze").header(KEY, key))
+    var retry = mockMvc.perform(post(location + "/freeze")
+            .header("Authorization", "Bearer " + seedMerchantKey).header(KEY, key))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("FROZEN"))
         .andExpect(header().string("Idempotency-Replayed", "true"))
@@ -144,7 +169,8 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
 
   @Test
   void failedReexecutionAfterReclaimDoesNotPoisonTheKey() throws Exception {
-    String accountId = mockMvc.perform(post("/v1/accounts").header(KEY, UUID.randomUUID().toString())
+    String accountId = mockMvc.perform(post("/v1/accounts").header("Authorization", "Bearer " + seedMerchantKey)
+            .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Poison Guard\"}"))
         .andExpect(status().isCreated())
         .andReturn().getResponse().getHeader("Location");
