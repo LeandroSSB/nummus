@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.payments.application;
 
+import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.domain.IntentStatus;
 import com.leandrossb.nummus.payments.domain.PaymentIntent;
 import java.time.Instant;
@@ -36,8 +37,9 @@ public class InMemoryPaymentsRepository implements PaymentsRepository {
   }
 
   @Override
-  public boolean markSettled(UUID publicId, UUID journalTransactionPublicId, Instant settledAt) {
-    return guarded(publicId, IntentStatus.SETTLED, journalTransactionPublicId, settledAt);
+  public boolean markSettled(UUID publicId, UUID journalTransactionPublicId, Instant settledAt,
+      Money feeAmount) {
+    return guarded(publicId, IntentStatus.SETTLED, journalTransactionPublicId, settledAt, feeAmount);
   }
 
   @Override
@@ -49,14 +51,15 @@ public class InMemoryPaymentsRepository implements PaymentsRepository {
         .toList();
   }
 
-  private synchronized boolean guarded(UUID publicId, IntentStatus target, UUID journalTx, Instant at) {
+  private synchronized boolean guarded(UUID publicId, IntentStatus target, UUID journalTx,
+      Instant at, Money feeAmount) {
     var current = intents.get(publicId);
     if (current == null || current.status() != IntentStatus.CREATED) {
       return false;
     }
     intents.put(publicId, new PaymentIntent(current.publicId(), current.accountPublicId(),
         current.amount(), target, current.chargePublicId(), current.expiresAt(),
-        current.createdAt(), at, journalTx));
+        current.createdAt(), at, journalTx, target == IntentStatus.SETTLED ? feeAmount : null));
     return true;
   }
 
@@ -65,6 +68,7 @@ public class InMemoryPaymentsRepository implements PaymentsRepository {
     intents.computeIfPresent(publicId, (id, intent) -> new PaymentIntent(
         intent.publicId(), intent.accountPublicId(), intent.amount(), intent.status(),
         intent.chargePublicId(), Instant.now().minusSeconds(1),
-        intent.createdAt(), intent.settledAt(), intent.journalTransactionPublicId()));
+        intent.createdAt(), intent.settledAt(), intent.journalTransactionPublicId(),
+        intent.feeAmount()));
   }
 }

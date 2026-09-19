@@ -24,7 +24,7 @@ class PaymentsRepositoryTest extends IntegrationTestBase {
   private PaymentIntent newIntent() {
     return new PaymentIntent(UUID.randomUUID(), UUID.randomUUID(), Money.ofBrl("10.0000"),
         IntentStatus.CREATED, UUID.randomUUID(), Instant.now().plus(Duration.ofMinutes(30)),
-        Instant.now(), null, null);
+        Instant.now(), null, null, null);
   }
 
   @Test
@@ -40,6 +40,7 @@ class PaymentsRepositoryTest extends IntegrationTestBase {
     assertEquals(intent.chargePublicId(), found.chargePublicId());
     assertTrue(found.settledAt() == null);
     assertTrue(found.journalTransactionPublicId() == null);
+    assertTrue(found.feeAmount() == null);
   }
 
   @Test
@@ -59,12 +60,15 @@ class PaymentsRepositoryTest extends IntegrationTestBase {
     var other = newIntent();
     repository.insert(other);
     var journalTx = UUID.randomUUID();
-    assertTrue(repository.markSettled(other.publicId(), journalTx, Instant.now()));
+    assertTrue(repository.markSettled(other.publicId(), journalTx, Instant.now(),
+        Money.ofBrl("0.2500")));
     var settled = repository.findByPublicId(other.publicId()).orElseThrow();
     assertEquals(IntentStatus.SETTLED, settled.status());
     assertEquals(journalTx, settled.journalTransactionPublicId());
     assertTrue(settled.settledAt() != null);
-    assertFalse(repository.markSettled(other.publicId(), UUID.randomUUID(), Instant.now()));
+    assertEquals(0, settled.feeAmount().compareTo(Money.ofBrl("0.2500")));
+    assertFalse(repository.markSettled(other.publicId(), UUID.randomUUID(), Instant.now(),
+        Money.ofBrl("0.2500")));
 
     var third = newIntent();
     repository.insert(third);

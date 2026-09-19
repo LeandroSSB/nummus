@@ -4,6 +4,7 @@ import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.application.PaymentsRepository;
 import com.leandrossb.nummus.payments.domain.IntentStatus;
 import com.leandrossb.nummus.payments.domain.PaymentIntent;
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -47,7 +48,7 @@ public class JdbcClientPaymentsRepository implements PaymentsRepository {
   public Optional<PaymentIntent> findByPublicId(UUID publicId) {
     return jdbc.sql("""
         select public_id, account_public_id, amount, status, charge_public_id,
-               expires_at, created_at, settled_at, journal_transaction_public_id
+               expires_at, created_at, settled_at, journal_transaction_public_id, fee_amount
         from payments.payment_intent where public_id = :publicId
         """)
         .param("publicId", publicId)
@@ -59,7 +60,7 @@ public class JdbcClientPaymentsRepository implements PaymentsRepository {
   public List<PaymentIntent> findSettledBetween(Instant from, Instant to) {
     return jdbc.sql("""
         select public_id, account_public_id, amount, status, charge_public_id,
-               expires_at, created_at, settled_at, journal_transaction_public_id
+               expires_at, created_at, settled_at, journal_transaction_public_id, fee_amount
         from payments.payment_intent
         where status = 'SETTLED' and settled_at >= :from and settled_at < :to
         order by settled_at, id
@@ -81,14 +82,17 @@ public class JdbcClientPaymentsRepository implements PaymentsRepository {
   }
 
   @Override
-  public boolean markSettled(UUID publicId, UUID journalTransactionPublicId, Instant settledAt) {
+  public boolean markSettled(UUID publicId, UUID journalTransactionPublicId, Instant settledAt,
+      Money feeAmount) {
     int updated = jdbc.sql("""
         update payments.payment_intent
-        set status = 'SETTLED', settled_at = :settledAt, journal_transaction_public_id = :journalTx
+        set status = 'SETTLED', settled_at = :settledAt, journal_transaction_public_id = :journalTx,
+            fee_amount = :fee
         where public_id = :publicId and status = 'CREATED'
         """)
         .param("settledAt", toOffsetDateTime(settledAt))
         .param("journalTx", journalTransactionPublicId)
+        .param("fee", feeAmount == null ? null : feeAmount.amount())
         .param("publicId", publicId)
         .update();
     return updated == 1;
@@ -107,6 +111,7 @@ public class JdbcClientPaymentsRepository implements PaymentsRepository {
 
   private PaymentIntent mapIntent(ResultSet rs) throws SQLException {
     OffsetDateTime settledAt = rs.getObject("settled_at", OffsetDateTime.class);
+    BigDecimal feeAmount = rs.getBigDecimal("fee_amount");
     return new PaymentIntent(
         rs.getObject("public_id", UUID.class),
         rs.getObject("account_public_id", UUID.class),
@@ -116,7 +121,8 @@ public class JdbcClientPaymentsRepository implements PaymentsRepository {
         rs.getObject("expires_at", OffsetDateTime.class).toInstant(),
         rs.getObject("created_at", OffsetDateTime.class).toInstant(),
         settledAt == null ? null : settledAt.toInstant(),
-        rs.getObject("journal_transaction_public_id", UUID.class));
+        rs.getObject("journal_transaction_public_id", UUID.class),
+        feeAmount == null ? null : Money.of(feeAmount, Currency.getInstance("BRL")));
   }
 
   private static OffsetDateTime toOffsetDateTime(Instant instant) {

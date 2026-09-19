@@ -20,6 +20,8 @@ import com.leandrossb.nummus.payments.application.PaymentsRepository;
 import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.application.PaymentsServiceImpl;
+import com.leandrossb.nummus.merchants.application.FakeMerchantsService;
+import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.payments.domain.IntentStatus;
 import com.leandrossb.nummus.payments.domain.PaymentIntent;
@@ -41,6 +43,7 @@ class PaymentsPublishRaceTest {
       new AccountsServiceImpl(ledger, new InMemoryAccountsRepository());
   private final FakePaymentNetwork network = new FakePaymentNetwork();
   private final RecordingIntentEvents intentEvents = new RecordingIntentEvents();
+  private final MerchantsService merchants = new FakeMerchantsService();
 
   @Test
   void lostExpireRacePublishesNothing() {
@@ -86,7 +89,7 @@ class PaymentsPublishRaceTest {
   }
 
   private PaymentsService paymentsWith(PaymentsRepository repository) {
-    return new PaymentsServiceImpl(ledger, accounts, network, repository, intentEvents);
+    return new PaymentsServiceImpl(ledger, accounts, network, repository, intentEvents, merchants);
   }
 
   private PaymentIntent createdIntent(PaymentsService payments) {
@@ -132,7 +135,7 @@ class PaymentsPublishRaceTest {
     private PaymentIntent asWinner(PaymentIntent intent) {
       return new PaymentIntent(intent.publicId(), intent.accountPublicId(), intent.amount(),
           winnerStatus, intent.chargePublicId(), intent.expiresAt(), intent.createdAt(),
-          intent.settledAt(), intent.journalTransactionPublicId());
+          intent.settledAt(), intent.journalTransactionPublicId(), intent.feeAmount());
     }
   }
 

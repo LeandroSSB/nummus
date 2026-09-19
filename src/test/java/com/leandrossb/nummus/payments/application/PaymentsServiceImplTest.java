@@ -15,6 +15,8 @@ import com.leandrossb.nummus.ledger.domain.AccountStatus;
 import com.leandrossb.nummus.ledger.domain.AccountType;
 import com.leandrossb.nummus.ledger.domain.LedgerAccount;
 import com.leandrossb.nummus.ledger.domain.Money;
+import com.leandrossb.nummus.merchants.application.FakeMerchantsService;
+import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.domain.ChargeAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
@@ -34,9 +36,10 @@ class PaymentsServiceImplTest {
       new AccountsServiceImpl(ledger, new InMemoryAccountsRepository());
   private final FakePaymentNetwork network = new FakePaymentNetwork();
   private final InMemoryPaymentsRepository repo = new InMemoryPaymentsRepository();
+  private final MerchantsService merchants = new FakeMerchantsService();
   // Outbox publishing is covered by WebhookPublishTest; unit scope ignores events.
   private final PaymentsService payments =
-      new PaymentsServiceImpl(ledger, accounts, network, repo, event -> { });
+      new PaymentsServiceImpl(ledger, accounts, network, repo, event -> { }, merchants);
 
   PaymentsServiceImplTest() {
     // Test-scope composition layer: mirror the V5 clearing-asset seed so the fixed
