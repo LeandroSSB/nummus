@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.conciliation.interfaces;
 
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.leandrossb.nummus.conciliation.application.ConciliationService;
 import com.leandrossb.nummus.conciliation.application.UnknownConciliationReportException;
 import com.leandrossb.nummus.conciliation.application.ConciliationStore;
@@ -53,6 +54,7 @@ class ConciliationReportsController {
         store.findLines(id).stream().map(ReportLineResponse::from).toList());
   }
 
-  record ReportDetailResponse(ReportSummaryResponse report, List<ReportLineResponse> lines) {
+  record ReportDetailResponse(@JsonUnwrapped ReportSummaryResponse report,
+      List<ReportLineResponse> lines) {
   }
 }

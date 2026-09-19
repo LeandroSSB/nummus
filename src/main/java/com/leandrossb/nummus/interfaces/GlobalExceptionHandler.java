@@ -18,6 +18,7 @@ import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
 import com.leandrossb.nummus.psp_simulator.domain.ChargeNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownChargeException;
 import com.leandrossb.nummus.webhooks.domain.UnknownWebhookEndpointException;
+import java.time.format.DateTimeParseException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -74,7 +75,7 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler({IllegalArgumentException.class, InvalidMoneyException.class,
       CurrencyMismatchException.class, MethodArgumentNotValidException.class,
-      MethodArgumentTypeMismatchException.class})
+      MethodArgumentTypeMismatchException.class, DateTimeParseException.class})
   public ProblemDetail badRequest(Exception e) {
     String detail = e instanceof MethodArgumentNotValidException validation
         ? validation.getBindingResult().getAllErrors().get(0).getDefaultMessage()

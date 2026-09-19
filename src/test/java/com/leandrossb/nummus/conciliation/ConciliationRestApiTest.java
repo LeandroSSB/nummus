@@ -71,20 +71,23 @@ class ConciliationRestApiTest extends IntegrationTestBase {
         .andReturn().getResponse().getContentAsString();
     String reportId = com.jayway.jsonpath.JsonPath.read(created, "$.reportId");
 
-    // Idempotent replay returns the stored response verbatim.
+    // A fresh key executes a fresh ingest; replaying THAT key returns its stored
+    // response verbatim (idempotency is key-scoped, not body-scoped).
     String replayKey = UUID.randomUUID().toString();
-    mockMvc.perform(post("/v1/conciliation/reports").header(KEY, replayKey)
+    String executed = mockMvc.perform(post("/v1/conciliation/reports").header(KEY, replayKey)
             .contentType(MediaType.APPLICATION_JSON).content(body))
-        .andExpect(status().isCreated());
+        .andExpect(status().isCreated())
+        .andReturn().getResponse().getContentAsString();
+    String executedReportId = com.jayway.jsonpath.JsonPath.read(executed, "$.reportId");
     mockMvc.perform(post("/v1/conciliation/reports").header(KEY, replayKey)
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated())
         .andExpect(header().string("Idempotency-Replayed", "true"))
-        .andExpect(jsonPath("$.reportId").value(reportId));
+        .andExpect(jsonPath("$.reportId").value(executedReportId));
 
     mockMvc.perform(get("/v1/conciliation/reports"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$[0].reportId").value(reportId));
+        .andExpect(jsonPath("$[0].reportId").value(executedReportId));
     mockMvc.perform(get("/v1/conciliation/reports/" + reportId))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.lines[?(@.matchStatus == 'MATCHED')]").isNotEmpty());
