@@ -28,22 +28,29 @@ class MerchantsSchemaTest extends IntegrationTestBase {
         rs.next();
         assertEquals(0, rs.getInt(1));
       }
-      // Partial unique semantics: same key across two merchants is allowed;
-      // within one merchant (or the operator namespace) it is not.
       st.executeUpdate("INSERT INTO merchants.merchant (public_id, name) VALUES ('"
           + UUID.randomUUID() + "', 'A')");
       st.executeUpdate("INSERT INTO merchants.merchant (public_id, name) VALUES ('"
           + UUID.randomUUID() + "', 'B')");
+      // api_key.key_hash is globally unique — authentication resolves a key by
+      // hash alone — so replaying a hash, even across merchants, is rejected.
       st.executeUpdate("""
           INSERT INTO merchants.api_key (merchant_id, key_hash, prefix)
-          SELECT id, 'hash-x', 'nummus_s' FROM merchants.merchant WHERE name IN ('A','B')
+          SELECT id, 'hash-a', 'nummus_s' FROM merchants.merchant WHERE name = 'A'
           """);
-      SQLException sameMerchantTwice = assertThrows(SQLException.class, () -> st.executeUpdate("""
+      st.executeUpdate("""
           INSERT INTO merchants.api_key (merchant_id, key_hash, prefix)
-          SELECT id, 'hash-x', 'nummus_s' FROM merchants.merchant WHERE name = 'A'
+          SELECT id, 'hash-b', 'nummus_s' FROM merchants.merchant WHERE name = 'B'
+          """);
+      SQLException replayedHash = assertThrows(SQLException.class, () -> st.executeUpdate("""
+          INSERT INTO merchants.api_key (merchant_id, key_hash, prefix)
+          SELECT id, 'hash-a', 'nummus_s' FROM merchants.merchant WHERE name = 'B'
           """));
-      assertEquals("23505", sameMerchantTwice.getSQLState());
+      assertEquals("23505", replayedHash.getSQLState());
 
+      // Idempotency keys split into two namespaces: the same key string across
+      // a merchant and the operator namespace is allowed; repeating it within
+      // the operator namespace is not.
       String sharedKey = "idem-" + UUID.randomUUID();
       st.executeUpdate("INSERT INTO idempotency.idempotency_keys (key, request_fingerprint, expires_at, merchant_public_id)"
           + " VALUES ('" + sharedKey + "', decode('00','hex'), now() + interval '1 hour', '11111111-1111-4111-8111-111111111111')");
