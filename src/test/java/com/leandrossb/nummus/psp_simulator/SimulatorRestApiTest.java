@@ -2,12 +2,15 @@ package com.leandrossb.nummus.psp_simulator;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.application.PaymentNetwork;
+import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
+import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +25,9 @@ class SimulatorRestApiTest extends IntegrationTestBase {
 
   @Autowired
   private PaymentNetwork paymentNetwork;
+
+  @Autowired
+  private SimulatorService simulator;
 
   @Test
   void payerActionsTransitionPendingChargeAndSecondActionConflicts() throws Exception {
@@ -63,5 +69,32 @@ class SimulatorRestApiTest extends IntegrationTestBase {
     org.junit.jupiter.api.Assertions.assertEquals(0, fetched.amount().compareTo(Money.ofBrl("42.0000")));
     org.junit.jupiter.api.Assertions.assertEquals(
         com.leandrossb.nummus.payments.application.ChargeStatus.PENDING, fetched.status());
+  }
+
+  @Test
+  void settlementReportReturnsSucceededChargesInsideWindow() throws Exception {
+    var paid = simulator.create(Money.ofBrl("8.0000"));
+    simulator.pay(paid.publicId());
+    var pending = simulator.create(Money.ofBrl("7.0000"));
+    var failed = simulator.create(Money.ofBrl("6.0000"));
+    simulator.fail(failed.publicId());
+
+    Instant from = Instant.now().minusSeconds(60);
+    Instant to = Instant.now().plusSeconds(60);
+    mockMvc.perform(get("/simulator/settlement-report")
+            .param("from", from.toString()).param("to", to.toString()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')].status", pending.publicId()))
+            .doesNotExist())
+        .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')]", failed.publicId()))
+            .doesNotExist())
+        .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')].amount", paid.publicId()))
+            .value(8.0000));
+
+    mockMvc.perform(get("/simulator/settlement-report")
+            .param("from", from.toString())
+            .param("to", Instant.now().minusSeconds(30).toString()))
+        .andExpect(status().isOk())
+        .andExpect(content().json("[]"));
   }
 }

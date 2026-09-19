@@ -152,3 +152,29 @@ deliberate:
   link-local, and RFC1918 targets. Consistent with the pre-auth stage (all
   endpoints are unauthenticated today); when merchant auth lands, reject
   internal target ranges at registration and consider https-only.
+
+## From the M6 review
+
+M6 delivered settlement-report conciliation: the simulator emits reports,
+a pure matcher classifies MATCHED / AMOUNT_MISMATCH / MISSING_INTERNAL /
+MISSING_EXTERNAL, and reports persist write-once (no update grant —
+corrections are new reports). Known bounds, deliberate:
+
+- **Matching is at ingest only.** Reports are frozen verdicts; internal data
+  is immutable post-settle, so a re-match could only change the verdict by
+  changing the report's window — which is a new report.
+- **No fees.** Report lines carry the settled amount only; fee schedules,
+  REVENUE accounts, and rounding remain deferred (M3's deferral carries on).
+- **Two clock domains at the window edges.** `payment_intent.settled_at` is
+  written from the JVM clock while the simulator's `updated_at` uses the
+  database clock, and lazy settlement can legitimately trail the charge's
+  transition. Boundary-straddling settlements can therefore yield a spurious
+  MISSING_INTERNAL/MISSING_EXTERNAL on the first ingest; re-ingesting heals
+  it. Negligible on one NTP-synced host, but a real PSP adapter must define
+  its settlement-timestamp contract (single clock domain or explicit skew
+  budget) before the edge cases become money-relevant.
+- **Listings are unpaginated** (50 most recent) and unauthenticated, like
+  every other endpoint until merchant auth lands.
+- **No scheduled reconciliation or divergence alerting** — ingest is manual
+  (POST). A webhook-on-divergence is the natural follow-up once operators
+  want push instead of pull.

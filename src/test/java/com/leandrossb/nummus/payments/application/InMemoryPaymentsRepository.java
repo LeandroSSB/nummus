@@ -3,6 +3,7 @@ package com.leandrossb.nummus.payments.application;
 import com.leandrossb.nummus.payments.domain.IntentStatus;
 import com.leandrossb.nummus.payments.domain.PaymentIntent;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,6 +38,15 @@ public class InMemoryPaymentsRepository implements PaymentsRepository {
   @Override
   public boolean markSettled(UUID publicId, UUID journalTransactionPublicId, Instant settledAt) {
     return guarded(publicId, IntentStatus.SETTLED, journalTransactionPublicId, settledAt);
+  }
+
+  @Override
+  public List<PaymentIntent> findSettledBetween(Instant from, Instant to) {
+    return intents.values().stream()
+        .filter(i -> i.status() == IntentStatus.SETTLED)
+        .filter(i -> !i.settledAt().isBefore(from) && i.settledAt().isBefore(to))
+        .sorted(java.util.Comparator.comparing(PaymentIntent::settledAt))
+        .toList();
   }
 
   private synchronized boolean guarded(UUID publicId, IntentStatus target, UUID journalTx, Instant at) {

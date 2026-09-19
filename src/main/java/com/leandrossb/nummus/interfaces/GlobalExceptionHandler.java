@@ -2,6 +2,8 @@ package com.leandrossb.nummus.interfaces;
 
 import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
 import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
+import com.leandrossb.nummus.conciliation.application.DuplicateSettlementLinesException;
+import com.leandrossb.nummus.conciliation.application.UnknownConciliationReportException;
 import com.leandrossb.nummus.interfaces.idempotency.IdempotencyKeyReuseException;
 import com.leandrossb.nummus.interfaces.idempotency.MissingIdempotencyKeyException;
 import com.leandrossb.nummus.ledger.domain.AccountNotActiveException;
@@ -16,6 +18,7 @@ import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
 import com.leandrossb.nummus.psp_simulator.domain.ChargeNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownChargeException;
 import com.leandrossb.nummus.webhooks.domain.UnknownWebhookEndpointException;
+import java.time.format.DateTimeParseException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -37,7 +40,8 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler({UnknownPaymentAccountException.class, UnknownAccountException.class,
       UnknownTransactionException.class, UnknownChargeException.class,
-      UnknownPaymentIntentException.class, UnknownWebhookEndpointException.class})
+      UnknownPaymentIntentException.class, UnknownWebhookEndpointException.class,
+      UnknownConciliationReportException.class})
   public ProblemDetail notFound(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
   }
@@ -54,6 +58,11 @@ public class GlobalExceptionHandler {
     return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
   }
 
+  @ExceptionHandler(DuplicateSettlementLinesException.class)
+  ProblemDetail duplicateSettlementLines(DuplicateSettlementLinesException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
   @ExceptionHandler(MissingIdempotencyKeyException.class)
   ProblemDetail idempotencyKeyMissing(MissingIdempotencyKeyException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
@@ -66,7 +75,7 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler({IllegalArgumentException.class, InvalidMoneyException.class,
       CurrencyMismatchException.class, MethodArgumentNotValidException.class,
-      MethodArgumentTypeMismatchException.class})
+      MethodArgumentTypeMismatchException.class, DateTimeParseException.class})
   public ProblemDetail badRequest(Exception e) {
     String detail = e instanceof MethodArgumentNotValidException validation
         ? validation.getBindingResult().getAllErrors().get(0).getDefaultMessage()
