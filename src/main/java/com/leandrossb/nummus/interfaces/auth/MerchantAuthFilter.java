@@ -43,8 +43,10 @@ public class MerchantAuthFilter extends OncePerRequestFilter {
       List.of("/v1/merchants", "/v1/conciliation", "/v1/operator");
 
   /** Exact match, checked before the prefix logic — the prefix list would
-   *  otherwise gate the recovery path behind the very keys it mints. */
-  private static final String BOOTSTRAP_PATH = "/v1/operator/bootstrap";
+   *  otherwise gate the recovery path behind the very keys it mints. The
+   *  single source of truth for the exemption; the idempotency filter
+   *  references it so the two can never drift apart. */
+  public static final String BOOTSTRAP_PATH = "/v1/operator/bootstrap";
 
   private final MerchantAuthenticationPort merchantAuthentication;
   private final OperatorAuthenticationPort operatorAuthentication;

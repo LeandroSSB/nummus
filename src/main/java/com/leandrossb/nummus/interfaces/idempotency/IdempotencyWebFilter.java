@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.interfaces.idempotency;
 
+import com.leandrossb.nummus.interfaces.auth.MerchantAuthFilter;
 import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,7 +29,6 @@ public class IdempotencyWebFilter extends OncePerRequestFilter {
 
   public static final String KEY_HEADER = "Idempotency-Key";
   public static final String CACHED_BODY_ATTRIBUTE = "idempotency.cached-body";
-  private static final String BOOTSTRAP_PATH = "/v1/operator/bootstrap";
   private static final int KEY_MAX_LENGTH = 255;
 
   private final ObjectMapper objectMapper;
@@ -39,7 +39,7 @@ public class IdempotencyWebFilter extends OncePerRequestFilter {
 
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
-    return BOOTSTRAP_PATH.equals(request.getRequestURI())
+    return MerchantAuthFilter.BOOTSTRAP_PATH.equals(request.getRequestURI())
         || !"POST".equalsIgnoreCase(request.getMethod())
         || !request.getRequestURI().startsWith("/v1/");
   }
