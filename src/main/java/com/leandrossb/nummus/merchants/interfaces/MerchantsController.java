@@ -3,6 +3,7 @@ package com.leandrossb.nummus.merchants.interfaces;
 import com.leandrossb.nummus.interfaces.auth.AuthenticatedOperator;
 import com.leandrossb.nummus.interfaces.idempotency.Idempotent;
 import com.leandrossb.nummus.merchants.application.ApiKeysService;
+import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.merchants.application.UnknownMerchantException;
 import com.leandrossb.nummus.merchants.interfaces.dto.CreateMerchantRequest;
@@ -36,7 +37,7 @@ class MerchantsController {
   @PostMapping
   ResponseEntity<CreateMerchantResponse> create(AuthenticatedOperator operator,
       @Valid @RequestBody CreateMerchantRequest request) {
-    var merchant = merchants.create(request.name());
+    var merchant = merchants.create(request.name(), FeeSchedule.ZERO);
     var firstKey = keys.create(merchant.publicId());
     return ResponseEntity
         .created(URI.create("/v1/merchants/" + merchant.publicId()))

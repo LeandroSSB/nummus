@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.merchants.infrastructure;
 
+import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantStore;
 import com.leandrossb.nummus.merchants.domain.ApiKey;
 import com.leandrossb.nummus.merchants.domain.Merchant;
@@ -22,14 +23,16 @@ public class JdbcClientMerchantStore implements MerchantStore {
   }
 
   @Override
-  public Merchant insertMerchant(Merchant merchant) {
+  public Merchant insertMerchant(Merchant merchant, FeeSchedule fee) {
     jdbc.sql("""
-        insert into merchants.merchant (public_id, name, created_at)
-        values (:publicId, :name, :createdAt)
+        insert into merchants.merchant (public_id, name, created_at, fee_rate, fee_fixed)
+        values (:publicId, :name, :createdAt, :rate, :fixed)
         """)
         .param("publicId", merchant.publicId())
         .param("name", merchant.name())
         .param("createdAt", toOffsetDateTime(merchant.createdAt()))
+        .param("rate", fee.rate())
+        .param("fixed", fee.fixedAmount())
         .update();
     return merchant;
   }
@@ -41,6 +44,26 @@ public class JdbcClientMerchantStore implements MerchantStore {
         """)
         .param("publicId", publicId)
         .query((rs, i) -> mapMerchant(rs)).optional();
+  }
+
+  @Override
+  public Optional<FeeSchedule> findFeeSchedule(UUID merchantPublicId) {
+    return jdbc.sql("select fee_rate, fee_fixed from merchants.merchant where public_id = :id")
+        .param("id", merchantPublicId)
+        .query((rs, i) -> new FeeSchedule(rs.getBigDecimal("fee_rate"), rs.getBigDecimal("fee_fixed")))
+        .optional();
+  }
+
+  @Override
+  public boolean updateFeeSchedule(UUID merchantPublicId, FeeSchedule fee) {
+    return jdbc.sql("""
+            update merchants.merchant set fee_rate = :rate, fee_fixed = :fixed
+            where public_id = :id
+            """)
+        .param("rate", fee.rate())
+        .param("fixed", fee.fixedAmount())
+        .param("id", merchantPublicId)
+        .update() == 1;
   }
 
   @Override

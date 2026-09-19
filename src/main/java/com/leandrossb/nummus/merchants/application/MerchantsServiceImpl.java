@@ -21,12 +21,22 @@ public class MerchantsServiceImpl implements MerchantsService {
   }
 
   @Override
-  public Merchant create(String name) {
+  public Merchant create(String name, FeeSchedule fee) {
     Objects.requireNonNull(name, "name must not be null");
     if (name.isBlank()) {
       throw new IllegalArgumentException("name must not be blank");
     }
-    return store.insertMerchant(new Merchant(UUID.randomUUID(), name, Instant.now()));
+    return store.insertMerchant(new Merchant(UUID.randomUUID(), name, Instant.now()), fee);
+  }
+
+  @Override
+  public Optional<FeeSchedule> findFeeSchedule(UUID publicId) {
+    return store.findFeeSchedule(publicId);
+  }
+
+  @Override
+  public boolean updateFeeSchedule(UUID publicId, FeeSchedule fee) {
+    return store.updateFeeSchedule(publicId, fee);
   }
 
   @Override

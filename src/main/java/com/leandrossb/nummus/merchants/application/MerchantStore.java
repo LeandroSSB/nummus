@@ -9,9 +9,14 @@ import java.util.UUID;
 /** Persistence port for merchants and their API keys. */
 public interface MerchantStore {
 
-  Merchant insertMerchant(Merchant merchant);
+  Merchant insertMerchant(Merchant merchant, FeeSchedule fee);
 
   Optional<Merchant> findMerchant(UUID publicId);
+
+  Optional<FeeSchedule> findFeeSchedule(UUID merchantPublicId);
+
+  /** @return false when the merchant is unknown. */
+  boolean updateFeeSchedule(UUID merchantPublicId, FeeSchedule fee);
 
   /** Stores hash + prefix; the secret never reaches the store. */
   void insertApiKey(UUID merchantPublicId, String keyHash, String prefix);
