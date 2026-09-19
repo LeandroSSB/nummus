@@ -140,7 +140,11 @@ public class PaymentsServiceImpl implements PaymentsService {
     var breakdown = FeeCalculator.compute(intent.amount(), schedule);
     var postings = new ArrayList<PostingDraft>();
     postings.add(new PostingDraft(PaymentClearingAccount.PUBLIC_ID, Direction.DEBIT, intent.amount()));
-    postings.add(new PostingDraft(account.ledgerAccountPublicId(), Direction.CREDIT, breakdown.net()));
+    // A fully capped fee consumes the gross (net = 0); zero amounts are never
+    // postable, so the merchant leg disappears rather than posts at 0.00.
+    if (breakdown.net().isPositive()) {
+      postings.add(new PostingDraft(account.ledgerAccountPublicId(), Direction.CREDIT, breakdown.net()));
+    }
     if (breakdown.fee().isPositive()) {
       postings.add(new PostingDraft(FeeRevenueAccount.PUBLIC_ID, Direction.CREDIT, breakdown.fee()));
     }

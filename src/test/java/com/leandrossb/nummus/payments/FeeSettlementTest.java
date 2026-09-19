@@ -12,6 +12,7 @@ import com.jayway.jsonpath.JsonPath;
 import com.leandrossb.nummus.merchants.application.ApiKeysService;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
+import com.leandrossb.nummus.payments.application.FeeRevenueAccount;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.math.BigDecimal;
@@ -104,6 +105,15 @@ class FeeSettlementTest extends IntegrationTestBase {
     mockMvc.perform(get("/v1/payment-intents/" + f.intentId()).header("Authorization", f.auth()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SETTLED"));
+    // The merchant sees the net credited: derived balance in natural sign.
+    var balance = mockMvc.perform(get("/v1/accounts/" + f.accountId() + "/balance")
+            .header("Authorization", f.auth()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.currency").value("BRL"))
+        .andReturn();
+    assertEquals(0, new BigDecimal(
+        JsonPath.read(balance.getResponse().getContentAsString(), "$.amount").toString())
+        .compareTo(new BigDecimal("98.62")));
     try (var c = adminConnection(); var st = c.createStatement()) {
       List<Leg> legs = journalLegs(st, f.intentId());
       assertEquals(3, legs.size(), legs.toString());
@@ -115,6 +125,20 @@ class FeeSettlementTest extends IntegrationTestBase {
           + "where public_id = '" + f.intentId() + "'");
       assertTrue(fact.next());
       assertEquals(0, fact.getBigDecimal("fee_amount").compareTo(new BigDecimal("1.38")));
+
+      // The system revenue account's derived balance from this settlement.
+      var revenue = st.executeQuery("""
+          select coalesce(sum(p.amount), 0)
+          from ledger.journal_posting p
+          join ledger.ledger_account a on a.id = p.account_id
+          join ledger.journal_transaction t on t.id = p.transaction_id
+          where a.public_id = '%s'
+            and t.public_id = (select journal_transaction_public_id
+                               from payments.payment_intent
+                               where public_id = '%s')"""
+          .formatted(FeeRevenueAccount.PUBLIC_ID, f.intentId()));
+      assertTrue(revenue.next());
+      assertEquals(0, revenue.getBigDecimal(1).compareTo(new BigDecimal("1.38")));
     }
   }
 
