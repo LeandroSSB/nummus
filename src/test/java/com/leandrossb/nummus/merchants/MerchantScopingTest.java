@@ -89,4 +89,30 @@ class MerchantScopingTest extends IntegrationTestBase {
             .content("{\"accountId\":\"" + accountId + "\",\"amount\":5.0000}"))
         .andExpect(status().isNotFound());
   }
+
+  @Test
+  void webhookEndpointsAreIsolatedPerMerchant() throws Exception {
+    String a = createMerchantAndGetKey("Hook A");
+    String b = createMerchantAndGetKey("Hook B");
+    MvcResult endpoint = mockMvc.perform(post("/v1/webhook-endpoints")
+            .header("Authorization", "Bearer " + a)
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"url\":\"https://a.example/hook\"}"))
+        .andExpect(status().isCreated()).andReturn();
+    String location = endpoint.getResponse().getHeader("Location");
+
+    mockMvc.perform(get(location).header("Authorization", "Bearer " + a))
+        .andExpect(status().isOk());
+    mockMvc.perform(get("/v1/webhook-endpoints").header("Authorization", "Bearer " + b))
+        .andExpect(status().isOk())
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().json("[]"));
+    mockMvc.perform(get(location).header("Authorization", "Bearer " + b))
+        .andExpect(status().isNotFound());
+    mockMvc.perform(get(location + "/deliveries").header("Authorization", "Bearer " + b))
+        .andExpect(status().isNotFound());
+    mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(location)
+            .header("Authorization", "Bearer " + b))
+        .andExpect(status().isNotFound());
+  }
 }
