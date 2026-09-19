@@ -62,4 +62,31 @@ class MerchantScopingTest extends IntegrationTestBase {
             .contentType(MediaType.APPLICATION_JSON))
         .andExpect(status().isUnauthorized());
   }
+
+  @Test
+  void intentsAreInvisibleAcrossMerchants() throws Exception {
+    String a = createMerchantAndGetKey("Intent A");
+    String b = createMerchantAndGetKey("Intent B");
+    String accountLocation = openAccount(a);
+    String accountId = accountLocation.substring(accountLocation.lastIndexOf('/') + 1);
+    MvcResult intentCreated = mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + a)
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"accountId\":\"" + accountId + "\",\"amount\":5.0000}"))
+        .andExpect(status().isCreated()).andReturn();
+    String intentLocation = intentCreated.getResponse().getHeader("Location");
+
+    mockMvc.perform(get(intentLocation).header("Authorization", "Bearer " + a))
+        .andExpect(status().isOk());
+    mockMvc.perform(get(intentLocation).header("Authorization", "Bearer " + b))
+        .andExpect(status().isNotFound());
+    // B cannot create an intent against A's account.
+    mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + b)
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"accountId\":\"" + accountId + "\",\"amount\":5.0000}"))
+        .andExpect(status().isNotFound());
+  }
 }
