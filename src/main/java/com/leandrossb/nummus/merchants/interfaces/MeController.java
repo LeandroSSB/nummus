@@ -32,9 +32,10 @@ class MeController {
 
   @GetMapping("/v1/me")
   MerchantResponse me(AuthenticatedMerchant merchant) {
-    return merchants.find(merchant.merchantPublicId())
-        .map(MerchantResponse::from)
+    var self = merchants.find(merchant.merchantPublicId())
         .orElseThrow(() -> new UnknownMerchantException(merchant.merchantPublicId()));
+    return MerchantResponse.from(self,
+        merchants.findFeeSchedule(merchant.merchantPublicId()).orElseThrow());
   }
 
   @Idempotent
