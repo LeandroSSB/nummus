@@ -37,7 +37,7 @@ values ('5f9c3b2e-0000-4000-8000-000000000002', 'payment fees', 'REVENUE');
 
 ## Module boundaries
 
-- **merchants** owns the fee schedule storage. `merchants.application` exposes `record FeeSchedule(BigDecimal rate, Money fixed)` and a lookup by merchant public id, following the existing internal-API pattern (`SeedMerchant` bridge). `MerchantStore` and its JDBC adapter gain the columns and the update.
+- **merchants** owns the fee schedule storage. `merchants.application` exposes `record FeeSchedule(BigDecimal rate, BigDecimal fixedAmount)` and a lookup by merchant public id, following the existing internal-API pattern (`SeedMerchant` bridge). Plain decimals, not `Money` — the merchants module stays self-contained (ArchUnit bans merchants → ledger). `MerchantStore` and its JDBC adapter gain the columns and the update.
 - **payments** owns fee computation and application. A pure calculator takes `(Money gross, FeeSchedule)` and returns `(Money fee, Money net)`. `payments → merchants.application` is an established dependency (ArchUnit-compliant).
 - **ledger** changes not at all — the three-leg settle is an ordinary balanced transaction; the REVENUE account is data, not code.
 - **conciliation** changes not at all: the matcher continues comparing the intent's gross amount against report lines. Fees are internal accounting, not network facts.
@@ -77,7 +77,7 @@ Race and failure semantics are unchanged: the guarded `markSettled` transition, 
 
 **Operator** (routes under `/v1/merchants` are already operator-gated by M8):
 
-- `PUT /v1/merchants/{id}/fee` — `@Idempotent` (NULL merchant namespace). Body: `{"rate": "0.0099", "fixedAmount": "0.39"}` — both required, full replacement, same string-decimal wire format as existing money fields. → 200 with the merchant representation including the fee.
+- `PUT /v1/merchants/{id}/fee` — `@Idempotent` (NULL merchant namespace). Body: `{"rate": 0.0099, "fixedAmount": 0.39}` — both required, full replacement, same wire format as the existing amount fields (decimal numbers, `@Digits`-validated). → 200 with the merchant representation including the fee.
 - `POST /v1/merchants` accepts an optional `fee` object (default `rate 0, fixed 0`).
 - `GET /v1/merchants/{id}` (operator) exposes the current fee.
 
