@@ -69,6 +69,7 @@ class ConciliationRestApiTest extends IntegrationTestBase {
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"from\":\"" + from + "\",\"to\":\"" + to + "\"}"))
+        .andExpect(status().isCreated())
         .andReturn();
     return result.getResponse().getContentAsString();
   }

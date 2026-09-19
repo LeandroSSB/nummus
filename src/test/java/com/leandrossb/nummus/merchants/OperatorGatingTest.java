@@ -18,7 +18,9 @@ import org.springframework.test.web.servlet.MvcResult;
 
 /** Gating E2E over the operator surfaces: keyless is 401, merchant keys are
  *  403 in both directions, and the operator's own writes keep working —
- *  merchant creation and conciliation ingest, replaying in the NULL namespace. */
+ *  merchant creation and conciliation ingest, replaying in the NULL namespace.
+ *  This context leaves the bootstrap token unset, so the unconfigured
+ *  bootstrap's 404 is pinned here too. */
 @AutoConfigureMockMvc
 class OperatorGatingTest extends IntegrationTestBase {
 
@@ -105,5 +107,15 @@ class OperatorGatingTest extends IntegrationTestBase {
         .andExpect(header().string("Idempotency-Replayed", "true"))
         .andReturn().getResponse().getContentAsString();
     org.junit.jupiter.api.Assertions.assertEquals(first, replay);
+  }
+
+  @Test
+  void bootstrapIsUnavailableWhenUnconfigured() throws Exception {
+    // No nummus.operator.bootstrap-token in this context: the endpoint is not
+    // locked — it does not exist.
+    mockMvc.perform(post("/v1/operator/bootstrap")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"token\":\"anything\"}"))
+        .andExpect(status().isNotFound());
   }
 }
