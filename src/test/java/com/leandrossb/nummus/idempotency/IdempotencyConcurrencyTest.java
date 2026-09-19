@@ -35,8 +35,9 @@ class IdempotencyConcurrencyTest extends IntegrationTestBase {
 
   private String seedMerchantKey;
 
-  /** Accounts routes are merchant routes now; payments still act as the seed
-   *  merchant (Task 5), so this class authenticates as a minted seed key. */
+  /** Accounts and payment-intent routes are merchant routes; this class
+   *  keeps its fixtures under the seed merchant and authenticates as a
+   *  minted seed key. */
   @BeforeEach
   void mintSeedMerchantKey() {
     seedMerchantKey = apiKeys.create(SeedMerchant.PUBLIC_ID).secret();
@@ -61,7 +62,9 @@ class IdempotencyConcurrencyTest extends IntegrationTestBase {
       for (int i = 0; i < workers; i++) {
         futures.add(pool.submit(() -> {
           start.await();
-          return mockMvc.perform(post("/v1/payment-intents").header("Idempotency-Key", key)
+          return mockMvc.perform(post("/v1/payment-intents")
+                  .header("Authorization", "Bearer " + seedMerchantKey)
+                  .header("Idempotency-Key", key)
                   .contentType(MediaType.APPLICATION_JSON).content(body))
               .andReturn();
         }));

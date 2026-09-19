@@ -30,7 +30,8 @@ public class MerchantAuthFilter extends OncePerRequestFilter {
   private static final String BEARER_PREFIX = "Bearer ";
 
   /** Routes that require an authenticated merchant (headerless → 401, not a later 400). */
-  private static final java.util.List<String> MERCHANT_ROUTES = java.util.List.of("/v1/me", "/v1/accounts");
+  private static final java.util.List<String> MERCHANT_ROUTES =
+      java.util.List.of("/v1/me", "/v1/accounts", "/v1/payment-intents");
 
   private final MerchantAuthenticationPort authentication;
   private final ObjectMapper objectMapper;

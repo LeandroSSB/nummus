@@ -32,8 +32,9 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
 
   private String seedMerchantKey;
 
-  /** Accounts routes are merchant routes now; payments still act as the seed
-   *  merchant (Task 5), so this class authenticates as a minted seed key. */
+  /** Accounts and payment-intent routes are merchant routes; this class
+   *  keeps its fixtures under the seed merchant and authenticates as a
+   *  minted seed key. */
   @BeforeEach
   void mintSeedMerchantKey() {
     seedMerchantKey = apiKeys.create(SeedMerchant.PUBLIC_ID).secret();
@@ -52,8 +53,11 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
             .header(KEY, "   ")
             .contentType(MediaType.APPLICATION_JSON).content("{\"holderName\":\"Blank Key Merchant\"}"))
         .andExpect(status().isBadRequest());
-    // Over 255 characters.
-    mockMvc.perform(post("/v1/payment-intents").header(KEY, "k".repeat(256))
+    // Over 255 characters (authenticated: the key-validation 400 must still
+    // be reachable behind the merchant gate, not shadowed by a 401).
+    mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey)
+            .header(KEY, "k".repeat(256))
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + UUID.randomUUID() + "\",\"amount\":1.0000}"))
         .andExpect(status().isBadRequest());
@@ -86,10 +90,12 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
     String body = "{\"accountId\":\"" + accountId.substring(accountId.lastIndexOf('/') + 1) + "\",\"amount\":12.5000}";
     String key = UUID.randomUUID().toString();
 
-    var first = mockMvc.perform(post("/v1/payment-intents").header(KEY, key)
+    var first = mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey).header(KEY, key)
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated()).andReturn();
-    var retry = mockMvc.perform(post("/v1/payment-intents").header(KEY, key)
+    var retry = mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey).header(KEY, key)
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated()).andReturn();
 
@@ -149,10 +155,12 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
   void domainErrorsAreNotStoredAndRerunDeterministically() throws Exception {
     String key = UUID.randomUUID().toString();
     String body = "{\"accountId\":\"" + UUID.randomUUID() + "\",\"amount\":5.0000}";
-    mockMvc.perform(post("/v1/payment-intents").header(KEY, key)
+    mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey).header(KEY, key)
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isNotFound());
-    mockMvc.perform(post("/v1/payment-intents").header(KEY, key)
+    mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey).header(KEY, key)
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isNotFound()) // re-executed, same deterministic 404
         .andExpect(header().doesNotExist("Idempotency-Replayed"));
@@ -160,7 +168,9 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
 
   @Test
   void amountsBeyondTheColumnBoundsAreRejectedAs400() throws Exception {
-    mockMvc.perform(post("/v1/payment-intents").header(KEY, UUID.randomUUID().toString())
+    mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey)
+            .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + UUID.randomUUID() + "\",\"amount\":10000000000000000.0000}"))
         .andExpect(status().isBadRequest())
@@ -176,7 +186,8 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
         .andReturn().getResponse().getHeader("Location");
     String publicId = accountId.substring(accountId.lastIndexOf('/') + 1);
     String key = UUID.randomUUID().toString();
-    mockMvc.perform(post("/v1/payment-intents").header(KEY, key)
+    mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey).header(KEY, key)
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + publicId + "\",\"amount\":5.0000}"))
         .andExpect(status().isCreated());
@@ -189,7 +200,8 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
 
     // Reclaim, then fail the re-execution inside the handler (unknown account
     // → 404 from the domain, thrown inside the aspect's transaction).
-    mockMvc.perform(post("/v1/payment-intents").header(KEY, key)
+    mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey).header(KEY, key)
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + UUID.randomUUID() + "\",\"amount\":5.0000}"))
         .andExpect(status().isNotFound());
@@ -197,7 +209,8 @@ class IdempotencyRestApiTest extends IntegrationTestBase {
     // The failed re-execution must have rolled the reclaim back too: the slot
     // is still expired, so the next retry reclaims cleanly and runs as new —
     // not a 422 from a poisoned response-less row with a fresh expiry.
-    mockMvc.perform(post("/v1/payment-intents").header(KEY, key)
+    mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey).header(KEY, key)
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + publicId + "\",\"amount\":5.0000}"))
         .andExpect(status().isCreated())

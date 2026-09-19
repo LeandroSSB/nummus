@@ -7,7 +7,6 @@ import com.leandrossb.nummus.ledger.application.Ledger;
 import com.leandrossb.nummus.ledger.application.PostTransactionCommand;
 import com.leandrossb.nummus.ledger.domain.Direction;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
-import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.domain.ChargeAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.ConcurrentSettlementException;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
@@ -46,15 +45,14 @@ public class PaymentsServiceImpl implements PaymentsService {
 
   @Override
   @Transactional
-  public PaymentIntent create(CreateIntentCommand cmd) {
+  public PaymentIntent create(UUID merchantPublicId, CreateIntentCommand cmd) {
     Objects.requireNonNull(cmd, "command must not be null");
     Duration ttl = cmd.ttl() == null ? DEFAULT_TTL : cmd.ttl();
     if (ttl.compareTo(MIN_TTL) < 0 || ttl.compareTo(MAX_TTL) > 0) {
       throw new IllegalArgumentException(
           "ttl must be between 60 and 86400 seconds: " + ttl.toSeconds());
     }
-    // Seed-merchant stand-in until Task 5 threads the caller's merchant through.
-    var account = accounts.get(SeedMerchant.PUBLIC_ID, cmd.accountPublicId());
+    var account = accounts.get(merchantPublicId, cmd.accountPublicId());
     if (account.status() != AccountStatus.ACTIVE) {
       throw new PaymentAccountNotActiveException(account.publicId(), account.status());
     }
@@ -66,9 +64,13 @@ public class PaymentsServiceImpl implements PaymentsService {
 
   @Override
   @Transactional
-  public PaymentIntent get(UUID publicId) {
+  public PaymentIntent get(UUID merchantPublicId, UUID publicId) {
     var intent = repository.findByPublicId(publicId)
         .orElseThrow(() -> new UnknownPaymentIntentException(publicId));
+    // Ownership precedes every lazy transition and the charge poll: never act
+    // on another merchant's intent — for them it is indistinguishable from
+    // an unknown one.
+    accounts.get(merchantPublicId, intent.accountPublicId());
     if (intent.status() != IntentStatus.CREATED) {
       return intent;
     }
@@ -98,7 +100,7 @@ public class PaymentsServiceImpl implements PaymentsService {
         }
         yield repository.findByPublicId(publicId).orElseThrow();
       }
-      case SUCCEEDED -> settle(intent);
+      case SUCCEEDED -> settle(intent, merchantPublicId);
     };
   }
 
@@ -114,8 +116,8 @@ public class PaymentsServiceImpl implements PaymentsService {
         .toList();
   }
 
-  private PaymentIntent settle(PaymentIntent intent) {
-    var account = accounts.get(SeedMerchant.PUBLIC_ID, intent.accountPublicId());
+  private PaymentIntent settle(PaymentIntent intent, UUID merchantPublicId) {
+    var account = accounts.get(merchantPublicId, intent.accountPublicId());
     if (account.status() != AccountStatus.ACTIVE) {
       throw new PaymentAccountNotActiveException(account.publicId(), account.status());
     }

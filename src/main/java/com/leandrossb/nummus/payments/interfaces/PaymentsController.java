@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.payments.interfaces;
 
+import com.leandrossb.nummus.interfaces.auth.AuthenticatedMerchant;
 import com.leandrossb.nummus.interfaces.idempotency.Idempotent;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.application.PaymentsService;
@@ -33,8 +34,10 @@ class PaymentsController {
 
   @Idempotent
   @PostMapping
-  ResponseEntity<IntentResponse> create(@Valid @RequestBody CreateIntentRequest request) {
-    var intent = payments.create(new CreateIntentCommand(request.accountId(),
+  ResponseEntity<IntentResponse> create(AuthenticatedMerchant merchant,
+      @Valid @RequestBody CreateIntentRequest request) {
+    var intent = payments.create(merchant.merchantPublicId(), new CreateIntentCommand(
+        request.accountId(),
         Money.of(request.amount(), BRL),
         request.expiresInSeconds() == null ? null : Duration.ofSeconds(request.expiresInSeconds())));
     return ResponseEntity
@@ -43,7 +46,7 @@ class PaymentsController {
   }
 
   @GetMapping("/{id}")
-  IntentResponse get(@PathVariable UUID id) {
-    return IntentResponse.from(payments.get(id));
+  IntentResponse get(AuthenticatedMerchant merchant, @PathVariable UUID id) {
+    return IntentResponse.from(payments.get(merchant.merchantPublicId(), id));
   }
 }

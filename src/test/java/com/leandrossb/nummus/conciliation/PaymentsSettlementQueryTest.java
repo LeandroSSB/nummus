@@ -29,9 +29,10 @@ class PaymentsSettlementQueryTest extends IntegrationTestBase {
 
   private UUID settle(String amount) {
     var account = accountsService.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("Settle Query Merchant"));
-    var intent = payments.create(new CreateIntentCommand(account.publicId(), Money.ofBrl(amount), null));
+    var intent = payments.create(SeedMerchant.PUBLIC_ID,
+        new CreateIntentCommand(account.publicId(), Money.ofBrl(amount), null));
     simulator.pay(intent.chargePublicId());
-    payments.get(intent.publicId());
+    payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
     return intent.publicId();
   }
 

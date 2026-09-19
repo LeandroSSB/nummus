@@ -29,8 +29,9 @@ class IdempotencyExpiryTest extends IntegrationTestBase {
 
   private String seedMerchantKey;
 
-  /** Accounts routes are merchant routes now; payments still act as the seed
-   *  merchant (Task 5), so this class authenticates as a minted seed key. */
+  /** Accounts and payment-intent routes are merchant routes; this class
+   *  keeps its fixtures under the seed merchant and authenticates as a
+   *  minted seed key. */
   @BeforeEach
   void mintSeedMerchantKey() {
     seedMerchantKey = apiKeys.create(SeedMerchant.PUBLIC_ID).secret();
@@ -46,7 +47,9 @@ class IdempotencyExpiryTest extends IntegrationTestBase {
     String body = "{\"accountId\":\"" + accountId + "\",\"amount\":7.0000}";
     String key = UUID.randomUUID().toString();
 
-    MvcResult first = mockMvc.perform(post("/v1/payment-intents").header("Idempotency-Key", key)
+    MvcResult first = mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey)
+            .header("Idempotency-Key", key)
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated()).andReturn();
 
@@ -56,7 +59,9 @@ class IdempotencyExpiryTest extends IntegrationTestBase {
       st.executeUpdate("UPDATE idempotency.idempotency_keys SET expires_at = now() - interval '1 minute' WHERE key = '" + key + "'");
     }
 
-    MvcResult second = mockMvc.perform(post("/v1/payment-intents").header("Idempotency-Key", key)
+    MvcResult second = mockMvc.perform(post("/v1/payment-intents")
+            .header("Authorization", "Bearer " + seedMerchantKey)
+            .header("Idempotency-Key", key)
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated()).andReturn();
 
