@@ -237,8 +237,9 @@ bounds, deliberate:
   recurring or monthly charges, no minimum-fee floor below the fixed
   component.
 - **The fee is capped at gross.** A fixed component larger than a
-  small transaction charges only the gross; merchants cannot go net
-  negative through fees.
+  small transaction charges only the gross; a fully capped settlement
+  posts no merchant leg — the entire gross credits revenue — and
+  merchants cannot go net negative through fees.
 - **No revenue reporting endpoint.** The revenue balance is derivable
   from the ledger; analytics stay out.
 - **Quote semantics are read-time.** Pre-settle `fee`/`netAmount` are

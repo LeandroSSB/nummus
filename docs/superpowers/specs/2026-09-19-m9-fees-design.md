@@ -12,7 +12,7 @@ Merchants pay a per-settlement fee: a percentage plus a fixed component, set per
 1. **Fee model:** percentage + fixed amount, per merchant, operator-managed (set at merchant creation, updatable later). Stored as a fraction (`0.0099` = 0.99%), not a percent value.
 2. **Timing:** the fee is quoted at intent creation (estimate from the current rate) but charged at settlement using the **rate in force at settle time**. A rate change between create and settle affects the charged fee; nothing is frozen per intent.
 3. **Rounding:** `HALF_UP` to centavos (scale 2), applied once, to the composed fee (`gross × rate + fixed`).
-4. **Fee cap:** the charged fee never exceeds the gross amount (`fee = min(computed, gross)`), so net is always ≥ 0. Relevant only when the fixed component exceeds a small transaction.
+4. **Fee cap:** the charged fee never exceeds the gross amount (`fee = min(computed, gross)`), so net is always ≥ 0. Relevant only when the fixed component exceeds a small transaction; a fully capped settlement pays the entire gross as fee — the merchant leg is omitted and the whole gross credits revenue.
 
 Defaults preserve current behavior: existing merchants and new merchants created without a fee carry `rate = 0, fixed = 0` — their settlements post exactly as today.
 
@@ -89,7 +89,7 @@ Race and failure semantics are unchanged: the guarded `markSettled` transition, 
 ## Error handling
 
 - Fee validation (PUT and create): `rate` ∈ [0, 1), `fixedAmount` ≥ 0, both well-formed decimals → violations are 400 problem+json via bean validation, matching existing conventions. A merchant key on `/v1/merchants/*` stays 403 (M8 role mismatch).
-- Settlement needs no new error paths: the cap guarantees a postable net; amount mismatch, inactive account, and concurrent-settle behavior are unchanged.
+- Settlement adds a posting-shape rule instead of an error path: when the cap consumes the whole gross (`net = 0`) the merchant leg is omitted — the journal never carries zero-amount postings — and the settlement posts two legs (clearing gross debit, revenue gross credit). Amount mismatch, inactive account, and concurrent-settle behavior are unchanged.
 
 ## Security and invariants
 
