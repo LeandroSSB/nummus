@@ -176,7 +176,8 @@ public class JdbcClientWebhookStore implements WebhookStore {
   }
 
   @Override
-  public List<DeliveryRecord> listDeliveries(UUID merchantPublicId, UUID endpointPublicId, String status, int limit) {
+  public List<DeliveryRecord> listDeliveries(UUID merchantPublicId, UUID endpointPublicId, String status,
+      UUID after, int limit) {
     return jdbc.sql("""
         select d.public_id, d.id, e.public_id, e.type, d.status, d.attempts,
                d.last_response_status, d.next_attempt_at
@@ -186,12 +187,15 @@ public class JdbcClientWebhookStore implements WebhookStore {
         where p.merchant_public_id = :merchantPublicId
           and p.public_id = :endpointPublicId
           and (:status::text is null or d.status = :status)
+          and (:after::uuid is null
+               or d.id < (select d2.id from webhooks.webhook_delivery d2 where d2.public_id = :after))
         order by d.id desc
         limit :limit
         """)
         .param("merchantPublicId", merchantPublicId)
         .param("endpointPublicId", endpointPublicId)
         .param("status", status)
+        .param("after", after)
         .param("limit", limit)
         .query((rs, i) -> new DeliveryRecord(rs.getObject(1, UUID.class), rs.getLong(2),
             rs.getObject(3, UUID.class), rs.getString(4), rs.getString(5), rs.getInt(6),

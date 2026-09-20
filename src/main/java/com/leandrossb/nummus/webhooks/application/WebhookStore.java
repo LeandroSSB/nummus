@@ -38,7 +38,8 @@ public interface WebhookStore {
 
   boolean requeueFailedDelivery(UUID merchantPublicId, UUID deliveryPublicId);
 
-  List<DeliveryRecord> listDeliveries(UUID merchantPublicId, UUID endpointPublicId, String status, int limit);
+  List<DeliveryRecord> listDeliveries(UUID merchantPublicId, UUID endpointPublicId, String status,
+      UUID after, int limit);
 
   /** Deletes SUCCEEDED deliveries with last_attempt_at before the cutoff, in
    * batch-sized chunks; returns the total deleted. FAILED and PENDING rows are
