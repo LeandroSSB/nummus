@@ -1,10 +1,14 @@
 package com.leandrossb.nummus.webhooks;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import com.leandrossb.nummus.webhooks.application.WebhookDeliveryWorker;
+import com.leandrossb.nummus.webhooks.application.WebhookUrlPolicy;
+import java.net.InetAddress;
+import java.net.URI;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.util.UUID;
@@ -37,32 +41,45 @@ class WebhookDeliveryPolicyTest extends IntegrationTestBase {
   @Test
   void policyViolatingUrlFailsTheAttemptWithoutDialing() throws Exception {
     // Merchant + endpoint inserted raw with a private URL, one due delivery.
-    String endpointId = UUID.randomUUID().toString();
-    String eventId = UUID.randomUUID().toString();
-    try (Connection c = adminConnection(); Statement st = c.createStatement()) {
-      st.executeUpdate("insert into webhooks.webhook_endpoint (public_id, url, secret) "
-          + "values ('" + endpointId + "', 'https://192.168.0.1/hook', 's1')");
-      st.executeUpdate("insert into webhooks.webhook_event (public_id, type, payload, occurred_at) "
-          + "values ('" + eventId + "', 'probe.evt', '{}', now())");
-      st.executeUpdate("insert into webhooks.webhook_delivery (event_id, endpoint_id, next_attempt_at) "
-          + "select (select id from webhooks.webhook_event where public_id = '" + eventId + "'), "
-          + "(select id from webhooks.webhook_endpoint where public_id = '" + endpointId + "'), now()");
-    }
+    // The violating URL must be a URL a dial would actually reach: this
+    // container's own site-local address behind a local receiver (plain http
+    // off-loopback is policy-violating). A worker that dials records
+    // SUCCEEDED; the pin demands the failed-attempt treatment instead. An
+    // unreachable target cannot tell those apart — every connect error is
+    // also recorded as an attempt.
+    String url;
+    try (ReceiverServer receiver =
+        new ReceiverServer(InetAddress.getLocalHost().getHostAddress())) {
+      url = receiver.url("/hook");
+      // Fixture precondition: the URL the worker will see is violating.
+      assertFalse(WebhookUrlPolicy.isSafe(URI.create(url)), url);
+      String endpointId = UUID.randomUUID().toString();
+      String eventId = UUID.randomUUID().toString();
+      try (Connection c = adminConnection(); Statement st = c.createStatement()) {
+        st.executeUpdate("insert into webhooks.webhook_endpoint (public_id, url, secret) "
+            + "values ('" + endpointId + "', '" + url + "', 's1')");
+        st.executeUpdate("insert into webhooks.webhook_event (public_id, type, payload, occurred_at) "
+            + "values ('" + eventId + "', 'probe.evt', '{}', now())");
+        st.executeUpdate("insert into webhooks.webhook_delivery (event_id, endpoint_id, next_attempt_at) "
+            + "select (select id from webhooks.webhook_event where public_id = '" + eventId + "'), "
+            + "(select id from webhooks.webhook_endpoint where public_id = '" + endpointId + "'), now()");
+      }
 
-    worker.deliverDue();
+      worker.deliverDue();
 
-    try (Connection c = adminConnection(); Statement st = c.createStatement()) {
-      var rs = st.executeQuery("select status, attempts from webhooks.webhook_delivery "
-          + "where endpoint_id = (select id from webhooks.webhook_endpoint "
-          + "where public_id = '" + endpointId + "')");
-      rs.next();
-      assertEquals("PENDING", rs.getString(1)); // backoff applied, not terminal on attempt 1
-      assertEquals(1, rs.getInt(2));
-      var backoff = st.executeQuery("select next_attempt_at > now() as later from webhooks.webhook_delivery "
-          + "where endpoint_id = (select id from webhooks.webhook_endpoint "
-          + "where public_id = '" + endpointId + "')");
-      backoff.next();
-      assertEquals(true, backoff.getBoolean(1));
+      try (Connection c = adminConnection(); Statement st = c.createStatement()) {
+        var rs = st.executeQuery("select status, attempts from webhooks.webhook_delivery "
+            + "where endpoint_id = (select id from webhooks.webhook_endpoint "
+            + "where public_id = '" + endpointId + "')");
+        rs.next();
+        assertEquals("PENDING", rs.getString(1)); // backoff applied, not terminal on attempt 1
+        assertEquals(1, rs.getInt(2));
+        var backoff = st.executeQuery("select next_attempt_at > now() as later from webhooks.webhook_delivery "
+            + "where endpoint_id = (select id from webhooks.webhook_endpoint "
+            + "where public_id = '" + endpointId + "')");
+        backoff.next();
+        assertEquals(true, backoff.getBoolean(1));
+      }
     }
   }
 

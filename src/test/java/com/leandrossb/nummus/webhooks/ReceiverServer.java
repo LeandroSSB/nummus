@@ -20,9 +20,16 @@ final class ReceiverServer implements AutoCloseable {
   private final Map<String, Integer> statusByPath = new ConcurrentHashMap<>();
   private final Map<String, String> locationByPath = new ConcurrentHashMap<>();
   private final HttpServer server;
+  private final String address;
 
   ReceiverServer() throws IOException {
-    server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    this("127.0.0.1");
+  }
+
+  /** Binds an explicit address — e.g. this host's site-local IP for policy-pin fixtures. */
+  ReceiverServer(String bindAddress) throws IOException {
+    address = bindAddress;
+    server = HttpServer.create(new InetSocketAddress(bindAddress, 0), 0);
     server.createContext("/", exchange -> {
       try (InputStream body = exchange.getRequestBody()) {
         Map<String, String> headers = new ConcurrentHashMap<>();
@@ -55,7 +62,7 @@ final class ReceiverServer implements AutoCloseable {
   }
 
   String url(String path) {
-    return "http://127.0.0.1:" + server.getAddress().getPort() + path;
+    return "http://" + address + ":" + server.getAddress().getPort() + path;
   }
 
   @Override
