@@ -76,8 +76,12 @@ class WebhookDeliveryWorkerTest extends IntegrationTestBase {
   }
 
   private UUID endpoint(String path) {
+    // Loopback http is the policy's local-receiver class — the delivery-time
+    // gate re-resolves every URL, and the reserved .example TLD does not
+    // resolve, which would (correctly) fail the attempt before the fake
+    // client is ever consulted.
     return store.insertEndpoint(new WebhookEndpoint(SeedMerchant.PUBLIC_ID, UUID.randomUUID(),
-        URI.create("https://merchant.example/worker-" + path), "whsec_worker",
+        URI.create("http://127.0.0.1/worker-" + path), "whsec_worker",
         List.of(), EndpointStatus.ACTIVE, Instant.now())).publicId();
   }
 
