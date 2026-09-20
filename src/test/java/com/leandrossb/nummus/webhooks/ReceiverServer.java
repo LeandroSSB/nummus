@@ -18,6 +18,7 @@ final class ReceiverServer implements AutoCloseable {
 
   final List<Received> requests = new CopyOnWriteArrayList<>();
   private final Map<String, Integer> statusByPath = new ConcurrentHashMap<>();
+  private final Map<String, String> locationByPath = new ConcurrentHashMap<>();
   private final HttpServer server;
 
   ReceiverServer() throws IOException {
@@ -31,6 +32,10 @@ final class ReceiverServer implements AutoCloseable {
       }
       Integer status = statusByPath.getOrDefault(exchange.getRequestURI().getPath(), 200);
       byte[] response = "ok".getBytes(StandardCharsets.UTF_8);
+      String location = locationByPath.get(exchange.getRequestURI().getPath());
+      if (location != null) {
+        exchange.getResponseHeaders().add("Location", location);
+      }
       exchange.sendResponseHeaders(status, response.length);
       try (var out = exchange.getResponseBody()) {
         out.write(response);
@@ -41,6 +46,12 @@ final class ReceiverServer implements AutoCloseable {
 
   void respondWith(String path, int status) {
     statusByPath.put(path, status);
+  }
+
+  /** Answers 302 with a Location header — pins that delivery never follows redirects. */
+  void redirectTo(String path, String targetUrl) {
+    statusByPath.put(path, 302);
+    locationByPath.put(path, targetUrl);
   }
 
   String url(String path) {
