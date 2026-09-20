@@ -160,9 +160,25 @@ public class JdbcClientWebhookStore implements WebhookStore {
   }
 
   @Override
+  public boolean requeueFailedDelivery(UUID merchantPublicId, UUID deliveryPublicId) {
+    return jdbc.sql("""
+        update webhooks.webhook_delivery d
+        set status = 'PENDING', attempts = 0, next_attempt_at = now()
+        from webhooks.webhook_endpoint e
+        where d.endpoint_id = e.id
+          and d.public_id = :deliveryId
+          and e.merchant_public_id = :merchantPublicId
+          and d.status = 'FAILED'
+        """)
+        .param("deliveryId", deliveryPublicId)
+        .param("merchantPublicId", merchantPublicId)
+        .update() == 1;
+  }
+
+  @Override
   public List<DeliveryRecord> listDeliveries(UUID merchantPublicId, UUID endpointPublicId, String status, int limit) {
     return jdbc.sql("""
-        select d.id, e.public_id, e.type, d.status, d.attempts,
+        select d.public_id, d.id, e.public_id, e.type, d.status, d.attempts,
                d.last_response_status, d.next_attempt_at
         from webhooks.webhook_delivery d
         join webhooks.webhook_event e on e.id = d.event_id
@@ -177,10 +193,10 @@ public class JdbcClientWebhookStore implements WebhookStore {
         .param("endpointPublicId", endpointPublicId)
         .param("status", status)
         .param("limit", limit)
-        .query((rs, i) -> new DeliveryRecord(rs.getLong(1), rs.getObject(2, UUID.class),
-            rs.getString(3), rs.getString(4), rs.getInt(5),
-            rs.getObject(6) == null ? null : rs.getInt(6),
-            toInstant(rs.getObject(7, OffsetDateTime.class))))
+        .query((rs, i) -> new DeliveryRecord(rs.getObject(1, UUID.class), rs.getLong(2),
+            rs.getObject(3, UUID.class), rs.getString(4), rs.getString(5), rs.getInt(6),
+            rs.getObject(7) == null ? null : rs.getInt(7),
+            toInstant(rs.getObject(8, OffsetDateTime.class))))
         .list();
   }
 

@@ -36,5 +36,7 @@ public interface WebhookStore {
 
   void recordDeliveryFailure(long deliveryId, Integer responseStatus);
 
+  boolean requeueFailedDelivery(UUID merchantPublicId, UUID deliveryPublicId);
+
   List<DeliveryRecord> listDeliveries(UUID merchantPublicId, UUID endpointPublicId, String status, int limit);
 }
