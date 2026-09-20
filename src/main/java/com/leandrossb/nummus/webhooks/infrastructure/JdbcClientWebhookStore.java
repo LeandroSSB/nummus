@@ -200,6 +200,27 @@ public class JdbcClientWebhookStore implements WebhookStore {
         .list();
   }
 
+  @Override
+  public int pruneSucceededBefore(Instant cutoff, int batch) {
+    int total = 0;
+    int deleted;
+    do {
+      deleted = jdbc.sql("""
+          delete from webhooks.webhook_delivery
+          where id in (
+            select id from webhooks.webhook_delivery
+            where status = 'SUCCEEDED' and last_attempt_at < :cutoff
+            limit :batch
+          )
+          """)
+          .param("cutoff", toOffsetDateTime(cutoff))
+          .param("batch", batch)
+          .update();
+      total += deleted;
+    } while (deleted == batch);
+    return total;
+  }
+
   private static WebhookEndpoint mapEndpoint(ResultSet rs) throws SQLException {
     return new WebhookEndpoint(rs.getObject("merchant_public_id", UUID.class),
         rs.getObject("public_id", UUID.class), URI.create(rs.getString("url")),
