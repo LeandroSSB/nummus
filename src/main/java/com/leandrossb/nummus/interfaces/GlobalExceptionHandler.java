@@ -13,6 +13,7 @@ import com.leandrossb.nummus.interfaces.idempotency.MissingIdempotencyKeyExcepti
 import com.leandrossb.nummus.merchants.application.BootstrapAlreadyUsedException;
 import com.leandrossb.nummus.merchants.application.BootstrapUnavailableException;
 import com.leandrossb.nummus.merchants.application.InvalidBootstrapTokenException;
+import com.leandrossb.nummus.merchants.application.InvalidFeeScheduleException;
 import com.leandrossb.nummus.merchants.application.UnknownApiKeyException;
 import com.leandrossb.nummus.merchants.application.UnknownMerchantException;
 import com.leandrossb.nummus.ledger.domain.AccountNotActiveException;
@@ -95,6 +96,11 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(DuplicateSettlementLinesException.class)
   ProblemDetail duplicateSettlementLines(DuplicateSettlementLinesException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(InvalidFeeScheduleException.class)
+  ProblemDetail invalidFeeSchedule(InvalidFeeScheduleException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
   }
 

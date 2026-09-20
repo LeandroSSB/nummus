@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.payments.application;
 
+import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.domain.PaymentIntent;
 import java.time.Instant;
 import java.util.List;
@@ -19,8 +20,9 @@ public interface PaymentsRepository {
   /** CREATED → FAILED. @return false when the intent is not CREATED. */
   boolean transitionToFailed(UUID publicId);
 
-  /** CREATED → SETTLED with the exactly-once journal link. @return false when not CREATED. */
-  boolean markSettled(UUID publicId, UUID journalTransactionPublicId, Instant settledAt);
+  /** CREATED → SETTLED with the exactly-once journal link and the fee fact. @return false when not CREATED. */
+  boolean markSettled(UUID publicId, UUID journalTransactionPublicId, Instant settledAt,
+      Money feeAmount);
 
   /** SETTLED intents with settled_at in [from, to), ordered by settled_at then id. */
   List<PaymentIntent> findSettledBetween(Instant from, Instant to);

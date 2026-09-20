@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.leandrossb.nummus.merchants.application.ApiKeysService;
+import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.IssuedApiKey;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
@@ -22,7 +23,7 @@ class MerchantStoreTest extends IntegrationTestBase {
 
   @Test
   void createIssuesAKeyThatResolvesAndIsNeverReissued() {
-    var merchant = merchants.create("Store Merchant");
+    var merchant = merchants.create("Store Merchant", FeeSchedule.ZERO);
     var first = merchants.findByApiKey("nummus_sk_definitely-unknown");
     assertTrue(first.isEmpty());
 
@@ -46,7 +47,7 @@ class MerchantStoreTest extends IntegrationTestBase {
     assertEquals(2, keys.list(merchant.publicId()).size());
 
     // Cross-merchant revoke is a miss.
-    var other = merchants.create("Other Merchant");
+    var other = merchants.create("Other Merchant", FeeSchedule.ZERO);
     assertThrows(com.leandrossb.nummus.merchants.application.UnknownApiKeyException.class,
         () -> keys.revoke(other.publicId(), second.key().publicId()));
     assertNotEquals(merchant.publicId(), other.publicId());
@@ -54,7 +55,7 @@ class MerchantStoreTest extends IntegrationTestBase {
 
   @Test
   void secretsAreUniqueAndHashesAreStoredNotSecrets() throws Exception {
-    var merchant = merchants.create("Hash Merchant");
+    var merchant = merchants.create("Hash Merchant", FeeSchedule.ZERO);
     var issued = keys.create(merchant.publicId());
     var another = keys.create(merchant.publicId());
     assertNotEquals(issued.secret(), another.secret());

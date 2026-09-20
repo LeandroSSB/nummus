@@ -221,3 +221,34 @@ Known bounds, deliberate:
   database invariant — two concurrent requests holding the correct token
   can both mint. No capability gain (a token holder can already self-serve
   additional keys), so it stays a documented bound, not a schema constraint.
+
+## From the M9 review
+
+M9 delivered per-merchant fees: operator-managed rate+fixed schedule,
+three-leg settlement (clearing gross debit, merchant net credit, system
+REVENUE fee credit), settle-time rate wins, fee persisted as a fact on
+the intent, and quote-vs-fact semantics on the merchant API. Known
+bounds, deliberate:
+
+- **No fee history or versioning.** Two mutable columns; changing a
+  rate rewrites nothing retroactively but leaves no audit trail of
+  who changed what when (operators remain role-level — the M8 bound).
+- **Fees exist only at settlement.** Nothing on expiry or failure, no
+  recurring or monthly charges, no minimum-fee floor below the fixed
+  component.
+- **The fee is capped at gross.** A fixed component larger than a
+  small transaction charges only the gross; a fully capped settlement
+  posts no merchant leg — the entire gross credits revenue — and
+  merchants cannot go net negative through fees.
+- **No revenue reporting endpoint.** The revenue balance is derivable
+  from the ledger; analytics stay out.
+- **Quote semantics are read-time.** Pre-settle `fee`/`netAmount` are
+  estimates from the rate in force; only the settled fact is stored.
+- **Sub-scale fee inputs round at the storage boundary.** A rate with
+  more than six decimals or a fixed amount beyond four passes
+  validation but is rounded by `numeric(9,6)`/`numeric(19,4)` on
+  write; the stored (rounded) value is what settlement charges.
+- **Webhook payload scales are mixed by design.** `amount` keeps the
+  journal's four-decimal scale (a shipped contract field); `fee` and
+  `netAmount` are centavos-minimal. Numerically identical under any
+  decimal parser.
