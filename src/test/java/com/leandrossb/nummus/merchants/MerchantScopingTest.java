@@ -113,7 +113,7 @@ class MerchantScopingTest extends IntegrationTestBase {
             .header("Authorization", "Bearer " + a)
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"url\":\"https://a.example/hook\"}"))
+            .content("{\"url\":\"https://example.com/hook\"}"))
         .andExpect(status().isCreated()).andReturn();
     String location = endpoint.getResponse().getHeader("Location");
 

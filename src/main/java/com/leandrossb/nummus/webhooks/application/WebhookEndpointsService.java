@@ -27,6 +27,7 @@ public class WebhookEndpointsService {
   }
 
   public WebhookEndpoint register(UUID merchantPublicId, URI url, List<String> eventTypes) {
+    WebhookUrlPolicy.check(url);
     List<String> types = eventTypes == null ? List.of() : eventTypes;
     List<String> unknown = types.stream().filter(t -> !IntentEventTypes.ALL.contains(t)).toList();
     if (!unknown.isEmpty()) {

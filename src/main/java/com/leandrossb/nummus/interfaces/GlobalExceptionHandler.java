@@ -27,6 +27,7 @@ import com.leandrossb.nummus.payments.domain.ConcurrentSettlementException;
 import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
 import com.leandrossb.nummus.psp_simulator.domain.ChargeNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownChargeException;
+import com.leandrossb.nummus.webhooks.application.UnsafeWebhookUrlException;
 import com.leandrossb.nummus.webhooks.domain.UnknownWebhookEndpointException;
 import java.time.format.DateTimeParseException;
 import org.springframework.dao.DataAccessException;
@@ -101,6 +102,11 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(InvalidFeeScheduleException.class)
   ProblemDetail invalidFeeSchedule(InvalidFeeScheduleException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(UnsafeWebhookUrlException.class)
+  ProblemDetail unsafeWebhookUrl(UnsafeWebhookUrlException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
   }
 
