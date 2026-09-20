@@ -97,8 +97,15 @@ class WebhookDeliveryIdSchemaTest extends IntegrationTestBase {
           + "where public_id = '33333333-3333-4333-8333-333333333332'");
       st.executeUpdate("insert into webhooks.webhook_delivery (event_id, endpoint_id) "
           + "values (" + eventId + ", " + endpointId + ")");
+      // V8 declares unique (event_id, endpoint_id) — the second delivery rides
+      // a second endpoint; both still share the event, so the select below
+      // reads both rows.
+      st.executeUpdate("insert into webhooks.webhook_endpoint (public_id, url, secret) "
+          + "values ('33333333-3333-4333-8333-333333333334', 'http://127.0.0.1/hook2', 's1')");
+      long secondEndpointId = queryId(st, "select id from webhooks.webhook_endpoint "
+          + "where public_id = '33333333-3333-4333-8333-333333333334'");
       st.executeUpdate("insert into webhooks.webhook_delivery (event_id, endpoint_id) "
-          + "values (" + eventId + ", " + endpointId + ")");
+          + "values (" + eventId + ", " + secondEndpointId + ")");
 
       var rs = st.executeQuery("select public_id from webhooks.webhook_delivery "
           + "where event_id = " + eventId);
