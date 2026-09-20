@@ -40,13 +40,16 @@ Loopback is the only tolerated internal class, and only over `http`. Literal-IP 
 
 ## Migration
 
-`V13__webhook_delivery_delete_grant.sql` — the only schema change:
+`V13__webhook_delivery_public_id_and_delete_grant.sql` — the only schema change. Deliveries gain the public identifier every user-facing row carries (today they have none — the listing exposes only the event id, which cannot key a redrive or a cursor), and the retention job needs its delete grant:
 
 ```sql
+alter table webhooks.webhook_delivery
+  add column public_id uuid not null default gen_random_uuid() unique;
+
 grant delete on webhooks.webhook_delivery to nummus_app;
 ```
 
-Everything else runs against existing columns (`status`, `attempts`, `next_attempt_at`, `last_attempt_at`, `id`, `public_id`).
+Existing rows backfill via the default. `DeliveryResponse` gains an additive `deliveryId` field; the cursor and the redrive route address deliveries by it. Everything else runs against existing columns (`status`, `attempts`, `next_attempt_at`, `last_attempt_at`).
 
 ## Redrive
 
