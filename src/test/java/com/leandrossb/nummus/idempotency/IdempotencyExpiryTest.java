@@ -34,7 +34,7 @@ class IdempotencyExpiryTest extends IntegrationTestBase {
    *  minted seed key. */
   @BeforeEach
   void mintSeedMerchantKey() {
-    seedMerchantKey = apiKeys.create(SeedMerchant.PUBLIC_ID).secret();
+    seedMerchantKey = apiKeys.create(SeedMerchant.PUBLIC_ID, null).secret();
   }
 
   @Test

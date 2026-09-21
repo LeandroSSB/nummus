@@ -31,7 +31,7 @@ class MerchantAuthFilterTest extends IntegrationTestBase {
   /** One operator key per test — the merchants surface is operator-gated. */
   private String operatorAuth() {
     if (operatorAuth == null) {
-      operatorAuth = "Bearer " + operatorKeys.create().secret();
+      operatorAuth = "Bearer " + operatorKeys.create(null).secret();
     }
     return operatorAuth;
   }

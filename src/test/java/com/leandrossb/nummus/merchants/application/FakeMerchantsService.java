@@ -17,7 +17,7 @@ public final class FakeMerchantsService implements MerchantsService {
   }
 
   @Override
-  public Optional<Merchant> findByApiKey(String rawKey) {
+  public Optional<ResolvedMerchantKey> findByApiKey(String rawKey) {
     return Optional.empty();
   }
 

@@ -56,7 +56,7 @@ class WebhookRedriveTest extends IntegrationTestBase {
 
   private String[] newMerchant() throws Exception {
     var created = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", "Bearer " + operatorKeys.create().secret())
+            .header("Authorization", "Bearer " + operatorKeys.create(null).secret())
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"redrive probe\"}"))
         .andExpect(status().isCreated()).andReturn();

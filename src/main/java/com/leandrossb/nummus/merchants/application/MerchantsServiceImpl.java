@@ -40,11 +40,15 @@ public class MerchantsServiceImpl implements MerchantsService {
   }
 
   @Override
-  public Optional<Merchant> findByApiKey(String rawKey) {
+  public Optional<ResolvedMerchantKey> findByApiKey(String rawKey) {
     if (rawKey == null || !rawKey.startsWith("nummus_sk_")) {
       return Optional.empty();
     }
-    return store.findMerchantByKeyHash(sha256Hex(rawKey));
+    String keyHash = sha256Hex(rawKey);
+    Optional<ResolvedMerchantKey> resolved = store.findMerchantByKeyHash(keyHash);
+    // Observability only: stamping is best-effort and never gates authentication.
+    resolved.ifPresent(r -> store.stampApiKeyLastUsed(keyHash));
+    return resolved;
   }
 
   @Override

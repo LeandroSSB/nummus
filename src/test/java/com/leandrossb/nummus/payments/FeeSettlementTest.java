@@ -53,7 +53,7 @@ class FeeSettlementTest extends IntegrationTestBase {
    */
   private Fixture newIntent(FeeSchedule fee, String amount) throws Exception {
     var merchant = merchants.create("fee settle " + UUID.randomUUID(), fee);
-    var key = keys.create(merchant.publicId());
+    var key = keys.create(merchant.publicId(), null);
     String auth = "Bearer " + key.secret();
     var account = mockMvc.perform(post("/v1/accounts")
             .header("Authorization", auth).header(KEY, UUID.randomUUID().toString())

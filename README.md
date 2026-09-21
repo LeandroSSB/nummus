@@ -13,7 +13,7 @@ Payment providers hold funds on behalf of merchants and must answer, at any mome
 | **Accounts** | Payment accounts for merchants, with full transaction history and derived balances |
 | **Ledger** | Immutable double-entry journal; invariants enforced at write time (balanced transactions, no entry ever updated or deleted) |
 | **Instant payments** | Payment intents and Pix-style dynamic charges: create, expire, settle; per-merchant fees netted into a revenue account on settlement |
-| **Authentication** | Merchant identity with Bearer API keys (hashed at rest, revocable); every merchant-facing resource is tenant-scoped; operators authenticate with separately-bootstrapped keys (merchant creation, conciliation) |
+| **Authentication** | Merchant identity with Bearer API keys (hashed at rest, revocable); every merchant-facing resource is tenant-scoped; operators authenticate with separately-bootstrapped keys (merchant creation, conciliation); keys expire on demand, track last use, and rotate with a grace window; authenticated routes are rate-limited per tenant; request bodies are capped |
 | **Idempotency** | Merchant-facing writes are safe to retry — `Idempotency-Key` handling with stored responses |
 | **Webhooks** | At-least-once event delivery to merchants via transactional outbox, with retries and backoff; registration and delivery reject SSRF targets (two-layer), merchants redrive failed deliveries, succeeded deliveries age out under retention, listings paginate |
 | **Conciliation** | Matching of external settlement reports against internal ledger entries, with divergence tracking |
@@ -57,3 +57,4 @@ In active development. Current milestones:
 - [x] M8 — Operator authentication
 - [x] M9 — Merchant fees and revenue accounting
 - [x] M10 — Webhook hardening
+- [x] M11 — API hardening

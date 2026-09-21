@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.interfaces.idempotency;
 
+import com.leandrossb.nummus.interfaces.HttpProperties;
 import com.leandrossb.nummus.interfaces.auth.MerchantAuthFilter;
 import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
@@ -16,7 +17,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * Fails merchant writes closed: every POST under /v1 must carry a usable
  * Idempotency-Key, except the operator bootstrap — it is one-time by its own
- * table state, not by idempotent replay, and must stay reachable token-first.
+ * table state, not by idempotent replay, and must stay reachable token-first —
+ * and caps the buffered body at nummus.http.max-body-bytes (413).
  * The path rule is defense in depth — @Idempotent is the real
  * mechanism, and a future merchant POST without it still gets a 400 here rather
  * than a silently non-idempotent write. Renders problem+json itself because a
@@ -32,9 +34,11 @@ public class IdempotencyWebFilter extends OncePerRequestFilter {
   private static final int KEY_MAX_LENGTH = 255;
 
   private final ObjectMapper objectMapper;
+  private final HttpProperties properties;
 
-  public IdempotencyWebFilter(ObjectMapper objectMapper) {
+  public IdempotencyWebFilter(ObjectMapper objectMapper, HttpProperties properties) {
     this.objectMapper = objectMapper;
+    this.properties = properties;
   }
 
   @Override
@@ -56,8 +60,25 @@ public class IdempotencyWebFilter extends OncePerRequestFilter {
       response.getWriter().write(objectMapper.writeValueAsString(problem));
       return;
     }
-    byte[] body = request.getInputStream().readAllBytes();
+    long contentLength = request.getContentLengthLong();
+    if (contentLength > properties.maxBodyBytes()) {
+      writeTooLarge(response);
+      return;
+    }
+    byte[] body = request.getInputStream().readNBytes(properties.maxBodyBytes() + 1);
+    if (body.length > properties.maxBodyBytes()) {
+      writeTooLarge(response);
+      return;
+    }
     request.setAttribute(CACHED_BODY_ATTRIBUTE, body);
     chain.doFilter(new CachedBodyRequest(request, body), response);
+  }
+
+  private void writeTooLarge(HttpServletResponse response) throws IOException {
+    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.PAYLOAD_TOO_LARGE,
+        "Request body exceeds the maximum accepted size");
+    response.setStatus(HttpStatus.PAYLOAD_TOO_LARGE.value());
+    response.setContentType("application/problem+json");
+    response.getWriter().write(objectMapper.writeValueAsString(problem));
   }
 }

@@ -281,3 +281,58 @@ Known bounds, deliberate:
   authoritative NS can stall delivery ticks, and an attacker's DNS may
   answer differently between the pre-dial check and the POST within one
   attempt. Availability bound, accepted for a single-worker deployment.
+
+## From the M11 design
+
+M11 hardened the API surface: per-tenant token-bucket rate limiting between
+authentication and body buffering, request-body caps at the idempotency
+filter, and key lifecycle — mint-time expiry, best-effort `last_used_at`,
+and self-serve rotation that retires the calling key at
+`least(existing, now + grace)`. Known bounds, deliberate:
+
+- **Limiter state is per-process.** A restart resets buckets (full burst
+  quota after boot); a second instance enforces independently — the same
+  single-process stance as the delivery worker and retention prune.
+- **No per-IP throttling; unauthenticated routes are unthrottled.** The
+  simulator stays open by design; an unauthenticated flood is an
+  edge/deployment concern.
+- **No per-merchant limit overrides** — global properties only.
+- **`last_used_at` is one write per authenticated request.** The throttled
+  async flush stays deferred.
+- **Buckets are never evicted** — memory bounded by tenant count.
+- **The cap guards the buffered merchant-write path only.** Simulator
+  writes stay uncapped (non-production harness).
+- **No per-route limit classes** — one bucket per tenant.
+
+## From the M11 review
+
+The whole-branch review found no production defect. Backlog-grade items it
+raised, none merge-blocking:
+
+- **New `nummus.*` knobs accept degenerate values.** `refill-per-second=0`
+  permanently throttles after burst (Retry-After overflows to ~68 years);
+  zero/negative capacity permanently 429s; `max-body-bytes=2147483647`
+  overflows `readNBytes(max + 1)`. One uniform posture — `@Min(1)`-style
+  binding validation vs documented-only — should cover the whole class.
+- **Bucket growth is bounded by distinct tenants *plus distinct operator
+  keys since start*** (rotation mints a new key id) — the "tenant count"
+  wording in the M11 section above is the imprecise form.
+- **Sub-millisecond `expiresIn`** passes `isPositive()` but truncates via
+  `toMillis()` to a stillborn 201 key (`expires_at = now()`); guard
+  `toMillis() >= 1`.
+- **Test polish:** operator `last_used_at` test targets its row by
+  `order by id desc` rather than the returned key id; no operator-side
+  not-on-401 stamp assertion; `atCapBodyPassesThrough` doesn't pin chain
+  execution (assert the chain's content type); forward timing assertions
+  tolerate <2s stalls (widen to 5s at first flake).
+- **Credentialed calls to unprotected routes** (a merchant key hitting the
+  simulator) consume tenant quota — matches the letter of "unauthenticated
+  passes through"; recorded as intended behavior.
+- **Test fixtures:** `operatorAuth()` / `createMerchantAndGetKey()` are
+  copy-pasted across six-plus classes; extract a shared fixture before the
+  next milestone.
+- **Spec-to-plan fidelity:** two spec-enumerated tests (the exact
+  `expires_at = now()` boundary; a fault-injected stamp failure) were
+  dropped at plan time without note — the stamp-failure `catch` path is
+  untested by decision. Carry spec test lists verbatim or record drops.
+

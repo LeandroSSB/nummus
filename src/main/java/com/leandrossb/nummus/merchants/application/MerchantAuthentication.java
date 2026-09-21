@@ -17,6 +17,7 @@ public class MerchantAuthentication implements MerchantAuthenticationPort {
   @Override
   public Optional<AuthenticatedMerchant> authenticate(String rawBearerCredential) {
     return merchants.findByApiKey(rawBearerCredential)
-        .map(merchant -> new AuthenticatedMerchant(merchant.publicId(), merchant.name()));
+        .map(resolved -> new AuthenticatedMerchant(resolved.merchant().publicId(),
+            resolved.merchant().name(), resolved.keyPublicId()));
   }
 }

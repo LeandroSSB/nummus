@@ -34,7 +34,7 @@ Close the three most-cited availability and lifecycle gaps from the milestone re
 | `operator.capacity` | `120` | burst ceiling per operator key |
 | `operator.refill-per-second` | `2` | 120/min sustained |
 
-**Exhaustion response.** `429`, header `Retry-After: <ceil((1 − tokens) / refillPerSecond)>` seconds, body `application/problem+json` (`type: .../rate-limited`) rendered by the filter itself — a filter runs outside `@ControllerAdvice`'s reach, same pattern as `IdempotencyWebFilter`'s 400.
+**Exhaustion response.** `429`, header `Retry-After: <ceil((1 − tokens) / refillPerSecond)>` seconds, body `application/problem+json` rendered by the filter itself — a filter runs outside `@ControllerAdvice`'s reach, same pattern as `IdempotencyWebFilter`'s 400.
 
 ## Key lifecycle
 
@@ -71,7 +71,7 @@ No new grants — V10/V11 already grant `update` on both tables to `nummus_app`.
 1. **Pre-read:** `Content-Length` present and `> max` → 413 immediately, stream untouched.
 2. **Backstop:** the `readAllBytes()` becomes `readNBytes(max + 1)`; a result longer than `max` → 413. Covers absent, lying, and chunked bodies.
 
-Response: `429`-style rendering — `413`, `application/problem+json` (`type: .../request-too-large`), written by the filter. Like the 429, it is pre-controller and leaves no idempotency record.
+Response: `429`-style rendering — `413`, `application/problem+json`, written by the filter. Like the 429, it is pre-controller and leaves no idempotency record.
 
 ## Error handling
 

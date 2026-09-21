@@ -4,6 +4,8 @@ import com.leandrossb.nummus.merchants.domain.ApiKey;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
@@ -24,18 +26,20 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
 
   private final MerchantStore store;
   private final OperatorBootstrapProperties bootstrapProperties;
+  private final ApiKeyProperties apiKeyProperties;
   private final SecureRandom random = new SecureRandom();
 
   public OperatorKeysServiceImpl(MerchantStore store,
-      OperatorBootstrapProperties bootstrapProperties) {
+      OperatorBootstrapProperties bootstrapProperties, ApiKeyProperties apiKeyProperties) {
     this.store = store;
     this.bootstrapProperties = bootstrapProperties;
+    this.apiKeyProperties = apiKeyProperties;
   }
 
   @Override
   @Transactional
-  public IssuedApiKey create() {
-    return mint();
+  public IssuedApiKey create(Duration expiresIn) {
+    return mint(expiresIn);
   }
 
   @Override
@@ -53,11 +57,25 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
   }
 
   @Override
+  @Transactional
+  public RotatedApiKey rotate(UUID keyPublicId, Duration expiresIn) {
+    IssuedApiKey issued = mint(expiresIn);
+    Instant oldKeyExpiresAt = store.retireOperatorKey(keyPublicId,
+            apiKeyProperties.rotationGrace())
+        .orElseThrow(() -> new UnknownApiKeyException(keyPublicId));
+    return new RotatedApiKey(issued, oldKeyExpiresAt);
+  }
+
+  @Override
   public Optional<ApiKey> findByRawKey(String rawKey) {
     if (rawKey == null || !rawKey.startsWith(PREFIX)) {
       return Optional.empty();
     }
-    return store.findActiveOperatorKeyByHash(MerchantsServiceImpl.sha256Hex(rawKey));
+    String keyHash = MerchantsServiceImpl.sha256Hex(rawKey);
+    Optional<ApiKey> key = store.findActiveOperatorKeyByHash(keyHash);
+    // Observability only: stamping is best-effort and never gates authentication.
+    key.ifPresent(k -> store.stampOperatorKeyLastUsed(keyHash));
+    return key;
   }
 
   @Override
@@ -75,17 +93,18 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
             presentedToken.getBytes(StandardCharsets.UTF_8))) {
       throw new InvalidBootstrapTokenException();
     }
-    return mint();
+    return mint(null);
   }
 
-  private IssuedApiKey mint() {
+  private IssuedApiKey mint(Duration expiresIn) {
+    ApiKeysServiceImpl.requirePositiveExpiry(expiresIn);
     byte[] secret = new byte[32];
     random.nextBytes(secret);
     String rawKey = PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
     String keyHash = MerchantsServiceImpl.sha256Hex(rawKey);
-    store.insertOperatorKey(keyHash, rawKey.substring(0, 12));
+    store.insertOperatorKey(keyHash, rawKey.substring(0, 12), expiresIn);
     // The store owns key identity; read the persisted row back so the returned
-    // metadata (public_id, created_at) is what revoke/list will match on.
+    // metadata (public_id, created_at, expires_at) is what revoke/list will match on.
     ApiKey stored = store.findActiveOperatorKeyByHash(keyHash)
         .orElseThrow(() -> new IllegalStateException("operator key row missing after insert"));
     return new IssuedApiKey(stored, rawKey);

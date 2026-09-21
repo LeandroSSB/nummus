@@ -31,7 +31,7 @@ class FeeRestApiTest extends IntegrationTestBase {
   private SimulatorService simulator;
 
   private String operatorAuth() {
-    return "Bearer " + operatorKeys.create().secret();
+    return "Bearer " + operatorKeys.create(null).secret();
   }
 
   private record Merchant(String key, String id) {}

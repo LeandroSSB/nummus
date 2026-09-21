@@ -30,7 +30,7 @@ class IdempotencyMerchantNamespaceTest extends IntegrationTestBase {
   /** One operator key per test — merchant creation and conciliation ingest are operator-gated. */
   private String operatorAuth() {
     if (operatorAuth == null) {
-      operatorAuth = "Bearer " + operatorKeys.create().secret();
+      operatorAuth = "Bearer " + operatorKeys.create(null).secret();
     }
     return operatorAuth;
   }
