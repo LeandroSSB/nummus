@@ -78,13 +78,15 @@ class ApiKeyLifecycleSchemaTest extends IntegrationTestBase {
       st.executeUpdate("insert into merchants.api_key (merchant_id, key_hash, prefix) "
           + "select id, 'lifecycle-hash-4', 'nummus_s' from merchants.merchant "
           + "where public_id = '" + merchantId + "'");
+      st.executeUpdate("insert into merchants.operator_key (key_hash, prefix) "
+          + "values ('lifecycle-hash-5', 'nummus_s')");
     }
     // V10/V11 already grant UPDATE on both key tables; V14 adds no grants.
     try (Connection c = appConnection(); Statement st = c.createStatement()) {
       assertEquals(1, st.executeUpdate("update merchants.api_key set expires_at = now(), "
           + "last_used_at = now() where key_hash = 'lifecycle-hash-4'"));
       assertEquals(1, st.executeUpdate("update merchants.operator_key set expires_at = now(), "
-          + "last_used_at = now() where key_hash = 'lifecycle-hash-2'"));
+          + "last_used_at = now() where key_hash = 'lifecycle-hash-5'"));
     }
   }
 }

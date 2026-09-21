@@ -114,8 +114,11 @@ class KeyRotationRestApiTest extends IntegrationTestBase {
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{}"))
         .andExpect(status().isCreated()).andReturn();
-    String oldKeyExpiresAt = rotated.getResponse().getContentAsString();
-    Assertions.assertTrue(oldKeyExpiresAt.contains("oldKeyExpiresAt"));
+    java.time.Instant mintedExpiry = java.time.Instant.parse(
+        com.jayway.jsonpath.JsonPath.read(minted.getResponse().getContentAsString(), "$.expiresAt"));
+    java.time.Instant oldKeyExpiry = java.time.Instant.parse(
+        com.jayway.jsonpath.JsonPath.read(rotated.getResponse().getContentAsString(), "$.oldKeyExpiresAt"));
+    Assertions.assertEquals(mintedExpiry, oldKeyExpiry);
     Thread.sleep(2500);
     // The rotated-away key died at its own earlier expiry, not at grace end.
     mockMvc.perform(get("/v1/me").header("Authorization", expiringBearer))
