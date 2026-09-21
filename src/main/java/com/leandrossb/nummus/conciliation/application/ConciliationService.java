@@ -34,39 +34,46 @@ public class ConciliationService {
    *  back, even a fully quiet one. */
   @Transactional
   public SettlementReportSummary ingest(Instant from, Instant to) {
-    return doIngest(from, to).summary();
+    return persist(matchWindow(from, to));
   }
 
   /** Scheduled path: an empty window (zero lines both sides) persists nothing. */
   @Transactional
   public Optional<SettlementReportSummary> ingestIfAnyLines(Instant from, Instant to) {
-    var outcome = doIngest(from, to);
-    return outcome.empty() ? Optional.empty() : Optional.of(outcome.summary());
+    var matched = matchWindow(from, to);
+    return matched.empty() ? Optional.empty() : Optional.of(persist(matched));
   }
 
-  private IngestOutcome doIngest(Instant from, Instant to) {
+  /** Fetch-and-match, with emptiness decided before anything is inserted. */
+  private MatchedWindow matchWindow(Instant from, Instant to) {
     if (!from.isBefore(to)) {
       throw new IllegalArgumentException("from must be before to");
     }
     var report = reportSource.fetch(from, to);
     var internal = payments.listSettlements(from, to);
-    if (report.lines().isEmpty() && internal.isEmpty()) {
-      return new IngestOutcome(true, null);
-    }
     var outcome = ReportMatcher.match(report, internal);
-    var summary = new SettlementReportSummary(UUID.randomUUID(), from, to,
-        outcome.summary().conciled() ? "CONCILED" : "OPEN", outcome.summary().matched(),
-        outcome.summary().amountMismatched(), outcome.summary().missingInternal(),
-        outcome.summary().missingExternal(), Instant.now());
-    store.insert(summary, outcome.lines());
-    if ("OPEN".equals(summary.status())) {
-      alerts.reportOpen(summary.publicId(), from, to, summary.matched(),
-          summary.amountMismatched(), summary.missingInternal(), summary.missingExternal());
-    }
-    return new IngestOutcome(false, summary);
+    boolean empty = report.lines().isEmpty() && internal.isEmpty();
+    return new MatchedWindow(from, to, outcome, empty);
   }
 
-  /** Whether the window carried any lines, and the persisted summary when it did. */
-  private record IngestOutcome(boolean empty, SettlementReportSummary summary) {
+  /** Persists the report and — when it lands OPEN — pushes its digest, both in
+   *  the caller's transaction. */
+  private SettlementReportSummary persist(MatchedWindow matched) {
+    var tally = matched.outcome().summary();
+    var summary = new SettlementReportSummary(UUID.randomUUID(), matched.from(), matched.to(),
+        tally.conciled() ? "CONCILED" : "OPEN", tally.matched(), tally.amountMismatched(),
+        tally.missingInternal(), tally.missingExternal(), Instant.now());
+    store.insert(summary, matched.outcome().lines());
+    if ("OPEN".equals(summary.status())) {
+      alerts.reportOpen(summary.publicId(), matched.from(), matched.to(), summary.matched(),
+          summary.amountMismatched(), summary.missingInternal(), summary.missingExternal());
+    }
+    return summary;
+  }
+
+  /** A matched window: whether it carried any lines at all, and the match to
+   *  persist when it did. */
+  private record MatchedWindow(Instant from, Instant to, ReportMatcher.MatchOutcome outcome,
+      boolean empty) {
   }
 }
