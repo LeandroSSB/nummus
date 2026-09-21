@@ -178,7 +178,8 @@ public class JdbcClientWebhookStore implements WebhookStore {
         from webhooks.webhook_endpoint e
         where d.endpoint_id = e.id
           and d.public_id = :deliveryId
-          and e.merchant_public_id = :merchantPublicId
+          -- null audience = the operator namespace
+          and e.merchant_public_id is not distinct from :merchantPublicId
           and d.status = 'FAILED'
         """)
         .param("deliveryId", deliveryPublicId)
@@ -195,7 +196,8 @@ public class JdbcClientWebhookStore implements WebhookStore {
         from webhooks.webhook_delivery d
         join webhooks.webhook_event e on e.id = d.event_id
         join webhooks.webhook_endpoint p on p.id = d.endpoint_id
-        where p.merchant_public_id = :merchantPublicId
+        -- null audience = the operator namespace
+        where p.merchant_public_id is not distinct from :merchantPublicId
           and p.public_id = :endpointPublicId
           and (:status::text is null or d.status = :status)
           and (:after::uuid is null
