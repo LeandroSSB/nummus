@@ -336,3 +336,25 @@ raised, none merge-blocking:
   dropped at plan time without note — the stamp-failure `catch` path is
   untested by decision. Carry spec test lists verbatim or record drops.
 
+## From the M12 design
+
+M12 automated conciliation: scheduled re-ingest over tumbling windows whose
+start self-heals past manual ingests and whose end holds back a 30s lag for
+the M6 clock skew, operator webhook endpoints riding the NULL-merchant
+namespace of the existing outbox, and a `conciliation.report_open` digest
+per OPEN report. Recon also closed a latent M5-era leak: event fan-out was
+unscoped, delivering one merchant's payment events to every merchant's
+endpoints — fan-out now binds to the event's merchant (or NULL for
+operators). Known bounds, deliberate:
+
+- **Single-process scheduler and delivery worker** — scale-out needs the
+  `SKIP LOCKED` treatment already documented for delivery and retention.
+- **Digest-only alerting** — per-line divergence stays behind the report
+  GET; no per-line push, no severity routing.
+- **The operator endpoint set is role-level shared** — no per-operator
+  ownership until audit attribution lands (the M8 bound carries).
+- **The lag is a property, not an SLA** — 30s of alert latency buys skew
+  safety; a real PSP adapter still owes the settlement-timestamp contract.
+- **Empty scheduled windows advance silently** — a quiet system leaves no
+  trace beyond the marker; observability of tick health is log-only.
+
