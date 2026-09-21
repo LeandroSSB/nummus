@@ -35,6 +35,18 @@ public class WebhookDeliveryWorker {
         store.recordDeliveryFailure(due.id(), null);
         continue;
       }
+      if (!WebhookUrlPolicy.isSafe(due.url())) {
+        // Registration already rejects these; this closes DNS rebinding. The
+        // attempt fails exactly like a connect error — backoff, then terminal.
+        var result = new DeliveryResult(false, null);
+        if (due.attempts() + 1 >= properties.maxAttempts()) {
+          store.recordDeliveryFailure(due.id(), null);
+        } else {
+          store.recordDeliveryRetry(due.id(), null,
+              Instant.now().plus(backoffAfter(due.attempts() + 1)));
+        }
+        continue;
+      }
       var result = client.deliver(due.url(), due.secret(), due.eventType(), due.payload());
       if (result.delivered()) {
         store.recordDeliverySuccess(due.id(), result.httpStatus());

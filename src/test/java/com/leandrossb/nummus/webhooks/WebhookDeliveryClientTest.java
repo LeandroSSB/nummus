@@ -103,7 +103,7 @@ class WebhookDeliveryClientTest extends IntegrationTestBase {
       var received = receiver.requests.get(0);
       assertTrue(received.body().contains("\"amount\":\"7.0000\""));
       assertEquals("SUCCEEDED",
-          store.listDeliveries(SeedMerchant.PUBLIC_ID, endpoint.publicId(), null, 50).get(0).status());
+          store.listDeliveries(SeedMerchant.PUBLIC_ID, endpoint.publicId(), null, null, 50).get(0).status());
     }
   }
 }

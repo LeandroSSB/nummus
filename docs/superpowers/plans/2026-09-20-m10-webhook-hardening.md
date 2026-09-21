@@ -18,7 +18,7 @@
   ssh megalan 'cd ~/nummus-ci && git fetch -q origin && git checkout -q -B worktree-m10-webhook-hardening origin/worktree-m10-webhook-hardening && docker run --rm -v $HOME/nummus-ci:/src -w /src -v /var/run/docker.sock:/var/run/docker.sock -v nummus-m2:/root/.m2 -e TESTCONTAINERS_HOST_OVERRIDE=172.17.0.1 -e TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock maven:3.9-eclipse-temurin-25 ./mvnw -B <GOALS>'
   ```
   TDD: test-only RED commit → push → remote RED → implement → push → GREEN → remote `verify` → final commit → push. Quote `Tests run:`/`BUILD` lines as evidence.
-- **Test classes end in `Test`.** Counts derive from each task's enumerated tests — do not add or drop methods without updating the count: baseline **231** → T1 **233** → T2 **247** → T3 **249** → T4 **253** → T5 **256** → T6 **260**. Final gate: `Tests run: 260, Failures: 0, Errors: 0, Skipped: 0`.
+- **Test classes end in `Test`.** Counts derive from each task's enumerated tests — do not add or drop methods without updating the count: baseline **231** → T1 **233** → T2 **247** → T3 **249** → T4 **251** → T5 **253** → T6 **257** → review fixes **262**. Final gate: `Tests run: 262, Failures: 0, Errors: 0, Skipped: 0`. (Earlier drafts said 253/256/260, then 254/258 — arithmetic slips; the per-task enumerations govern.)
 - **ArchUnit (12 tests) stays green unchanged.** `WebhookUrlPolicy` lives in `webhooks.application`, uses only `java.net` — no new cross-module dependency.
 - **Existing webhook suites keep registering `http://localhost` receivers** — they are the standing regression proof of the loopback exemption. If your change breaks them, the exemption is wrong, not the suites.
 - **Redirects:** the delivery client performs no redirect following; 3xx fails the attempt through the existing non-2xx path. Nothing to configure — pin it with a test.
@@ -97,8 +97,15 @@ class WebhookDeliveryIdSchemaTest extends IntegrationTestBase {
           + "where public_id = '33333333-3333-4333-8333-333333333332'");
       st.executeUpdate("insert into webhooks.webhook_delivery (event_id, endpoint_id) "
           + "values (" + eventId + ", " + endpointId + ")");
+      // V8 declares unique (event_id, endpoint_id) — the second delivery rides
+      // a second endpoint; both still share the event, so the select below
+      // reads both rows.
+      st.executeUpdate("insert into webhooks.webhook_endpoint (public_id, url, secret) "
+          + "values ('33333333-3333-4333-8333-333333333334', 'http://127.0.0.1/hook2', 's1')");
+      long secondEndpointId = queryId(st, "select id from webhooks.webhook_endpoint "
+          + "where public_id = '33333333-3333-4333-8333-333333333334'");
       st.executeUpdate("insert into webhooks.webhook_delivery (event_id, endpoint_id) "
-          + "values (" + eventId + ", " + endpointId + ")");
+          + "values (" + eventId + ", " + secondEndpointId + ")");
 
       var rs = st.executeQuery("select public_id from webhooks.webhook_delivery "
           + "where event_id = " + eventId);
@@ -735,7 +742,7 @@ The controller route:
 ```
 `UnknownWebhookDeliveryException` mirrors `UnknownWebhookEndpointException` (`webhooks.domain`, 404 advice entry). `DeliveryRecord` gains `UUID deliveryPublicId` as the FIRST component; the listing SQL selects `d.public_id` and maps it; `DeliveryResponse` gains `UUID deliveryId` first; every constructor site (tests included) is swept.
 
-- [ ] **Step 4: Remote GREEN + verify** — focused 2/2; full `verify` → BUILD SUCCESS, **253 tests**.
+- [ ] **Step 4: Remote GREEN + verify** — focused 2/2; full `verify` → BUILD SUCCESS, **251 tests**.
 
 - [ ] **Step 5: Commit** — `feat: let merchants redrive failed deliveries` + trailer; push.
 
@@ -909,7 +916,7 @@ The store loop:
 ```
 (`toOffsetDateTime` is the file's existing helper if present — reuse whatever the file uses to bind `Instant`; if it binds `Instant` directly in other queries, do that.) `WebhookProperties` gains `@DefaultValue("30") int retentionDays` as the LAST component — sweep constructor call sites (tests) with the default.
 
-- [ ] **Step 4: Remote GREEN + verify** — focused 3/3; full `verify` → BUILD SUCCESS, **256 tests**.
+- [ ] **Step 4: Remote GREEN + verify** — focused 2/2; full `verify` → BUILD SUCCESS, **253 tests**.
 
 - [ ] **Step 5: Commit** — `feat: prune succeeded webhook deliveries past the retention ttl` + trailer; push.
 
@@ -1101,7 +1108,7 @@ class WebhookDeliveriesPaginationTest extends IntegrationTestBase {
 ```
 (`IllegalArgumentException` already maps to 400 problem+json by the existing advice — verify against `GlobalExceptionHandler` while implementing; if not mapped, add the entry mirroring the M9 one.)
 
-- [ ] **Step 4: Remote GREEN + verify** — focused 4/4; full `verify` → BUILD SUCCESS, **260 tests**.
+- [ ] **Step 4: Remote GREEN + verify** — focused 4/4; full `verify` → BUILD SUCCESS, **257 tests**.
 
 - [ ] **Step 5: Commit** — `feat: paginate webhook deliveries with a cursor header` + trailer; push.
 
@@ -1135,7 +1142,7 @@ Known bounds, deliberate:
   the shared maxAttempts/backoff policy govern.
 ```
 
-- [ ] **Step 1: Remote full verify** — `Tests run: 260, Failures: 0, Errors: 0, Skipped: 0`, BUILD SUCCESS.
+- [ ] **Step 1: Remote full verify** — `Tests run: 257, Failures: 0, Errors: 0, Skipped: 0`, BUILD SUCCESS.
 - [ ] **Step 2+3:** README/backlog edits per the text above.
 - [ ] **Step 4: Commit** — `docs: mark M10 webhook hardening complete` + trailer; push.
 - [ ] **Step 5: Report** the remote verify summary line verbatim.

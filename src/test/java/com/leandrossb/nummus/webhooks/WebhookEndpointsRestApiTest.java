@@ -59,13 +59,13 @@ class WebhookEndpointsRestApiTest extends IntegrationTestBase {
   @Test
   void createReturnsTheSecretExactlyOnceAndReplaysIdentically() throws Exception {
     String key = UUID.randomUUID().toString();
-    String body = "{\"url\":\"https://merchant.example/hook\",\"eventTypes\":[\"payment_intent.settled\"]}";
+    String body = "{\"url\":\"https://example.com/hook\",\"eventTypes\":[\"payment_intent.settled\"]}";
     var first = mockMvc.perform(post("/v1/webhook-endpoints")
             .header("Authorization", "Bearer " + merchantKey).header(KEY, key)
             .contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.secret").exists())
-        .andExpect(jsonPath("$.url").value("https://merchant.example/hook"))
+        .andExpect(jsonPath("$.url").value("https://example.com/hook"))
         .andExpect(jsonPath("$.status").value("ACTIVE"))
         .andReturn();
     var replay = mockMvc.perform(post("/v1/webhook-endpoints")
@@ -92,12 +92,12 @@ class WebhookEndpointsRestApiTest extends IntegrationTestBase {
     mockMvc.perform(post("/v1/webhook-endpoints")
             .header("Authorization", "Bearer " + merchantKey).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"url\":\"ftp://merchant.example/hook\"}"))
+            .content("{\"url\":\"ftp://example.com/hook\"}"))
         .andExpect(status().isBadRequest());
     mockMvc.perform(post("/v1/webhook-endpoints")
             .header("Authorization", "Bearer " + merchantKey).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"url\":\"https://merchant.example/hook\",\"eventTypes\":[\"nope.event\"]}"))
+            .content("{\"url\":\"https://example.com/hook\",\"eventTypes\":[\"nope.event\"]}"))
         .andExpect(status().isBadRequest());
   }
 
@@ -106,7 +106,7 @@ class WebhookEndpointsRestApiTest extends IntegrationTestBase {
     mockMvc.perform(post("/v1/webhook-endpoints")
             .header("Authorization", "Bearer " + merchantKey)
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"url\":\"https://merchant.example/hook\"}"))
+            .content("{\"url\":\"https://example.com/hook\"}"))
         .andExpect(status().isBadRequest());
   }
 
@@ -115,7 +115,7 @@ class WebhookEndpointsRestApiTest extends IntegrationTestBase {
     mockMvc.perform(get("/v1/webhook-endpoints/" + UUID.randomUUID())
             .header("Authorization", "Bearer " + merchantKey))
         .andExpect(status().isNotFound());
-    String location = createEndpoint("{\"url\":\"https://merchant.example/temp\"}");
+    String location = createEndpoint("{\"url\":\"https://example.com/temp\"}");
     mockMvc.perform(delete(location).header("Authorization", "Bearer " + merchantKey))
         .andExpect(status().isNoContent());
     mockMvc.perform(get(location).header("Authorization", "Bearer " + merchantKey))
@@ -126,7 +126,7 @@ class WebhookEndpointsRestApiTest extends IntegrationTestBase {
 
   @Test
   void deliveriesAreListedPerEndpoint() throws Exception {
-    String location = createEndpoint("{\"url\":\"https://merchant.example/dl\"}");
+    String location = createEndpoint("{\"url\":\"https://example.com/dl\"}");
     String endpointId = location.substring(location.lastIndexOf('/') + 1);
     mockMvc.perform(get(location + "/deliveries").header("Authorization", "Bearer " + merchantKey))
         .andExpect(status().isOk());
@@ -144,7 +144,7 @@ class WebhookEndpointsRestApiTest extends IntegrationTestBase {
     mockMvc.perform(post("/v1/webhook-endpoints")
             .header("Authorization", "Bearer " + merchantKey).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"url\":\"https://merchant.example/all\"}"))
+            .content("{\"url\":\"https://example.com/all\"}"))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.eventTypes").isArray());
   }

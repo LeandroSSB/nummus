@@ -18,10 +18,18 @@ final class ReceiverServer implements AutoCloseable {
 
   final List<Received> requests = new CopyOnWriteArrayList<>();
   private final Map<String, Integer> statusByPath = new ConcurrentHashMap<>();
+  private final Map<String, String> locationByPath = new ConcurrentHashMap<>();
   private final HttpServer server;
+  private final String address;
 
   ReceiverServer() throws IOException {
-    server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    this("127.0.0.1");
+  }
+
+  /** Binds an explicit address — e.g. this host's site-local IP for policy-pin fixtures. */
+  ReceiverServer(String bindAddress) throws IOException {
+    address = bindAddress;
+    server = HttpServer.create(new InetSocketAddress(bindAddress, 0), 0);
     server.createContext("/", exchange -> {
       try (InputStream body = exchange.getRequestBody()) {
         Map<String, String> headers = new ConcurrentHashMap<>();
@@ -31,6 +39,10 @@ final class ReceiverServer implements AutoCloseable {
       }
       Integer status = statusByPath.getOrDefault(exchange.getRequestURI().getPath(), 200);
       byte[] response = "ok".getBytes(StandardCharsets.UTF_8);
+      String location = locationByPath.get(exchange.getRequestURI().getPath());
+      if (location != null) {
+        exchange.getResponseHeaders().add("Location", location);
+      }
       exchange.sendResponseHeaders(status, response.length);
       try (var out = exchange.getResponseBody()) {
         out.write(response);
@@ -43,8 +55,14 @@ final class ReceiverServer implements AutoCloseable {
     statusByPath.put(path, status);
   }
 
+  /** Answers 302 with a Location header — pins that delivery never follows redirects. */
+  void redirectTo(String path, String targetUrl) {
+    statusByPath.put(path, 302);
+    locationByPath.put(path, targetUrl);
+  }
+
   String url(String path) {
-    return "http://127.0.0.1:" + server.getAddress().getPort() + path;
+    return "http://" + address + ":" + server.getAddress().getPort() + path;
   }
 
   @Override

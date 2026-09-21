@@ -5,11 +5,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record DeliveryResponse(
-    UUID eventId, String eventType, String status, int attempts,
+    UUID deliveryId, UUID eventId, String eventType, String status, int attempts,
     Integer lastResponseStatus, Instant nextAttemptAt) {
 
   public static DeliveryResponse from(DeliveryRecord record) {
-    return new DeliveryResponse(record.eventPublicId(), record.eventType(), record.status(),
-        record.attempts(), record.lastResponseStatus(), record.nextAttemptAt());
+    return new DeliveryResponse(record.deliveryPublicId(), record.eventPublicId(), record.eventType(),
+        record.status(), record.attempts(), record.lastResponseStatus(), record.nextAttemptAt());
   }
 }

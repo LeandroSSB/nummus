@@ -69,10 +69,10 @@ class WebhookStoreTest extends IntegrationTestBase {
     publish("payment_intent.settled");
     publish("payment_intent.failed");
 
-    var settledDeliveries = store.listDeliveries(SeedMerchant.PUBLIC_ID, allTypes.publicId(), null, 50);
-    assertEquals(1, store.listDeliveries(SeedMerchant.PUBLIC_ID, settledOnly.publicId(), null, 50).size());
+    var settledDeliveries = store.listDeliveries(SeedMerchant.PUBLIC_ID, allTypes.publicId(), null, null, 50);
+    assertEquals(1, store.listDeliveries(SeedMerchant.PUBLIC_ID, settledOnly.publicId(), null, null, 50).size());
     assertEquals(2, settledDeliveries.size()); // [] subscribes to every type
-    assertEquals(0, store.listDeliveries(SeedMerchant.PUBLIC_ID, deleted.publicId(), null, 50).size());
+    assertEquals(0, store.listDeliveries(SeedMerchant.PUBLIC_ID, deleted.publicId(), null, null, 50).size());
   }
 
   @Test
@@ -105,7 +105,7 @@ class WebhookStoreTest extends IntegrationTestBase {
         .filter(d -> d.url().toString().endsWith("/outcomes")).findFirst().orElseThrow().id();
 
     store.recordDeliveryRetry(deliveryId, 500, Instant.now().plusSeconds(30));
-    Optional<DeliveryRecord> retried = store.listDeliveries(SeedMerchant.PUBLIC_ID, target.publicId(), null, 50).stream()
+    Optional<DeliveryRecord> retried = store.listDeliveries(SeedMerchant.PUBLIC_ID, target.publicId(), null, null, 50).stream()
         .filter(d -> d.id() == deliveryId).findFirst();
     assertTrue(retried.isPresent());
     assertEquals("PENDING", retried.get().status());
@@ -113,12 +113,12 @@ class WebhookStoreTest extends IntegrationTestBase {
     assertEquals(500, retried.get().lastResponseStatus());
 
     store.recordDeliverySuccess(deliveryId, 200);
-    assertEquals("SUCCEEDED", store.listDeliveries(SeedMerchant.PUBLIC_ID, target.publicId(), null, 50).stream()
+    assertEquals("SUCCEEDED", store.listDeliveries(SeedMerchant.PUBLIC_ID, target.publicId(), null, null, 50).stream()
         .filter(d -> d.id() == deliveryId).findFirst().orElseThrow().status());
 
     // Guarded: a second outcome on a non-PENDING row is a no-op (rowcount 0, no exception).
     store.recordDeliveryRetry(deliveryId, 500, Instant.now());
-    assertEquals("SUCCEEDED", store.listDeliveries(SeedMerchant.PUBLIC_ID, target.publicId(), null, 50).stream()
+    assertEquals("SUCCEEDED", store.listDeliveries(SeedMerchant.PUBLIC_ID, target.publicId(), null, null, 50).stream()
         .filter(d -> d.id() == deliveryId).findFirst().orElseThrow().status());
   }
 
@@ -133,8 +133,8 @@ class WebhookStoreTest extends IntegrationTestBase {
         .filter(d -> d.url().toString().endsWith("/filter-a")).findFirst()
         .ifPresent(d -> store.recordDeliverySuccess(d.id(), null));
 
-    assertEquals(1, store.listDeliveries(SeedMerchant.PUBLIC_ID, a.publicId(), "SUCCEEDED", 50).size());
-    assertEquals(0, store.listDeliveries(SeedMerchant.PUBLIC_ID, a.publicId(), "FAILED", 50).size());
-    assertEquals(2, store.listDeliveries(SeedMerchant.PUBLIC_ID, b.publicId(), null, 50).size());
+    assertEquals(1, store.listDeliveries(SeedMerchant.PUBLIC_ID, a.publicId(), "SUCCEEDED", null, 50).size());
+    assertEquals(0, store.listDeliveries(SeedMerchant.PUBLIC_ID, a.publicId(), "FAILED", null, 50).size());
+    assertEquals(2, store.listDeliveries(SeedMerchant.PUBLIC_ID, b.publicId(), null, null, 50).size());
   }
 }

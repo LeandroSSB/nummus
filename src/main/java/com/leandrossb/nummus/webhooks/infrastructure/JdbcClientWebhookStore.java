@@ -160,9 +160,26 @@ public class JdbcClientWebhookStore implements WebhookStore {
   }
 
   @Override
-  public List<DeliveryRecord> listDeliveries(UUID merchantPublicId, UUID endpointPublicId, String status, int limit) {
+  public boolean requeueFailedDelivery(UUID merchantPublicId, UUID deliveryPublicId) {
     return jdbc.sql("""
-        select d.id, e.public_id, e.type, d.status, d.attempts,
+        update webhooks.webhook_delivery d
+        set status = 'PENDING', attempts = 0, next_attempt_at = now()
+        from webhooks.webhook_endpoint e
+        where d.endpoint_id = e.id
+          and d.public_id = :deliveryId
+          and e.merchant_public_id = :merchantPublicId
+          and d.status = 'FAILED'
+        """)
+        .param("deliveryId", deliveryPublicId)
+        .param("merchantPublicId", merchantPublicId)
+        .update() == 1;
+  }
+
+  @Override
+  public List<DeliveryRecord> listDeliveries(UUID merchantPublicId, UUID endpointPublicId, String status,
+      UUID after, int limit) {
+    return jdbc.sql("""
+        select d.public_id, d.id, e.public_id, e.type, d.status, d.attempts,
                d.last_response_status, d.next_attempt_at
         from webhooks.webhook_delivery d
         join webhooks.webhook_event e on e.id = d.event_id
@@ -170,18 +187,42 @@ public class JdbcClientWebhookStore implements WebhookStore {
         where p.merchant_public_id = :merchantPublicId
           and p.public_id = :endpointPublicId
           and (:status::text is null or d.status = :status)
+          and (:after::uuid is null
+               or d.id < (select d2.id from webhooks.webhook_delivery d2 where d2.public_id = :after))
         order by d.id desc
         limit :limit
         """)
         .param("merchantPublicId", merchantPublicId)
         .param("endpointPublicId", endpointPublicId)
         .param("status", status)
+        .param("after", after)
         .param("limit", limit)
-        .query((rs, i) -> new DeliveryRecord(rs.getLong(1), rs.getObject(2, UUID.class),
-            rs.getString(3), rs.getString(4), rs.getInt(5),
-            rs.getObject(6) == null ? null : rs.getInt(6),
-            toInstant(rs.getObject(7, OffsetDateTime.class))))
+        .query((rs, i) -> new DeliveryRecord(rs.getObject(1, UUID.class), rs.getLong(2),
+            rs.getObject(3, UUID.class), rs.getString(4), rs.getString(5), rs.getInt(6),
+            rs.getObject(7) == null ? null : rs.getInt(7),
+            toInstant(rs.getObject(8, OffsetDateTime.class))))
         .list();
+  }
+
+  @Override
+  public int pruneSucceededBefore(Instant cutoff, int batch) {
+    int total = 0;
+    int deleted;
+    do {
+      deleted = jdbc.sql("""
+          delete from webhooks.webhook_delivery
+          where id in (
+            select id from webhooks.webhook_delivery
+            where status = 'SUCCEEDED' and last_attempt_at < :cutoff
+            limit :batch
+          )
+          """)
+          .param("cutoff", toOffsetDateTime(cutoff))
+          .param("batch", batch)
+          .update();
+      total += deleted;
+    } while (deleted > 0);
+    return total;
   }
 
   private static WebhookEndpoint mapEndpoint(ResultSet rs) throws SQLException {

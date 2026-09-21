@@ -76,8 +76,12 @@ class WebhookDeliveryWorkerTest extends IntegrationTestBase {
   }
 
   private UUID endpoint(String path) {
+    // Loopback http is the policy's local-receiver class — the delivery-time
+    // gate re-resolves every URL, and the reserved .example TLD does not
+    // resolve, which would (correctly) fail the attempt before the fake
+    // client is ever consulted.
     return store.insertEndpoint(new WebhookEndpoint(SeedMerchant.PUBLIC_ID, UUID.randomUUID(),
-        URI.create("https://merchant.example/worker-" + path), "whsec_worker",
+        URI.create("http://127.0.0.1/worker-" + path), "whsec_worker",
         List.of(), EndpointStatus.ACTIVE, Instant.now())).publicId();
   }
 
@@ -95,7 +99,7 @@ class WebhookDeliveryWorkerTest extends IntegrationTestBase {
     worker.deliverDue(); // nothing due anymore for this endpoint
 
     assertEquals(1, client.callsFor("/worker-success"));
-    assertEquals(1, store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, "SUCCEEDED", 50).size());
+    assertEquals(1, store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, "SUCCEEDED", null, 50).size());
   }
 
   @Test
@@ -109,7 +113,7 @@ class WebhookDeliveryWorkerTest extends IntegrationTestBase {
     worker.deliverDue(); // still within the backoff window — no second attempt
 
     assertEquals(1, client.callsFor("/worker-backoff"));
-    var record = store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, null, 50).get(0);
+    var record = store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, null, null, 50).get(0);
     assertEquals("PENDING", record.status());
     assertEquals(1, record.attempts());
     assertEquals(500, record.lastResponseStatus());
@@ -131,7 +135,7 @@ class WebhookDeliveryWorkerTest extends IntegrationTestBase {
       worker.deliverDue();
     }
 
-    var record = store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, null, 50).get(0);
+    var record = store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, null, null, 50).get(0);
     assertEquals("FAILED", record.status());
     assertEquals(8, record.attempts());
     assertEquals(8, client.callsFor("/worker-exhaust"));
@@ -147,6 +151,6 @@ class WebhookDeliveryWorkerTest extends IntegrationTestBase {
     worker.deliverDue();
 
     assertEquals(0, client.callsFor("/worker-deleted"));
-    assertEquals(1, store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, "FAILED", 50).size());
+    assertEquals(1, store.listDeliveries(SeedMerchant.PUBLIC_ID, endpointId, "FAILED", null, 50).size());
   }
 }

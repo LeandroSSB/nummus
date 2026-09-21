@@ -252,3 +252,32 @@ bounds, deliberate:
   journal's four-decimal scale (a shipped contract field); `fee` and
   `netAmount` are centavos-minimal. Numerically identical under any
   decimal parser.
+
+## From the M10 review
+
+M10 hardened webhook delivery: two-layer SSRF enforcement (registration
+400 plus delivery-time revalidation, redirects never followed),
+merchant self-serve redrive with a fresh retry cycle, TTL pruning of
+succeeded deliveries, and cursor pagination behind a response header.
+Known bounds, deliberate:
+
+- **Events are never pruned.** Payload rows accumulate; deliveries are
+  the volume multiplier and carry the retention policy.
+- **No DNS pinning.** The two-layer check trusts each resolution as it
+  happens; pinning registration-time answers would break legitimate
+  CDN churn.
+- **Loopback http is the only internal exemption** — local receivers,
+  and by extension anything that can bind the test host's loopback.
+- **Pruning is single-process** like the delivery worker; scale-out
+  needs the same SKIP LOCKED treatment.
+- **No mTLS or per-endpoint retry budgets** — the signature scheme and
+  the shared maxAttempts/backoff policy govern.
+- **Cursors are opaque bookmarks.** A foreign-but-real delivery id used
+  as `after` resolves and simply skips ahead within the caller's own
+  rows; only unknown or pruned cursors yield an empty page. The listing
+  stays merchant-scoped either way — no cross-tenant data.
+- **DNS resolution is unbounded and unpinned.** Policy checks resolve
+  per call with no timeout beyond the OS resolver; a blackholing
+  authoritative NS can stall delivery ticks, and an attacker's DNS may
+  answer differently between the pre-dial check and the POST within one
+  attempt. Availability bound, accepted for a single-worker deployment.
