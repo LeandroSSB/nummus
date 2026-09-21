@@ -14,6 +14,10 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 public abstract class IntegrationTestBase {
 
   static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18-alpine")
+      // Each cached Spring context holds a Hikari pool; at the image default of
+      // 100 connections the suite runs out of client slots before it runs out of
+      // tests. Keep generous headroom for the raw DriverManager probes too.
+      .withCommand("postgres", "-c", "max_connections=300")
       .withStartupTimeout(Duration.ofMinutes(3));
 
   static {
