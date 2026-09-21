@@ -46,11 +46,14 @@ class RequestBodyCapTest {
   }
 
   private static MockHttpServletRequest post(String uri, long contentLength, ServletInputStream body) {
-    MockHttpServletRequest request = new MockHttpServletRequest("POST", uri);
-    request.setHeader("Idempotency-Key", "cap-probe");
+    // Spring Framework 7's mock has no declared-length setter and no stream
+    // setter, so the two are decoupled by overriding the accessors.
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", uri) {
+      @Override public long getContentLengthLong() { return contentLength; }
+      @Override public ServletInputStream getInputStream() { return body; }
+    };
+    request.addHeader("Idempotency-Key", "cap-probe");
     request.setContentType(MediaType.APPLICATION_JSON_VALUE);
-    request.setContentLengthLong(contentLength);
-    request.setInputStream(body);
     return request;
   }
 
