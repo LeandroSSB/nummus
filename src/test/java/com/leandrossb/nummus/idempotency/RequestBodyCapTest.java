@@ -3,6 +3,7 @@ package com.leandrossb.nummus.idempotency;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.leandrossb.nummus.interfaces.HttpProperties;
+import com.leandrossb.nummus.interfaces.idempotency.IdempotencyWebFilter;
 import jakarta.servlet.ReadListener;
 import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.ServletRequest;
