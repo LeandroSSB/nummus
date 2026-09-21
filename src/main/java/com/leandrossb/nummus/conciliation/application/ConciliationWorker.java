@@ -10,7 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Scheduled tumbling-window re-ingest: start self-heals past manual ingests,
  * the end holds back the lag, an empty window persists nothing but still
- * advances the marker, and report + digest + advance commit atomically.
+ * advances the marker, and the whole tick is one transaction.
  * A failed tick warns and retries the same window next time — the same
  * single-process fixedDelay discipline as the webhook workers.
  */
@@ -32,6 +32,7 @@ public class ConciliationWorker {
 
   @Scheduled(fixedDelayString = "${nummus.conciliation.poll-delay-ms:300000}",
       initialDelayString = "${nummus.conciliation.initial-delay-ms:60000}")
+  @Transactional
   public void tick() {
     try {
       runWindow();
@@ -40,7 +41,6 @@ public class ConciliationWorker {
     }
   }
 
-  @Transactional
   void runWindow() {
     Instant start = store.selfHealingWindowStart();
     Instant end = store.currentWindowEnd(properties.windowLag());
