@@ -73,7 +73,7 @@ Existing rows backfill via the default. `DeliveryResponse` gains an additive `de
 - `GET /v1/webhook-endpoints/{id}/deliveries?status=&after=&limit=` — `status` unchanged; `limit` defaults to 50, capped at 100 (`limit < 1` or `> 100` → 400 problem+json); `after` is the opaque cursor (a delivery public id).
 - Keyset: `... and id < (select id from webhooks.webhook_delivery where public_id = :after) order by id desc limit :limit` — the primary key indexes the walk.
 - The body remains a JSON array of delivery objects (existing contract). The store fetches `limit + 1` rows; when the extra row exists, the response carries header `Next-Cursor: <last delivery public id of the returned page>`; otherwise (short page, or exactly `limit` with nothing beyond) the header is absent.
-- An `after` cursor that does not resolve (unknown, foreign, or pruned) yields an empty page with no cursor — silent, Stripe-style; the walk terminates. Documented behavior, not an error.
+- An `after` cursor that does not resolve (unknown or pruned) yields an empty page with no cursor — silent, Stripe-style; the walk terminates. A foreign-but-real cursor resolves and acts as an opaque skip over the caller's own rows — no cross-tenant data is ever returned (the listing stays merchant-scoped). Cursors are opaque bookmarks. Documented behavior, not an error.
 
 ## Error handling
 
