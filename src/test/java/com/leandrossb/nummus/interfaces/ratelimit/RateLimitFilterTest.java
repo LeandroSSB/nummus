@@ -22,7 +22,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 /** Tight buckets per test class; every test mints fresh merchants/keys, so
- *  each gets a fresh bucket and tests cannot interfere. */
+ *  each gets a fresh bucket and tests cannot interfere. The operator bucket
+ *  never refills — the burst assertion is timing-independent; {@code Retry-After}
+ *  may be large, which the test only checks for existence. */
 @AutoConfigureMockMvc
 class RateLimitFilterTest extends IntegrationTestBase {
 
@@ -33,7 +35,7 @@ class RateLimitFilterTest extends IntegrationTestBase {
     registry.add("nummus.ratelimit.merchant-capacity", () -> "2");
     registry.add("nummus.ratelimit.merchant-refill-per-second", () -> "1");
     registry.add("nummus.ratelimit.operator-capacity", () -> "3");
-    registry.add("nummus.ratelimit.operator-refill-per-second", () -> "1");
+    registry.add("nummus.ratelimit.operator-refill-per-second", () -> "0");
   }
 
   @Autowired
