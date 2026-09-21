@@ -15,8 +15,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-/** Today's fan-out cross-joins every ACTIVE endpoint: merchant B receives
- *  merchant A's payment events. This pins the audience-scoped fix. */
+/** Fan-out is audience-scoped: merchant B never receives merchant A's
+ *  payment events. This pins the tenancy property. */
 @AutoConfigureMockMvc
 class WebhookAudienceTest extends IntegrationTestBase {
 
