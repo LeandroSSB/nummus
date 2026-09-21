@@ -79,4 +79,25 @@ class WebhookUrlPolicyTest {
   void nonHttpSchemeIsRejected() {
     assertRejected("ftp://example.com/hook");
   }
+
+  @Test
+  void cgnatAndBenchmarkRangesAreRejected() {
+    assertRejected("https://100.64.0.1/hook");
+    assertRejected("https://198.18.0.1/hook");
+    // mapped literal: the resolver normalizes it to the v4 CGNAT entry
+    assertRejected("https://[::ffff:100.64.0.1]/hook");
+  }
+
+  @Test
+  void testNetAndReservedRangesAreRejected() {
+    assertRejected("https://192.0.2.1/hook");
+    assertRejected("https://198.51.100.1/hook");
+    assertRejected("https://203.0.113.1/hook");
+    assertRejected("https://240.0.0.1/hook");
+  }
+
+  @Test
+  void documentationRangesAreRejected() {
+    assertRejected("https://[2001:db8::1]/hook");
+  }
 }
