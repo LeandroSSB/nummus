@@ -6,6 +6,7 @@ import com.leandrossb.nummus.conciliation.application.SettlementReportSummary;
 import com.leandrossb.nummus.ledger.domain.Money;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -107,6 +108,31 @@ public class JdbcClientConciliationStore implements ConciliationStore {
             rs.getObject(5) == null ? null : Money.of(rs.getBigDecimal(5), BRL),
             rs.getString(6)))
         .list();
+  }
+
+  @Override
+  public Instant selfHealingWindowStart() {
+    return jdbc.sql("""
+        select greatest(s.last_window_end,
+          coalesce((select max(r.period_to) from conciliation.settlement_report r), s.last_window_end))
+        from conciliation.ingest_state s where s.id = 1
+        """)
+        .query((rs, i) -> rs.getObject(1, OffsetDateTime.class).toInstant()).single();
+  }
+
+  @Override
+  public Instant currentWindowEnd(Duration lag) {
+    return jdbc.sql("select now() - make_interval(secs => :lagSeconds)")
+        .param("lagSeconds", lag.toMillis() / 1000.0)
+        .query((rs, i) -> rs.getObject(1, OffsetDateTime.class).toInstant()).single();
+  }
+
+  @Override
+  public void advanceWindowEnd(Instant end) {
+    jdbc.sql("update conciliation.ingest_state set last_window_end = :end, updated_at = now() "
+        + "where id = 1")
+        .param("end", toOffsetDateTime(end))
+        .update();
   }
 
   private static SettlementReportSummary mapSummary(ResultSet rs) throws SQLException {
