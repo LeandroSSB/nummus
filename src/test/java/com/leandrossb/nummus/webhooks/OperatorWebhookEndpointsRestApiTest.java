@@ -120,6 +120,8 @@ class OperatorWebhookEndpointsRestApiTest extends IntegrationTestBase {
         .andExpect(status().isNotFound());
   }
 
+  /** A merchant fixture's Authorization header value: the first API key's
+   *  secret is shown exactly once, here as the bearer credential. */
   private String seedMerchantBearer() throws Exception {
     MvcResult merchant = mockMvc.perform(post("/v1/merchants")
             .header("Authorization", operatorAuth())
@@ -127,6 +129,7 @@ class OperatorWebhookEndpointsRestApiTest extends IntegrationTestBase {
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"name\":\"Namespace Merchant\"}"))
         .andExpect(status().isCreated()).andReturn();
-    return com.jayway.jsonpath.JsonPath.read(merchant.getResponse().getContentAsString(), "$.apiKey.secret");
+    return "Bearer " + com.jayway.jsonpath.JsonPath.read(
+        merchant.getResponse().getContentAsString(), "$.apiKey.secret");
   }
 }

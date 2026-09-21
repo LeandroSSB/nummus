@@ -8,7 +8,8 @@ import java.util.UUID;
 
 /**
  * Persistence port for the outbox. Endpoint registration and lookup are
- * scoped to the owning merchant — another merchant's endpoint is
+ * scoped to the audience merchant — a null {@code merchantPublicId} addresses
+ * the operator namespace, and another merchant's endpoint is
  * indistinguishable from an unknown one. {@link #insertEvent} fans out
  * inside the caller's transaction to every ACTIVE endpoint in the
  * audience: one delivery row per endpoint whose event_types is empty (all

@@ -48,7 +48,8 @@ public class JdbcClientWebhookStore implements WebhookStore {
     return jdbc.sql("""
         select public_id, merchant_public_id, url, secret, event_types::text, status, created_at
         from webhooks.webhook_endpoint
-        where merchant_public_id = :merchantPublicId and status = 'ACTIVE'
+        -- null audience = the operator namespace
+        where merchant_public_id is not distinct from :merchantPublicId and status = 'ACTIVE'
         order by created_at, id
         """)
         .param("merchantPublicId", merchantPublicId)
@@ -60,7 +61,9 @@ public class JdbcClientWebhookStore implements WebhookStore {
     return jdbc.sql("""
         select public_id, merchant_public_id, url, secret, event_types::text, status, created_at
         from webhooks.webhook_endpoint
-        where merchant_public_id = :merchantPublicId and public_id = :publicId and status = 'ACTIVE'
+        -- null audience = the operator namespace
+        where merchant_public_id is not distinct from :merchantPublicId
+          and public_id = :publicId and status = 'ACTIVE'
         """)
         .param("merchantPublicId", merchantPublicId)
         .param("publicId", publicId)
@@ -71,7 +74,9 @@ public class JdbcClientWebhookStore implements WebhookStore {
   public boolean markEndpointDeleted(UUID merchantPublicId, UUID publicId) {
     return jdbc.sql("""
         update webhooks.webhook_endpoint set status = 'DELETED'
-        where merchant_public_id = :merchantPublicId and public_id = :publicId and status = 'ACTIVE'
+        -- null audience = the operator namespace
+        where merchant_public_id is not distinct from :merchantPublicId
+          and public_id = :publicId and status = 'ACTIVE'
         """)
         .param("merchantPublicId", merchantPublicId)
         .param("publicId", publicId).update() == 1;
