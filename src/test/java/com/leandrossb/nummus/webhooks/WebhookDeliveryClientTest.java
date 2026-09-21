@@ -93,7 +93,7 @@ class WebhookDeliveryClientTest extends IntegrationTestBase {
       var endpoint = store.insertEndpoint(new WebhookEndpoint(SeedMerchant.PUBLIC_ID, UUID.randomUUID(),
           URI.create(receiver.url("/merchant")), "whsec_flow", List.of(),
           EndpointStatus.ACTIVE, Instant.now()));
-      store.insertEvent(UUID.randomUUID(), "payment_intent.settled",
+      store.insertEvent(UUID.randomUUID(), SeedMerchant.PUBLIC_ID, "payment_intent.settled",
           "{\"id\":\"" + UUID.randomUUID() + "\",\"type\":\"payment_intent.settled\",\"data\":{\"amount\":\"7.0000\"}}",
           Instant.now());
 

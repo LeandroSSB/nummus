@@ -86,7 +86,8 @@ class WebhookDeliveryWorkerTest extends IntegrationTestBase {
   }
 
   private void publish() {
-    store.insertEvent(UUID.randomUUID(), "payment_intent.settled", "{}", Instant.now());
+    store.insertEvent(UUID.randomUUID(), SeedMerchant.PUBLIC_ID, "payment_intent.settled", "{}",
+        Instant.now());
   }
 
   @Test

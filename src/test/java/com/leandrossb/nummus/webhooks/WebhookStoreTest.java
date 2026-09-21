@@ -41,7 +41,8 @@ class WebhookStoreTest extends IntegrationTestBase {
   }
 
   private void publish(String type) {
-    store.insertEvent(UUID.randomUUID(), type, "{\"type\":\"" + type + "\"}", Instant.now());
+    store.insertEvent(UUID.randomUUID(), SeedMerchant.PUBLIC_ID, type,
+        "{\"type\":\"" + type + "\"}", Instant.now());
   }
 
   @Test
@@ -78,10 +79,10 @@ class WebhookStoreTest extends IntegrationTestBase {
   @Test
   void claimDueDeliveriesRespectsDueTimeOrderAndLimit() throws Exception {
     var target = endpoint("claim", List.of());
-    store.insertEvent(UUID.randomUUID(), "payment_intent.settled", "{}", Instant.now());
+    store.insertEvent(UUID.randomUUID(), SeedMerchant.PUBLIC_ID, "payment_intent.settled", "{}", Instant.now());
 
     var other = endpoint("claim-other", List.of());
-    store.insertEvent(UUID.randomUUID(), "payment_intent.failed", "{}", Instant.now());
+    store.insertEvent(UUID.randomUUID(), SeedMerchant.PUBLIC_ID, "payment_intent.failed", "{}", Instant.now());
     // Both events fan out to BOTH subscribe-all endpoints. Age the deliveries
     // DB-side after the fan-out: /claim pushed out (not due), /claim-other due now.
     try (var c = adminConnection(); var st = c.createStatement()) {
@@ -100,7 +101,7 @@ class WebhookStoreTest extends IntegrationTestBase {
   @Test
   void outcomeRecordingMovesStatusAttemptsAndBackoff() {
     var target = endpoint("outcomes", List.of());
-    store.insertEvent(UUID.randomUUID(), "payment_intent.settled", "{}", Instant.now());
+    store.insertEvent(UUID.randomUUID(), SeedMerchant.PUBLIC_ID, "payment_intent.settled", "{}", Instant.now());
     long deliveryId = store.claimDueDeliveries(Instant.now(), 10).stream()
         .filter(d -> d.url().toString().endsWith("/outcomes")).findFirst().orElseThrow().id();
 
@@ -126,8 +127,8 @@ class WebhookStoreTest extends IntegrationTestBase {
   void listDeliveriesFiltersByEndpointAndStatus() {
     var a = endpoint("filter-a", List.of());
     var b = endpoint("filter-b", List.of());
-    store.insertEvent(UUID.randomUUID(), "payment_intent.settled", "{}", Instant.now());
-    store.insertEvent(UUID.randomUUID(), "payment_intent.failed", "{}", Instant.now());
+    store.insertEvent(UUID.randomUUID(), SeedMerchant.PUBLIC_ID, "payment_intent.settled", "{}", Instant.now());
+    store.insertEvent(UUID.randomUUID(), SeedMerchant.PUBLIC_ID, "payment_intent.failed", "{}", Instant.now());
 
     store.claimDueDeliveries(Instant.now(), 10).stream()
         .filter(d -> d.url().toString().endsWith("/filter-a")).findFirst()
