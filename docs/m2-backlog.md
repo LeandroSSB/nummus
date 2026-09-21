@@ -303,3 +303,36 @@ and self-serve rotation that retires the calling key at
 - **The cap guards the buffered merchant-write path only.** Simulator
   writes stay uncapped (non-production harness).
 - **No per-route limit classes** — one bucket per tenant.
+
+## From the M11 review
+
+The whole-branch review found no production defect. Backlog-grade items it
+raised, none merge-blocking:
+
+- **New `nummus.*` knobs accept degenerate values.** `refill-per-second=0`
+  permanently throttles after burst (Retry-After overflows to ~68 years);
+  zero/negative capacity permanently 429s; `max-body-bytes=2147483647`
+  overflows `readNBytes(max + 1)`. One uniform posture — `@Min(1)`-style
+  binding validation vs documented-only — should cover the whole class.
+- **Bucket growth is bounded by distinct tenants *plus distinct operator
+  keys since start*** (rotation mints a new key id) — the "tenant count"
+  wording in the M11 section above is the imprecise form.
+- **Sub-millisecond `expiresIn`** passes `isPositive()` but truncates via
+  `toMillis()` to a stillborn 201 key (`expires_at = now()`); guard
+  `toMillis() >= 1`.
+- **Test polish:** operator `last_used_at` test targets its row by
+  `order by id desc` rather than the returned key id; no operator-side
+  not-on-401 stamp assertion; `atCapBodyPassesThrough` doesn't pin chain
+  execution (assert the chain's content type); forward timing assertions
+  tolerate <2s stalls (widen to 5s at first flake).
+- **Credentialed calls to unprotected routes** (a merchant key hitting the
+  simulator) consume tenant quota — matches the letter of "unauthenticated
+  passes through"; recorded as intended behavior.
+- **Test fixtures:** `operatorAuth()` / `createMerchantAndGetKey()` are
+  copy-pasted across six-plus classes; extract a shared fixture before the
+  next milestone.
+- **Spec-to-plan fidelity:** two spec-enumerated tests (the exact
+  `expires_at = now()` boundary; a fault-injected stamp failure) were
+  dropped at plan time without note — the stamp-failure `catch` path is
+  untested by decision. Carry spec test lists verbatim or record drops.
+
