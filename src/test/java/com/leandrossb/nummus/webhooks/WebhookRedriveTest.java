@@ -2,6 +2,7 @@ package com.leandrossb.nummus.webhooks;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -106,5 +107,15 @@ class WebhookRedriveTest extends IntegrationTestBase {
     mockMvc.perform(post("/v1/webhook-deliveries/" + UUID.randomUUID() + "/redrive")
             .header("Authorization", "Bearer " + f[0]).header(KEY, UUID.randomUUID().toString()))
         .andExpect(status().isNotFound()); // unknown
+  }
+
+  @Test
+  void keylessRedriveIsUnauthorizedBeforeIdempotency() throws Exception {
+    String[] f = merchantWithTerminalDelivery();
+    // No Authorization and no Idempotency-Key: the auth filter's 401 must
+    // win over the idempotency filter's 400 — the route is merchant-protected.
+    mockMvc.perform(post("/v1/webhook-deliveries/" + f[2] + "/redrive"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(header().exists("WWW-Authenticate"));
   }
 }
