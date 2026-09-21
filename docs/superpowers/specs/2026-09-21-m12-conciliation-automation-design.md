@@ -10,10 +10,10 @@ Close the last open M6-era product thread: settlement-report re-ingest becomes s
 ## Product decisions (locked)
 
 1. **Operator webhooks ride the NULL-merchant namespace.** Operator endpoints are rows in `webhooks.webhook_endpoint` with `merchant_public_id = NULL` — the same namespace trick `idempotency_keys` has used since M7. One table, one delivery worker, one retry policy, one URL policy, one retention job; merchant-scoped queries never see operator rows and vice versa.
-2. **The scheduler is tumbling with persisted state.** A single row (`conciliation.ingest_state`) holds `last_window_end`; each tick ingests one window and advances the marker only on success. The window **start is self-healing**: `greatest(state.last_window_end, max(summary.to))` — a manual operator ingest that covered pending territory can never poison the schedule.
+2. **The scheduler is tumbling with persisted state.** A single row (`conciliation.ingest_state`) holds `last_window_end`; each tick ingests one window and advances the marker only on success. The window **start is self-healing**: `greatest(state.last_window_end, max(summary.to))` — a manual operator ingest that covered pending territory is never re-covered (no duplicate coverage, no second digest event for the same window).
 3. **Window end holds back a lag buffer** (`nummus.conciliation.window-lag`, default `PT30S`) — the M6 skew lesson: `settled_at` (JVM clock) and the simulator's `updated_at` (DB clock) can straddle a boundary by ~5s, and under tumbling windows a straddle would otherwise create a permanent spurious MISSING pair that no re-ingest heals.
 4. **Alerting is a report digest, emitted on any OPEN ingest** — scheduled or manual, one code path. One event per OPEN report: counts and ids only, no amounts, no per-line push.
-5. **Empty windows skip-and-hold:** a window with zero lines on both sides writes no report and does not advance state — a quiet system generates no report spam; the window grows until something settles.
+5. **Empty windows write no report:** a window with zero lines on both sides persists nothing but still advances the marker — a quiet system generates no report spam and the windows stay tight.
 
 ## Operator webhook endpoints
 
@@ -42,18 +42,18 @@ The seed default on `merchant_public_id` was migration-era backfill (V10); both 
 - `POST /v1/operator/webhook-endpoints` — `{url, eventTypes}`; `WebhookUrlPolicy` enforced at registration (400 problem+json naming the violated rule); response carries the endpoint and its **secret exactly once** (same show-once mechanics as merchant endpoints and API keys).
 - `GET /v1/operator/webhook-endpoints` — list, prefix only.
 - `DELETE /v1/operator/webhook-endpoints/{id}` — soft delete (`status = 'DELETED'`); delivery history survives.
-- **M10 parity for the operator namespace:** `GET /v1/operator/webhook-endpoints/{id}/deliveries?status=&after=&limit=` (array body, `Next-Cursor` response header when more pages exist, limit bounds 1–100, unknown cursor → empty page) and `POST /v1/operator/webhook-endpoints/{id}/deliveries/{deliveryId}/redrive` (`@Idempotent`, 202, fresh retry cycle).
+- **M10 parity for the operator namespace:** `GET /v1/operator/webhook-endpoints/{id}/deliveries?status=&after=&limit=` (array body, `Next-Cursor` response header when more pages exist, limit bounds 1–100, unknown cursor → empty page) and `POST /v1/operator/webhook-deliveries/{id}/redrive` (`@Idempotent`, 202, fresh retry cycle — mirroring the shipped merchant route shape).
 
 Registration, listing, and delete flow through the existing `WebhookEndpointsService` with a NULL-merchant variant — one policy, one store, one worker; no parallel service.
 
 ## Outbox generalization and the divergence event
 
-**Audience at fan-out.** Write-time fan-out (event row + per-endpoint delivery rows in the caller's transaction, unique `(event_id, endpoint_id)`) gains an audience dimension:
+**Audience at fan-out — and a leak this closes.** Recon found that today's fan-out is **unscoped**: `insertEvent` cross-joins every ACTIVE endpoint, so a `payment_intent.settled` event for one merchant creates deliveries to every other merchant's matching endpoints — a latent cross-tenant delivery leak from the single-merchant M5 era that M7's scoping never revisited (registration and listing are scoped; delivery is not). M12 fixes it as part of generalizing the audience:
 
-- merchant-audience events → ACTIVE endpoints `where merchant_public_id = :id` (today's behavior, untouched);
+- merchant-audience events → ACTIVE endpoints `where merchant_public_id = <the event's merchant>`;
 - operator-audience events → ACTIVE endpoints `where merchant_public_id is null`.
 
-Both honor the endpoint's `event_types` filter. The delivery worker, signature scheme (`t=` timestamp, per-endpoint secret), bounded retries with backoff, delivery-time URL revalidation, no-redirect rule, retention pruning, and cursor pagination apply to both namespaces unchanged — the worker resolves endpoints through the delivery row, so it needs no audience awareness.
+One mechanism serves both: the audience is a nullable merchant id, matched with `merchant_public_id is not distinct from :audience`. `IntentLifecycleEvent` gains the merchant id (every publish site in `PaymentsServiceImpl` already has it in scope), and the cross-tenant fix is pinned by test: two merchants' endpoints, one settles — only the owner's endpoint receives a delivery row. Both audiences honor the endpoint's `event_types` filter. The delivery worker, signature scheme (`t=` timestamp, per-endpoint secret), bounded retries with backoff, delivery-time URL revalidation, no-redirect rule, retention pruning, and cursor pagination apply to both namespaces unchanged — the worker resolves endpoints through the delivery row, so it needs no audience awareness.
 
 **The event.** Type `conciliation.report_open`, emitted by `ConciliationService.ingest` inside its transaction whenever the summary lands `OPEN` (any trigger — the manual operator POST emits too; one code path). A `CONCILED` ingest emits nothing.
 
@@ -75,10 +75,10 @@ Both honor the endpoint's `event_types` filter. The delivery worker, signature s
 
 `conciliation.application.ConciliationWorker` — the same single-process `fixedDelay` discipline as the delivery and retention workers. Each tick is one transaction:
 
-1. **Start:** `greatest(state.last_window_end, (select max(to) from conciliation report summaries))` — self-healing against manual ingests that covered pending territory; the duplicate-lines guard becomes unreachable from the scheduled path.
+1. **Start:** `greatest(state.last_window_end, (select max(period_to) from conciliation.settlement_report))` — self-healing against manual ingests that covered pending territory: they are never re-covered, so no duplicate coverage and no second digest for the same window.
 2. **End:** `now() - window-lag` (the DB clock, via SQL), so the boundary sits outside the M6 skew zone. If `end <= start` the tick is a no-op.
-3. **Fetch and match** through the existing `ConciliationService.ingest` path — one code path for manual and scheduled.
-4. **Empty window (zero lines both sides):** no report row, state unchanged — skip-and-hold.
+3. **Fetch and match** through the same fetch-and-match the manual path uses — one code path for manual and scheduled ingestion.
+4. **Empty window (zero lines both sides):** no report row is written; the marker still advances — nothing was missed, the windows stay tight.
 5. **Success:** report (+ digest event if OPEN) and `state.last_window_end = end` commit together. **Failure:** everything rolls back; the same window retries next tick, warn-logged.
 
 **Config** (`nummus.conciliation.*`): `poll-delay-ms` (default `300000`), `initial-delay-ms` (default `60000`), `window-lag` (default `PT30S`). Test contexts pin the two delays to 3600000 in `IntegrationTestBase`, exactly as the webhook workers are pinned — no test context ever runs a scheduled ingest.
@@ -102,8 +102,8 @@ Both honor the endpoint's `event_types` filter. The delivery worker, signature s
 
 1. **Schema/roles:** `merchant_public_id` nullable, no default; `ingest_state` single-row constrained and seeded; `nummus_app` holds the new insert/update on `ingest_state` and existing endpoint grants cover NULL-merchant rows.
 2. **Operator endpoint REST:** register (policy-400 on a private-IP URL, 201 with secret once, secret never repeated in list), soft delete; deliveries paginate with `Next-Cursor`; redrive 202 with a fresh retry cycle; **cross-namespace isolation** both directions (merchant sees nothing operator, operator listings see nothing merchant).
-3. **Publishing:** OPEN ingest via the manual POST → exactly one event + one delivery per ACTIVE operator endpoint honoring `event_types`; scheduled OPEN ingest → same; CONCILED ingest → no event; the event rows exist only alongside the committed report (transactional).
-4. **Scheduler (worker method invoked directly; delays pinned):** first tick starts from the seeded state; empty window → no report, state unchanged; success advances `last_window_end`; a manual ingest overlapping pending territory followed by a tick → no duplicate-lines throw, window starts after the manual report's `to`; window end respects the lag; a failing fetch rolls back report and state together.
+3. **Publishing:** OPEN ingest via the manual POST → exactly one event + one delivery per ACTIVE operator endpoint honoring `event_types`; scheduled OPEN ingest → same; CONCILED ingest → no event; the event rows exist only alongside the committed report (transactional). **Cross-tenant delivery isolation:** two merchants' endpoints, one settles — only the owner's endpoint receives a delivery row (the leak fix).
+4. **Scheduler (worker method invoked directly; delays pinned):** first tick starts from the seeded state; empty window → no report and the marker advances; success writes report + event + advance together; a manual ingest overlapping pending territory followed by a tick → the window starts after the manual report's `period_to` (no re-coverage); window end respects the lag; a failing fetch rolls back report and state together.
 
 Baseline at plan time: 297 tests, all green.
 
