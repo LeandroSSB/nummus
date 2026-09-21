@@ -57,7 +57,11 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
     if (rawKey == null || !rawKey.startsWith(PREFIX)) {
       return Optional.empty();
     }
-    return store.findActiveOperatorKeyByHash(MerchantsServiceImpl.sha256Hex(rawKey));
+    String keyHash = MerchantsServiceImpl.sha256Hex(rawKey);
+    Optional<ApiKey> key = store.findActiveOperatorKeyByHash(keyHash);
+    // Observability only: stamping is best-effort and never gates authentication.
+    key.ifPresent(k -> store.stampOperatorKeyLastUsed(keyHash));
+    return key;
   }
 
   @Override

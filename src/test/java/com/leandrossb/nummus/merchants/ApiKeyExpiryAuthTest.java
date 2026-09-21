@@ -123,6 +123,19 @@ class ApiKeyExpiryAuthTest extends IntegrationTestBase {
   }
 
   @Test
+  void operatorLastUsedAtIsStampedOnSuccess() throws Exception {
+    String operatorKey = "Bearer " + operatorKeys.create().secret();
+    mockMvc.perform(get("/v1/operator/api-keys").header("Authorization", operatorKey))
+        .andExpect(status().isOk());
+    try (Connection c = adminConnection(); Statement st = c.createStatement();
+        ResultSet rs = st.executeQuery("select last_used_at is not null as stamped "
+            + "from merchants.operator_key order by id desc limit 1")) {
+      Assertions.assertTrue(rs.next());
+      Assertions.assertTrue(rs.getBoolean("stamped"));
+    }
+  }
+
+  @Test
   void listingsExposeTheLifecycleColumns() throws Exception {
     String bearer = "Bearer " + createMerchantAndGetKey("Listed Merchant");
     String keyId = firstKeyId(bearer);
