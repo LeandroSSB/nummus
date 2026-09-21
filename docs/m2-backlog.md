@@ -358,3 +358,30 @@ operators). Known bounds, deliberate:
 - **Empty scheduled windows advance silently** — a quiet system leaves no
   trace beyond the marker; observability of tick health is log-only.
 
+## From the M12 review
+
+The whole-branch review found no production defect. Items it raised:
+
+- **A future-dated manual ingest stalls the scheduler silently.** The manual
+  POST validates only `from < to`; a typo'd `to` in the future makes the
+  self-healing start outrun the lagged now, and every tick no-ops without a
+  log line until wall clock passes it. Fast-follow: reject `to` beyond
+  `now + slack` on the manual route, or warn once when a no-op tick is
+  caused by `max(period_to)` being ahead of now.
+- **Failure-log polish:** a failed tick logs the cause at WARN then surfaces
+  a stackless `UnexpectedRollbackException` at ERROR (rollback and retry are
+  correct; the framing misleads). A `TransactionTemplate` around the window
+  body would make the swallow real.
+- **Test pins worth adding when the suites are next touched:** cross-catalog
+  event-type rejections (operator registering a payment type; merchant
+  registering `conciliation.report_open`); reverse-direction namespace
+  isolation; operator-side pagination bounds/unknown-cursor (the controller
+  mirrors the merchant one — extract a shared helper if a third copy
+  appears).
+- **Spec sketch alignment:** the M12 spec's event sketch shows a nested
+  `window` object; the shipped envelope is flat `data.from`/`data.to` in the
+  standard wrapper. Align the sketch next time the spec is touched.
+- **V15 grants `insert` on `conciliation.ingest_state` to `nummus_app` but
+  the app only UPDATEs** (the migration seeds the single row; the check
+  constraint forbids a second). Harmless least-privilege excess.
+
