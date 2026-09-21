@@ -92,7 +92,7 @@ public class PaymentsServiceImpl implements PaymentsService {
       // its event for the terminal state — the loser returns it silently.
       if (repository.transitionToExpired(publicId)) {
         var expired = repository.findByPublicId(publicId).orElseThrow();
-        intentEvents.publish(toEvent(IntentEventTypes.EXPIRED, expired, null, null));
+        intentEvents.publish(toEvent(merchantPublicId, IntentEventTypes.EXPIRED, expired, null, null));
         return expired;
       }
       return repository.findByPublicId(publicId).orElseThrow();
@@ -108,7 +108,7 @@ public class PaymentsServiceImpl implements PaymentsService {
         // its event for the terminal state — the loser returns it silently.
         if (repository.transitionToFailed(publicId)) {
           var failed = repository.findByPublicId(publicId).orElseThrow();
-          intentEvents.publish(toEvent(IntentEventTypes.FAILED, failed, null, null));
+          intentEvents.publish(toEvent(merchantPublicId, IntentEventTypes.FAILED, failed, null, null));
           yield failed;
         }
         yield repository.findByPublicId(publicId).orElseThrow();
@@ -156,13 +156,14 @@ public class PaymentsServiceImpl implements PaymentsService {
       throw new ConcurrentSettlementException(intent.publicId());
     }
     var settled = repository.findByPublicId(intent.publicId()).orElseThrow();
-    intentEvents.publish(toEvent(IntentEventTypes.SETTLED, settled, breakdown.fee(), breakdown.net()));
+    intentEvents.publish(toEvent(merchantPublicId, IntentEventTypes.SETTLED, settled,
+        breakdown.fee(), breakdown.net()));
     return settled;
   }
 
-  private static IntentLifecycleEvent toEvent(String type, PaymentIntent intent,
+  private static IntentLifecycleEvent toEvent(UUID merchantPublicId, String type, PaymentIntent intent,
       Money fee, Money netAmount) {
-    return new IntentLifecycleEvent(type, intent.publicId(), intent.accountPublicId(),
+    return new IntentLifecycleEvent(merchantPublicId, type, intent.publicId(), intent.accountPublicId(),
         intent.amount(), intent.status().name(), intent.chargePublicId(),
         intent.settledAt(), intent.journalTransactionPublicId(), fee, netAmount);
   }

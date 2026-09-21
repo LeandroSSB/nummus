@@ -336,3 +336,52 @@ raised, none merge-blocking:
   dropped at plan time without note — the stamp-failure `catch` path is
   untested by decision. Carry spec test lists verbatim or record drops.
 
+## From the M12 design
+
+M12 automated conciliation: scheduled re-ingest over tumbling windows whose
+start self-heals past manual ingests and whose end holds back a 30s lag for
+the M6 clock skew, operator webhook endpoints riding the NULL-merchant
+namespace of the existing outbox, and a `conciliation.report_open` digest
+per OPEN report. Recon also closed a latent M5-era leak: event fan-out was
+unscoped, delivering one merchant's payment events to every merchant's
+endpoints — fan-out now binds to the event's merchant (or NULL for
+operators). Known bounds, deliberate:
+
+- **Single-process scheduler and delivery worker** — scale-out needs the
+  `SKIP LOCKED` treatment already documented for delivery and retention.
+- **Digest-only alerting** — per-line divergence stays behind the report
+  GET; no per-line push, no severity routing.
+- **The operator endpoint set is role-level shared** — no per-operator
+  ownership until audit attribution lands (the M8 bound carries).
+- **The lag is a property, not an SLA** — 30s of alert latency buys skew
+  safety; a real PSP adapter still owes the settlement-timestamp contract.
+- **Empty scheduled windows advance silently** — a quiet system leaves no
+  trace beyond the marker; observability of tick health is log-only.
+
+## From the M12 review
+
+The whole-branch review found no production defect. Items it raised:
+
+- **A future-dated manual ingest stalls the scheduler silently.** The manual
+  POST validates only `from < to`; a typo'd `to` in the future makes the
+  self-healing start outrun the lagged now, and every tick no-ops without a
+  log line until wall clock passes it. Fast-follow: reject `to` beyond
+  `now + slack` on the manual route, or warn once when a no-op tick is
+  caused by `max(period_to)` being ahead of now.
+- **Failure-log polish:** a failed tick logs the cause at WARN then surfaces
+  a stackless `UnexpectedRollbackException` at ERROR (rollback and retry are
+  correct; the framing misleads). A `TransactionTemplate` around the window
+  body would make the swallow real.
+- **Test pins worth adding when the suites are next touched:** cross-catalog
+  event-type rejections (operator registering a payment type; merchant
+  registering `conciliation.report_open`); reverse-direction namespace
+  isolation; operator-side pagination bounds/unknown-cursor (the controller
+  mirrors the merchant one — extract a shared helper if a third copy
+  appears).
+- **Spec sketch alignment:** the M12 spec's event sketch shows a nested
+  `window` object; the shipped envelope is flat `data.from`/`data.to` in the
+  standard wrapper. Align the sketch next time the spec is touched.
+- **V15 grants `insert` on `conciliation.ingest_state` to `nummus_app` but
+  the app only UPDATEs** (the migration seeds the single row; the check
+  constraint forbids a second). Harmless least-privilege excess.
+

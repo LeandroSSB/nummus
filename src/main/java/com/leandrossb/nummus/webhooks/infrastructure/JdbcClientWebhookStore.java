@@ -48,7 +48,8 @@ public class JdbcClientWebhookStore implements WebhookStore {
     return jdbc.sql("""
         select public_id, merchant_public_id, url, secret, event_types::text, status, created_at
         from webhooks.webhook_endpoint
-        where merchant_public_id = :merchantPublicId and status = 'ACTIVE'
+        -- null audience = the operator namespace
+        where merchant_public_id is not distinct from :merchantPublicId and status = 'ACTIVE'
         order by created_at, id
         """)
         .param("merchantPublicId", merchantPublicId)
@@ -60,7 +61,9 @@ public class JdbcClientWebhookStore implements WebhookStore {
     return jdbc.sql("""
         select public_id, merchant_public_id, url, secret, event_types::text, status, created_at
         from webhooks.webhook_endpoint
-        where merchant_public_id = :merchantPublicId and public_id = :publicId and status = 'ACTIVE'
+        -- null audience = the operator namespace
+        where merchant_public_id is not distinct from :merchantPublicId
+          and public_id = :publicId and status = 'ACTIVE'
         """)
         .param("merchantPublicId", merchantPublicId)
         .param("publicId", publicId)
@@ -71,14 +74,17 @@ public class JdbcClientWebhookStore implements WebhookStore {
   public boolean markEndpointDeleted(UUID merchantPublicId, UUID publicId) {
     return jdbc.sql("""
         update webhooks.webhook_endpoint set status = 'DELETED'
-        where merchant_public_id = :merchantPublicId and public_id = :publicId and status = 'ACTIVE'
+        -- null audience = the operator namespace
+        where merchant_public_id is not distinct from :merchantPublicId
+          and public_id = :publicId and status = 'ACTIVE'
         """)
         .param("merchantPublicId", merchantPublicId)
         .param("publicId", publicId).update() == 1;
   }
 
   @Override
-  public void insertEvent(UUID eventPublicId, String type, String payload, Instant occurredAt) {
+  public void insertEvent(UUID eventPublicId, UUID audienceMerchant, String type, String payload,
+      Instant occurredAt) {
     jdbc.sql("""
         insert into webhooks.webhook_event (public_id, type, payload, occurred_at)
         values (:publicId, :type, :payload, :occurredAt)
@@ -89,6 +95,9 @@ public class JdbcClientWebhookStore implements WebhookStore {
         .param("occurredAt", toOffsetDateTime(occurredAt))
         .update();
     // Write-time fan-out: subscription semantics are exact at the event instant.
+    // is not distinct from binds a NULL audience to the operator namespace
+    // (merchant_public_id is null) and a non-NULL one to the owning merchant —
+    // one predicate, both audiences; no endpoint ever sees a foreign event.
     jdbc.sql("""
         insert into webhooks.webhook_delivery (event_id, endpoint_id)
         select e.id, p.id
@@ -96,9 +105,11 @@ public class JdbcClientWebhookStore implements WebhookStore {
         cross join webhooks.webhook_endpoint p
         where e.public_id = :eventPublicId
           and p.status = 'ACTIVE'
+          and p.merchant_public_id is not distinct from :audienceMerchant
           and (jsonb_array_length(p.event_types) = 0 or p.event_types @> to_jsonb(:type))
         """)
         .param("eventPublicId", eventPublicId)
+        .param("audienceMerchant", audienceMerchant)
         .param("type", type)
         .update();
   }
@@ -167,7 +178,8 @@ public class JdbcClientWebhookStore implements WebhookStore {
         from webhooks.webhook_endpoint e
         where d.endpoint_id = e.id
           and d.public_id = :deliveryId
-          and e.merchant_public_id = :merchantPublicId
+          -- null audience = the operator namespace
+          and e.merchant_public_id is not distinct from :merchantPublicId
           and d.status = 'FAILED'
         """)
         .param("deliveryId", deliveryPublicId)
@@ -184,7 +196,8 @@ public class JdbcClientWebhookStore implements WebhookStore {
         from webhooks.webhook_delivery d
         join webhooks.webhook_event e on e.id = d.event_id
         join webhooks.webhook_endpoint p on p.id = d.endpoint_id
-        where p.merchant_public_id = :merchantPublicId
+        -- null audience = the operator namespace
+        where p.merchant_public_id is not distinct from :merchantPublicId
           and p.public_id = :endpointPublicId
           and (:status::text is null or d.status = :status)
           and (:after::uuid is null

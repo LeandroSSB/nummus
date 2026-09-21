@@ -35,6 +35,9 @@ public abstract class IntegrationTestBase {
     // No integration-test context may run the delivery scheduler against the network.
     registry.add("nummus.webhooks.poll-delay-ms", () -> "3600000");
     registry.add("nummus.webhooks.initial-delay-ms", () -> "3600000");
+    // Nor the conciliation scheduler: ConciliationWorkerTest drives the tick by hand.
+    registry.add("nummus.conciliation.poll-delay-ms", () -> "3600000");
+    registry.add("nummus.conciliation.initial-delay-ms", () -> "3600000");
   }
 
   /** Superuser connection — the Flyway/owner role. Use for raw-SQL probes. */

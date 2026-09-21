@@ -42,7 +42,7 @@ public class OutboxIntentLifecycleEvents implements IntentLifecycleEvents {
             event.status(), event.chargePublicId(),
             event.settledAt(), event.journalTransactionPublicId(),
             toMoneyString(event.fee()), toMoneyString(event.netAmount()))));
-    store.insertEvent(eventId, event.type(), payload, Instant.now());
+    store.insertEvent(eventId, event.merchantPublicId(), event.type(), payload, Instant.now());
   }
 
   /**
