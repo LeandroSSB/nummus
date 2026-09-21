@@ -6,6 +6,8 @@ import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.merchants.interfaces.dto.ApiKeyResponse;
 import com.leandrossb.nummus.merchants.interfaces.dto.CreateKeyRequest;
 import com.leandrossb.nummus.merchants.interfaces.dto.CreateKeyResponse;
+import com.leandrossb.nummus.merchants.interfaces.dto.RotateKeyRequest;
+import com.leandrossb.nummus.merchants.interfaces.dto.RotateKeyResponse;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
@@ -43,6 +45,17 @@ class OperatorKeysController {
   @GetMapping
   List<ApiKeyResponse> listKeys(AuthenticatedOperator operator) {
     return operatorKeys.list().stream().map(ApiKeyResponse::from).toList();
+  }
+
+  @Idempotent
+  @PostMapping("/current/rotate")
+  ResponseEntity<RotateKeyResponse> rotateKey(AuthenticatedOperator operator,
+      @RequestBody(required = false) RotateKeyRequest request) {
+    var rotated = operatorKeys.rotate(operator.keyPublicId(),
+        request == null ? null : request.expiresIn());
+    return ResponseEntity
+        .created(URI.create("/v1/operator/api-keys/" + rotated.issued().key().publicId()))
+        .body(RotateKeyResponse.from(rotated));
   }
 
   @DeleteMapping("/{id}")

@@ -16,4 +16,9 @@ public interface ApiKeysService {
 
   /** @throws UnknownApiKeyException when the key is absent or not the merchant's. */
   void revoke(UUID merchantPublicId, UUID keyPublicId);
+
+  /** Mints a replacement for the calling key; the old key lives until its
+   *  grace end. @throws UnknownApiKeyException when the calling key vanished
+   *  (a concurrent revoke raced the rotation). */
+  RotatedApiKey rotate(UUID merchantPublicId, UUID keyPublicId, Duration expiresIn);
 }

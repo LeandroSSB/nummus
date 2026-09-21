@@ -126,6 +126,39 @@ public class JdbcClientMerchantStore implements MerchantStore {
   }
 
   @Override
+  public Optional<Instant> retireApiKey(UUID merchantPublicId, UUID keyPublicId, Duration grace) {
+    return jdbc.sql("""
+        update merchants.api_key k set expires_at =
+            least(coalesce(k.expires_at, 'infinity'::timestamptz),
+                  now() + make_interval(secs => :graceSeconds))
+        from merchants.merchant m
+        where k.merchant_id = m.id and m.public_id = :merchantPublicId
+          and k.public_id = :keyPublicId and k.status = 'ACTIVE'
+        returning k.expires_at
+        """)
+        .param("merchantPublicId", merchantPublicId)
+        .param("keyPublicId", keyPublicId)
+        .param("graceSeconds", grace.toMillis() / 1000.0)
+        .query((rs, i) -> rs.getObject("expires_at", OffsetDateTime.class).toInstant())
+        .optional();
+  }
+
+  @Override
+  public Optional<Instant> retireOperatorKey(UUID keyPublicId, Duration grace) {
+    return jdbc.sql("""
+        update merchants.operator_key set expires_at =
+            least(coalesce(expires_at, 'infinity'::timestamptz),
+                  now() + make_interval(secs => :graceSeconds))
+        where public_id = :keyPublicId and status = 'ACTIVE'
+        returning expires_at
+        """)
+        .param("keyPublicId", keyPublicId)
+        .param("graceSeconds", grace.toMillis() / 1000.0)
+        .query((rs, i) -> rs.getObject("expires_at", OffsetDateTime.class).toInstant())
+        .optional();
+  }
+
+  @Override
   public Optional<ResolvedMerchantKey> findMerchantByKeyHash(String keyHash) {
     return jdbc.sql("""
         select m.public_id, m.name, m.created_at, k.public_id as key_public_id

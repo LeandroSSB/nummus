@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
@@ -25,12 +26,14 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
 
   private final MerchantStore store;
   private final OperatorBootstrapProperties bootstrapProperties;
+  private final ApiKeyProperties apiKeyProperties;
   private final SecureRandom random = new SecureRandom();
 
   public OperatorKeysServiceImpl(MerchantStore store,
-      OperatorBootstrapProperties bootstrapProperties) {
+      OperatorBootstrapProperties bootstrapProperties, ApiKeyProperties apiKeyProperties) {
     this.store = store;
     this.bootstrapProperties = bootstrapProperties;
+    this.apiKeyProperties = apiKeyProperties;
   }
 
   @Override
@@ -51,6 +54,16 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
     if (!store.revokeOperatorKey(keyPublicId)) {
       throw new UnknownApiKeyException(keyPublicId);
     }
+  }
+
+  @Override
+  @Transactional
+  public RotatedApiKey rotate(UUID keyPublicId, Duration expiresIn) {
+    IssuedApiKey issued = mint(expiresIn);
+    Instant oldKeyExpiresAt = store.retireOperatorKey(keyPublicId,
+            apiKeyProperties.rotationGrace())
+        .orElseThrow(() -> new UnknownApiKeyException(keyPublicId));
+    return new RotatedApiKey(issued, oldKeyExpiresAt);
   }
 
   @Override

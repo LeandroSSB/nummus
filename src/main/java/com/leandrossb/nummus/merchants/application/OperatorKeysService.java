@@ -18,6 +18,10 @@ public interface OperatorKeysService {
   /** @throws UnknownApiKeyException when the key is absent or already revoked. */
   void revoke(UUID keyPublicId);
 
+  /** Mints a replacement for the calling operator key; the old key lives
+   *  until its grace end. */
+  RotatedApiKey rotate(UUID keyPublicId, Duration expiresIn);
+
   /** The ACTIVE operator key for a raw secret, if any. */
   Optional<ApiKey> findByRawKey(String rawKey);
 

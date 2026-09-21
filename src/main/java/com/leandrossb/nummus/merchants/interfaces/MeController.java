@@ -9,6 +9,8 @@ import com.leandrossb.nummus.merchants.interfaces.dto.ApiKeyResponse;
 import com.leandrossb.nummus.merchants.interfaces.dto.CreateKeyRequest;
 import com.leandrossb.nummus.merchants.interfaces.dto.CreateKeyResponse;
 import com.leandrossb.nummus.merchants.interfaces.dto.MerchantResponse;
+import com.leandrossb.nummus.merchants.interfaces.dto.RotateKeyRequest;
+import com.leandrossb.nummus.merchants.interfaces.dto.RotateKeyResponse;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
@@ -54,6 +56,17 @@ class MeController {
   @GetMapping("/v1/me/api-keys")
   List<ApiKeyResponse> listKeys(AuthenticatedMerchant merchant) {
     return keys.list(merchant.merchantPublicId()).stream().map(ApiKeyResponse::from).toList();
+  }
+
+  @Idempotent
+  @PostMapping("/v1/me/api-keys/current/rotate")
+  ResponseEntity<RotateKeyResponse> rotateKey(AuthenticatedMerchant merchant,
+      @RequestBody(required = false) RotateKeyRequest request) {
+    var rotated = keys.rotate(merchant.merchantPublicId(), merchant.keyPublicId(),
+        request == null ? null : request.expiresIn());
+    return ResponseEntity
+        .created(URI.create("/v1/me/api-keys/" + rotated.issued().key().publicId()))
+        .body(RotateKeyResponse.from(rotated));
   }
 
   @DeleteMapping("/v1/me/api-keys/{id}")
