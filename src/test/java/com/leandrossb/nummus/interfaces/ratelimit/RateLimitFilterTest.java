@@ -31,9 +31,9 @@ class RateLimitFilterTest extends IntegrationTestBase {
   @DynamicPropertySource
   static void tightBuckets(DynamicPropertyRegistry registry) {
     registry.add("nummus.ratelimit.merchant-capacity", () -> "2");
-    registry.add("nummus.ratelimit.merchant-refill-per-second", () -> "200");
+    registry.add("nummus.ratelimit.merchant-refill-per-second", () -> "1");
     registry.add("nummus.ratelimit.operator-capacity", () -> "3");
-    registry.add("nummus.ratelimit.operator-refill-per-second", () -> "200");
+    registry.add("nummus.ratelimit.operator-refill-per-second", () -> "1");
   }
 
   @Autowired
@@ -74,8 +74,8 @@ class RateLimitFilterTest extends IntegrationTestBase {
     mockMvc.perform(get("/v1/me").header("Authorization", bearer)).andExpect(status().isOk());
     mockMvc.perform(get("/v1/me").header("Authorization", bearer))
         .andExpect(status().isTooManyRequests());
-    // At 200 tokens/s, ~60ms restores well over one token.
-    Thread.sleep(60);
+    // At 1 token/s, 2.5s restores the drained bucket (capped at capacity).
+    Thread.sleep(2500);
     mockMvc.perform(get("/v1/me").header("Authorization", bearer)).andExpect(status().isOk());
   }
 
