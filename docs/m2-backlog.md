@@ -276,3 +276,8 @@ Known bounds, deliberate:
   as `after` resolves and simply skips ahead within the caller's own
   rows; only unknown or pruned cursors yield an empty page. The listing
   stays merchant-scoped either way — no cross-tenant data.
+- **DNS resolution is unbounded and unpinned.** Policy checks resolve
+  per call with no timeout beyond the OS resolver; a blackholing
+  authoritative NS can stall delivery ticks, and an attacker's DNS may
+  answer differently between the pre-dial check and the POST within one
+  attempt. Availability bound, accepted for a single-worker deployment.
