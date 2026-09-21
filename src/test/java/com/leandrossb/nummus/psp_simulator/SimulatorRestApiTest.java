@@ -2,7 +2,6 @@ package com.leandrossb.nummus.psp_simulator;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -91,10 +90,18 @@ class SimulatorRestApiTest extends IntegrationTestBase {
         .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')].amount", paid.publicId()))
             .value(8.0000));
 
+    // Settled charges are timestamped now, so none of this test's charges can
+    // fall in the window that ends 30 seconds ago. Asserted per charge rather
+    // than as a globally empty report because other tests create charges too.
     mockMvc.perform(get("/simulator/settlement-report")
             .param("from", from.toString())
             .param("to", Instant.now().minusSeconds(30).toString()))
         .andExpect(status().isOk())
-        .andExpect(content().json("[]"));
+        .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')]", paid.publicId()))
+            .doesNotExist())
+        .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')]", pending.publicId()))
+            .doesNotExist())
+        .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')]", failed.publicId()))
+            .doesNotExist());
   }
 }
