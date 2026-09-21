@@ -9,6 +9,7 @@ import com.leandrossb.nummus.webhooks.application.WebhookStore;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +52,20 @@ class WebhookRetentionTest extends IntegrationTestBase {
     disabled.prune();
 
     assertEquals(1, count(endpointId, "SUCCEEDED"));
+  }
+
+  @Test
+  void pruneIteratesBatchesUntilExhausted() throws Exception {
+    String endpointId = UUID.randomUUID().toString();
+    seedEndpoint(endpointId);
+    seed(endpointId, "SUCCEEDED", "40 days");
+    seed(endpointId, "SUCCEEDED", "40 days");
+    seed(endpointId, "SUCCEEDED", "40 days");
+
+    int deleted = store.pruneSucceededBefore(Instant.now().minus(Duration.ofDays(30)), 2);
+
+    assertEquals(3, deleted);
+    assertEquals(0, count(endpointId, "SUCCEEDED"));
   }
 
   private void seedEndpoint(String endpointId) throws Exception {

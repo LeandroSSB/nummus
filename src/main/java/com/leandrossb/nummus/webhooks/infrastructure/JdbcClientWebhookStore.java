@@ -221,7 +221,7 @@ public class JdbcClientWebhookStore implements WebhookStore {
           .param("batch", batch)
           .update();
       total += deleted;
-    } while (deleted == batch);
+    } while (deleted > 0);
     return total;
   }
 
