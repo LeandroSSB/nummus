@@ -9,8 +9,9 @@ public interface MerchantsService {
 
   Merchant create(String name, FeeSchedule fee);
 
-  /** Resolves a raw {@code nummus_sk_…} key to its merchant; empty for unknown or revoked keys. */
-  Optional<Merchant> findByApiKey(String rawKey);
+  /** Resolves a raw {@code nummus_sk_…} key to its merchant and key; empty for
+   *  unknown, revoked, or expired keys. */
+  Optional<ResolvedMerchantKey> findByApiKey(String rawKey);
 
   Optional<Merchant> find(UUID publicId);
 

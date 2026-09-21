@@ -37,7 +37,8 @@ class MerchantStoreTest extends IntegrationTestBase {
 
     var resolved = merchants.findByApiKey(issued.secret());
     assertTrue(resolved.isPresent());
-    assertEquals(merchant.publicId(), resolved.get().publicId());
+    assertEquals(merchant.publicId(), resolved.get().merchant().publicId());
+    assertEquals(issued.key().publicId(), resolved.get().keyPublicId());
 
     // Revoked keys stop resolving; other keys are unaffected.
     var second = keys.create(merchant.publicId());

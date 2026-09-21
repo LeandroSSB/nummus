@@ -29,8 +29,14 @@ public interface MerchantStore {
   /** @return false when the key is absent or not the merchant's. */
   boolean revokeApiKey(UUID merchantPublicId, UUID keyPublicId);
 
-  /** The merchant owning the ACTIVE key with this hash. */
-  Optional<Merchant> findMerchantByKeyHash(String keyHash);
+  /** The merchant and key behind the ACTIVE, unexpired key with this hash. */
+  Optional<ResolvedMerchantKey> findMerchantByKeyHash(String keyHash);
+
+  /** Best-effort observability stamp; never gates authentication. */
+  void stampApiKeyLastUsed(String keyHash);
+
+  /** Best-effort observability stamp; never gates authentication. */
+  void stampOperatorKeyLastUsed(String keyHash);
 
   /** Stores an operator key hash + prefix; the secret never reaches the store. */
   void insertOperatorKey(String keyHash, String prefix);

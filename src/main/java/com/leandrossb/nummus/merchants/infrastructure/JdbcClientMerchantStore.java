@@ -2,19 +2,26 @@ package com.leandrossb.nummus.merchants.infrastructure;
 
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantStore;
+import com.leandrossb.nummus.merchants.application.ResolvedMerchantKey;
 import com.leandrossb.nummus.merchants.domain.ApiKey;
 import com.leandrossb.nummus.merchants.domain.Merchant;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcClientMerchantStore implements MerchantStore {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(JdbcClientMerchantStore.class);
 
   private final JdbcClient jdbc;
 
@@ -83,7 +90,7 @@ public class JdbcClientMerchantStore implements MerchantStore {
   @Override
   public Optional<ApiKey> findActiveKeyByHash(String keyHash) {
     return jdbc.sql("""
-        select public_id, prefix, status, created_at from merchants.api_key
+        select public_id, prefix, status, created_at, expires_at, last_used_at from merchants.api_key
         where key_hash = :keyHash and status = 'ACTIVE'
         """)
         .param("keyHash", keyHash)
@@ -93,7 +100,7 @@ public class JdbcClientMerchantStore implements MerchantStore {
   @Override
   public List<ApiKey> listKeys(UUID merchantPublicId) {
     return jdbc.sql("""
-        select k.public_id, k.prefix, k.status, k.created_at
+        select k.public_id, k.prefix, k.status, k.created_at, k.expires_at, k.last_used_at
         from merchants.api_key k join merchants.merchant m on m.id = k.merchant_id
         where m.public_id = :merchantPublicId order by k.id desc
         """)
@@ -115,14 +122,36 @@ public class JdbcClientMerchantStore implements MerchantStore {
   }
 
   @Override
-  public Optional<Merchant> findMerchantByKeyHash(String keyHash) {
+  public Optional<ResolvedMerchantKey> findMerchantByKeyHash(String keyHash) {
     return jdbc.sql("""
-        select m.public_id, m.name, m.created_at
+        select m.public_id, m.name, m.created_at, k.public_id as key_public_id
         from merchants.merchant m join merchants.api_key k on k.merchant_id = m.id
         where k.key_hash = :keyHash and k.status = 'ACTIVE'
+          and (k.expires_at is null or k.expires_at > now())
         """)
         .param("keyHash", keyHash)
-        .query((rs, i) -> mapMerchant(rs)).optional();
+        .query((rs, i) -> new ResolvedMerchantKey(mapMerchant(rs),
+            rs.getObject("key_public_id", UUID.class))).optional();
+  }
+
+  @Override
+  public void stampApiKeyLastUsed(String keyHash) {
+    try {
+      jdbc.sql("update merchants.api_key set last_used_at = now() where key_hash = :keyHash")
+          .param("keyHash", keyHash).update();
+    } catch (DataAccessException e) {
+      LOGGER.warn("failed to stamp api key last_used_at", e);
+    }
+  }
+
+  @Override
+  public void stampOperatorKeyLastUsed(String keyHash) {
+    try {
+      jdbc.sql("update merchants.operator_key set last_used_at = now() where key_hash = :keyHash")
+          .param("keyHash", keyHash).update();
+    } catch (DataAccessException e) {
+      LOGGER.warn("failed to stamp operator key last_used_at", e);
+    }
   }
 
   @Override
@@ -140,8 +169,10 @@ public class JdbcClientMerchantStore implements MerchantStore {
   @Override
   public Optional<ApiKey> findActiveOperatorKeyByHash(String keyHash) {
     return jdbc.sql("""
-        select public_id, prefix, status, created_at from merchants.operator_key
+        select public_id, prefix, status, created_at, expires_at, last_used_at
+        from merchants.operator_key
         where key_hash = :keyHash and status = 'ACTIVE'
+          and (expires_at is null or expires_at > now())
         """)
         .param("keyHash", keyHash)
         .query((rs, i) -> mapKey(rs)).optional();
@@ -150,7 +181,8 @@ public class JdbcClientMerchantStore implements MerchantStore {
   @Override
   public List<ApiKey> listOperatorKeys() {
     return jdbc.sql("""
-        select public_id, prefix, status, created_at from merchants.operator_key
+        select public_id, prefix, status, created_at, expires_at, last_used_at
+        from merchants.operator_key
         order by id desc
         """)
         .query((rs, i) -> mapKey(rs)).list();
@@ -181,7 +213,13 @@ public class JdbcClientMerchantStore implements MerchantStore {
 
   private static ApiKey mapKey(ResultSet rs) throws SQLException {
     return new ApiKey(rs.getObject("public_id", UUID.class), rs.getString("prefix"),
-        rs.getString("status"), rs.getObject("created_at", OffsetDateTime.class).toInstant());
+        rs.getString("status"), rs.getObject("created_at", OffsetDateTime.class).toInstant(),
+        instantOrNull(rs, "expires_at"), instantOrNull(rs, "last_used_at"));
+  }
+
+  private static Instant instantOrNull(ResultSet rs, String column) throws SQLException {
+    OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);
+    return value == null ? null : value.toInstant();
   }
 
   private static OffsetDateTime toOffsetDateTime(java.time.Instant instant) {
