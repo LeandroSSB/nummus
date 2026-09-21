@@ -281,3 +281,25 @@ Known bounds, deliberate:
   authoritative NS can stall delivery ticks, and an attacker's DNS may
   answer differently between the pre-dial check and the POST within one
   attempt. Availability bound, accepted for a single-worker deployment.
+
+## From the M11 design
+
+M11 hardened the API surface: per-tenant token-bucket rate limiting between
+authentication and body buffering, request-body caps at the idempotency
+filter, and key lifecycle — mint-time expiry, best-effort `last_used_at`,
+and self-serve rotation that retires the calling key at
+`least(existing, now + grace)`. Known bounds, deliberate:
+
+- **Limiter state is per-process.** A restart resets buckets (full burst
+  quota after boot); a second instance enforces independently — the same
+  single-process stance as the delivery worker and retention prune.
+- **No per-IP throttling; unauthenticated routes are unthrottled.** The
+  simulator stays open by design; an unauthenticated flood is an
+  edge/deployment concern.
+- **No per-merchant limit overrides** — global properties only.
+- **`last_used_at` is one write per authenticated request.** The throttled
+  async flush stays deferred.
+- **Buckets are never evicted** — memory bounded by tenant count.
+- **The cap guards the buffered merchant-write path only.** Simulator
+  writes stay uncapped (non-production harness).
+- **No per-route limit classes** — one bucket per tenant.
