@@ -9,6 +9,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Ingest-and-match: fetches the network report and the internal settlements,
  * matches them purely, and persists report + lines immutably — one transaction.
+ * An OPEN tally pushes its report-open digest through the same transaction, so
+ * the alert commits with the report or not at all.
  */
 @Service
 public class ConciliationService {
@@ -16,12 +18,14 @@ public class ConciliationService {
   private final SettlementReportSource reportSource;
   private final PaymentsService payments;
   private final ConciliationStore store;
+  private final ConciliationAlerts alerts;
 
   public ConciliationService(SettlementReportSource reportSource, PaymentsService payments,
-      ConciliationStore store) {
+      ConciliationStore store, ConciliationAlerts alerts) {
     this.reportSource = reportSource;
     this.payments = payments;
     this.store = store;
+    this.alerts = alerts;
   }
 
   @Transactional
@@ -37,6 +41,10 @@ public class ConciliationService {
         outcome.summary().amountMismatched(), outcome.summary().missingInternal(),
         outcome.summary().missingExternal(), Instant.now());
     store.insert(summary, outcome.lines());
+    if ("OPEN".equals(summary.status())) {
+      alerts.reportOpen(summary.publicId(), from, to, summary.matched(),
+          summary.amountMismatched(), summary.missingInternal(), summary.missingExternal());
+    }
     return summary;
   }
 }
