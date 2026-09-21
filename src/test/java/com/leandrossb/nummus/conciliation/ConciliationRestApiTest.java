@@ -58,7 +58,7 @@ class ConciliationRestApiTest extends IntegrationTestBase {
   /** One operator key per test — conciliation is operator-gated. */
   private String operatorAuth() {
     if (operatorAuth == null) {
-      operatorAuth = "Bearer " + operatorKeys.create().secret();
+      operatorAuth = "Bearer " + operatorKeys.create(null).secret();
     }
     return operatorAuth;
   }

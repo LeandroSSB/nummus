@@ -30,7 +30,7 @@ class OperatorAuthRestApiTest extends IntegrationTestBase {
   private OperatorKeysService operatorKeys;
 
   private String operatorKey() {
-    return operatorKeys.create().secret();
+    return operatorKeys.create(null).secret();
   }
 
   @Test
@@ -69,7 +69,7 @@ class OperatorAuthRestApiTest extends IntegrationTestBase {
         .andExpect(status().isOk());
     // A revoked key stops authenticating immediately: mint a fresh key, revoke
     // it over HTTP with the still-valid auth, then present the dead secret.
-    var revoked = operatorKeys.create();
+    var revoked = operatorKeys.create(null);
     mockMvc.perform(delete("/v1/operator/api-keys/" + revoked.key().publicId())
             .header("Authorization", auth))
         .andExpect(status().isNoContent());

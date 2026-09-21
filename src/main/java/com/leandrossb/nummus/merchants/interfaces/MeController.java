@@ -6,6 +6,7 @@ import com.leandrossb.nummus.merchants.application.ApiKeysService;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.merchants.application.UnknownMerchantException;
 import com.leandrossb.nummus.merchants.interfaces.dto.ApiKeyResponse;
+import com.leandrossb.nummus.merchants.interfaces.dto.CreateKeyRequest;
 import com.leandrossb.nummus.merchants.interfaces.dto.CreateKeyResponse;
 import com.leandrossb.nummus.merchants.interfaces.dto.MerchantResponse;
 import java.net.URI;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Self-serve surface: the authenticated merchant manages its own keys. */
@@ -40,8 +42,10 @@ class MeController {
 
   @Idempotent
   @PostMapping("/v1/me/api-keys")
-  ResponseEntity<CreateKeyResponse> createKey(AuthenticatedMerchant merchant) {
-    var issued = keys.create(merchant.merchantPublicId());
+  ResponseEntity<CreateKeyResponse> createKey(AuthenticatedMerchant merchant,
+      @RequestBody(required = false) CreateKeyRequest request) {
+    var issued = keys.create(merchant.merchantPublicId(),
+        request == null ? null : request.expiresIn());
     return ResponseEntity
         .created(URI.create("/v1/me/api-keys/" + issued.key().publicId()))
         .body(CreateKeyResponse.from(issued));

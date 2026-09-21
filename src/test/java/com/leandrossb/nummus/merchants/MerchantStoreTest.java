@@ -29,7 +29,7 @@ class MerchantStoreTest extends IntegrationTestBase {
 
     // create() itself does not issue keys in this test's service shape — use the
     // controller-level creation in Task 3 for the bundled first key. Here: mint one.
-    IssuedApiKey issued = keys.create(merchant.publicId());
+    IssuedApiKey issued = keys.create(merchant.publicId(), null);
     assertTrue(issued.secret().startsWith("nummus_sk_"));
     assertEquals(43 + "nummus_sk_".length(), issued.secret().length());
     assertEquals(issued.key().prefix(), issued.secret().substring(0, 12));
@@ -41,7 +41,7 @@ class MerchantStoreTest extends IntegrationTestBase {
     assertEquals(issued.key().publicId(), resolved.get().keyPublicId());
 
     // Revoked keys stop resolving; other keys are unaffected.
-    var second = keys.create(merchant.publicId());
+    var second = keys.create(merchant.publicId(), null);
     keys.revoke(merchant.publicId(), issued.key().publicId());
     assertTrue(merchants.findByApiKey(issued.secret()).isEmpty());
     assertTrue(merchants.findByApiKey(second.secret()).isPresent());
@@ -57,8 +57,8 @@ class MerchantStoreTest extends IntegrationTestBase {
   @Test
   void secretsAreUniqueAndHashesAreStoredNotSecrets() throws Exception {
     var merchant = merchants.create("Hash Merchant", FeeSchedule.ZERO);
-    var issued = keys.create(merchant.publicId());
-    var another = keys.create(merchant.publicId());
+    var issued = keys.create(merchant.publicId(), null);
+    var another = keys.create(merchant.publicId(), null);
     assertNotEquals(issued.secret(), another.secret());
     try (var c = adminConnection(); var st = c.createStatement();
         var rs = st.executeQuery(

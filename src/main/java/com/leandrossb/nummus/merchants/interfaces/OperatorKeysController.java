@@ -4,6 +4,7 @@ import com.leandrossb.nummus.interfaces.auth.AuthenticatedOperator;
 import com.leandrossb.nummus.interfaces.idempotency.Idempotent;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.merchants.interfaces.dto.ApiKeyResponse;
+import com.leandrossb.nummus.merchants.interfaces.dto.CreateKeyRequest;
 import com.leandrossb.nummus.merchants.interfaces.dto.CreateKeyResponse;
 import java.net.URI;
 import java.util.List;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,8 +32,9 @@ class OperatorKeysController {
 
   @Idempotent
   @PostMapping
-  ResponseEntity<CreateKeyResponse> createKey(AuthenticatedOperator operator) {
-    var issued = operatorKeys.create();
+  ResponseEntity<CreateKeyResponse> createKey(AuthenticatedOperator operator,
+      @RequestBody(required = false) CreateKeyRequest request) {
+    var issued = operatorKeys.create(request == null ? null : request.expiresIn());
     return ResponseEntity
         .created(URI.create("/v1/operator/api-keys/" + issued.key().publicId()))
         .body(CreateKeyResponse.from(issued));

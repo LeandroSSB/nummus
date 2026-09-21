@@ -1,6 +1,7 @@
 package com.leandrossb.nummus.merchants.application;
 
 import com.leandrossb.nummus.merchants.domain.ApiKey;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -8,7 +9,9 @@ import java.util.UUID;
 /** Operator key lifecycle: issue, list, revoke, and the one-time bootstrap. */
 public interface OperatorKeysService {
 
-  IssuedApiKey create();
+  /** @param expiresIn optional lifetime; null = never expires.
+   *  @throws InvalidKeyExpiryException when expiresIn is non-positive. */
+  IssuedApiKey create(Duration expiresIn);
 
   List<ApiKey> list();
 

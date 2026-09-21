@@ -14,6 +14,7 @@ import com.leandrossb.nummus.merchants.application.BootstrapAlreadyUsedException
 import com.leandrossb.nummus.merchants.application.BootstrapUnavailableException;
 import com.leandrossb.nummus.merchants.application.InvalidBootstrapTokenException;
 import com.leandrossb.nummus.merchants.application.InvalidFeeScheduleException;
+import com.leandrossb.nummus.merchants.application.InvalidKeyExpiryException;
 import com.leandrossb.nummus.merchants.application.UnknownApiKeyException;
 import com.leandrossb.nummus.merchants.application.UnknownMerchantException;
 import com.leandrossb.nummus.ledger.domain.AccountNotActiveException;
@@ -104,6 +105,11 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(InvalidFeeScheduleException.class)
   ProblemDetail invalidFeeSchedule(InvalidFeeScheduleException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(InvalidKeyExpiryException.class)
+  ProblemDetail invalidKeyExpiry(InvalidKeyExpiryException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
   }
 

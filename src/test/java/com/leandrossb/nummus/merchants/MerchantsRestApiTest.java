@@ -33,7 +33,7 @@ class MerchantsRestApiTest extends IntegrationTestBase {
   /** One operator key per test — merchant creation is operator-gated. */
   private String operatorAuth() {
     if (operatorAuth == null) {
-      operatorAuth = "Bearer " + operatorKeys.create().secret();
+      operatorAuth = "Bearer " + operatorKeys.create(null).secret();
     }
     return operatorAuth;
   }

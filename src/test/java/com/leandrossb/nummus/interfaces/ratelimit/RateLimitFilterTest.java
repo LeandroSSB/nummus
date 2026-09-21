@@ -43,7 +43,7 @@ class RateLimitFilterTest extends IntegrationTestBase {
   private OperatorKeysService operatorKeys;
 
   private String operatorAuth() {
-    return "Bearer " + operatorKeys.create().secret();
+    return "Bearer " + operatorKeys.create(null).secret();
   }
 
   private String createMerchantAndGetKey(String name) throws Exception {

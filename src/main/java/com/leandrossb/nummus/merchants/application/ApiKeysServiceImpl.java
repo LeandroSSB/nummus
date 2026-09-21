@@ -2,6 +2,7 @@ package com.leandrossb.nummus.merchants.application;
 
 import com.leandrossb.nummus.merchants.domain.ApiKey;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
@@ -24,18 +25,25 @@ public class ApiKeysServiceImpl implements ApiKeysService {
 
   @Override
   @Transactional
-  public IssuedApiKey create(UUID merchantPublicId) {
+  public IssuedApiKey create(UUID merchantPublicId, Duration expiresIn) {
     Objects.requireNonNull(merchantPublicId, "merchantPublicId must not be null");
+    requirePositiveExpiry(expiresIn);
     byte[] secret = new byte[32];
     random.nextBytes(secret);
     String rawKey = PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
     String keyHash = MerchantsServiceImpl.sha256Hex(rawKey);
-    store.insertApiKey(merchantPublicId, keyHash, rawKey.substring(0, 12));
+    store.insertApiKey(merchantPublicId, keyHash, rawKey.substring(0, 12), expiresIn);
     // The store owns key identity; read the persisted row back so the returned
-    // metadata (public_id, created_at) is what revoke/list will match on.
+    // metadata (public_id, created_at, expires_at) is what revoke/list will match on.
     ApiKey stored = store.findActiveKeyByHash(keyHash)
         .orElseThrow(() -> new IllegalStateException("api key row missing after insert"));
     return new IssuedApiKey(stored, rawKey);
+  }
+
+  static void requirePositiveExpiry(Duration expiresIn) {
+    if (expiresIn != null && !expiresIn.isPositive()) {
+      throw new InvalidKeyExpiryException();
+    }
   }
 
   @Override

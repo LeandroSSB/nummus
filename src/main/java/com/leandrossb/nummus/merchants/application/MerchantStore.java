@@ -2,6 +2,7 @@ package com.leandrossb.nummus.merchants.application;
 
 import com.leandrossb.nummus.merchants.domain.ApiKey;
 import com.leandrossb.nummus.merchants.domain.Merchant;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,8 +19,9 @@ public interface MerchantStore {
   /** @return false when the merchant is unknown. */
   boolean updateFeeSchedule(UUID merchantPublicId, FeeSchedule fee);
 
-  /** Stores hash + prefix; the secret never reaches the store. */
-  void insertApiKey(UUID merchantPublicId, String keyHash, String prefix);
+  /** Stores hash + prefix; the secret never reaches the store. Null expiresIn
+   *  means no expiry; the database clock owns expires_at. */
+  void insertApiKey(UUID merchantPublicId, String keyHash, String prefix, Duration expiresIn);
 
   /** The ACTIVE key metadata for a hash, if any. */
   Optional<ApiKey> findActiveKeyByHash(String keyHash);
@@ -39,7 +41,7 @@ public interface MerchantStore {
   void stampOperatorKeyLastUsed(String keyHash);
 
   /** Stores an operator key hash + prefix; the secret never reaches the store. */
-  void insertOperatorKey(String keyHash, String prefix);
+  void insertOperatorKey(String keyHash, String prefix, Duration expiresIn);
 
   /** The ACTIVE operator key metadata for a hash, if any. */
   Optional<ApiKey> findActiveOperatorKeyByHash(String keyHash);

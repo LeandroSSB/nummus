@@ -7,6 +7,7 @@ import com.leandrossb.nummus.merchants.domain.ApiKey;
 import com.leandrossb.nummus.merchants.domain.Merchant;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -74,16 +75,19 @@ public class JdbcClientMerchantStore implements MerchantStore {
   }
 
   @Override
-  public void insertApiKey(UUID merchantPublicId, String keyHash, String prefix) {
+  public void insertApiKey(UUID merchantPublicId, String keyHash, String prefix, Duration expiresIn) {
     jdbc.sql("""
-        insert into merchants.api_key (public_id, merchant_id, key_hash, prefix)
-        select :keyId, m.id, :keyHash, :prefix
+        insert into merchants.api_key (public_id, merchant_id, key_hash, prefix, expires_at)
+        select :keyId, m.id, :keyHash, :prefix,
+          case when :hasExpiry then now() + make_interval(secs => :expiresInSeconds) else null end
         from merchants.merchant m where m.public_id = :merchantPublicId
         """)
         .param("keyId", UUID.randomUUID())
         .param("keyHash", keyHash)
         .param("prefix", prefix)
         .param("merchantPublicId", merchantPublicId)
+        .param("hasExpiry", expiresIn != null)
+        .param("expiresInSeconds", expiresIn == null ? 0.0 : expiresIn.toMillis() / 1000.0)
         .update();
   }
 
@@ -155,14 +159,17 @@ public class JdbcClientMerchantStore implements MerchantStore {
   }
 
   @Override
-  public void insertOperatorKey(String keyHash, String prefix) {
+  public void insertOperatorKey(String keyHash, String prefix, Duration expiresIn) {
     jdbc.sql("""
-        insert into merchants.operator_key (public_id, key_hash, prefix)
-        values (:keyId, :keyHash, :prefix)
+        insert into merchants.operator_key (public_id, key_hash, prefix, expires_at)
+        values (:keyId, :keyHash, :prefix,
+          case when :hasExpiry then now() + make_interval(secs => :expiresInSeconds) else null end)
         """)
         .param("keyId", UUID.randomUUID())
         .param("keyHash", keyHash)
         .param("prefix", prefix)
+        .param("hasExpiry", expiresIn != null)
+        .param("expiresInSeconds", expiresIn == null ? 0.0 : expiresIn.toMillis() / 1000.0)
         .update();
   }
 

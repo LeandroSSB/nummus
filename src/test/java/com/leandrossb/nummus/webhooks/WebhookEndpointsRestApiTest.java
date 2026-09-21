@@ -35,7 +35,7 @@ class WebhookEndpointsRestApiTest extends IntegrationTestBase {
    *  Creation is operator-gated — one operator key per fixture mint. */
   @BeforeEach
   void createMerchantFixture() throws Exception {
-    String operatorAuth = "Bearer " + operatorKeys.create().secret();
+    String operatorAuth = "Bearer " + operatorKeys.create(null).secret();
     MvcResult created = mockMvc.perform(post("/v1/merchants")
             .header("Authorization", operatorAuth)
             .header(KEY, UUID.randomUUID().toString())

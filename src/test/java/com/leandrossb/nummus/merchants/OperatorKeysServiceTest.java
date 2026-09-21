@@ -40,7 +40,7 @@ class OperatorKeysServiceTest extends IntegrationTestBase {
         () -> operatorKeys.bootstrap("test-bootstrap-token"));
 
     // Self-serve lifecycle still works after bootstrap is consumed.
-    var minted = operatorKeys.create();
+    var minted = operatorKeys.create(null);
     assertNotEquals(first.secret(), minted.secret());
     operatorKeys.revoke(minted.key().publicId());
     assertTrue(operatorKeys.findByRawKey(minted.secret()).isEmpty());
@@ -52,7 +52,7 @@ class OperatorKeysServiceTest extends IntegrationTestBase {
   @Test
   void revokingEveryKeyReopensBootstrap() {
     revokeEveryActiveKey();
-    var key = operatorKeys.create();
+    var key = operatorKeys.create(null);
     operatorKeys.revoke(key.key().publicId());
     var again = operatorKeys.bootstrap("test-bootstrap-token");
     assertTrue(again.secret().startsWith("nummus_sk_"));

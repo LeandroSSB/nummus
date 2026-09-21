@@ -31,7 +31,7 @@ class ApiKeyExpiryAuthTest extends IntegrationTestBase {
   private OperatorKeysService operatorKeys;
 
   private String operatorAuth() {
-    return "Bearer " + operatorKeys.create().secret();
+    return "Bearer " + operatorKeys.create(null).secret();
   }
 
   private String createMerchantAndGetKey(String name) throws Exception {
@@ -81,7 +81,7 @@ class ApiKeyExpiryAuthTest extends IntegrationTestBase {
 
   @Test
   void expiredOperatorKeyIsUnauthorized() throws Exception {
-    String operator = operatorKeys.create().secret();
+    String operator = operatorKeys.create(null).secret();
     String operatorKey = "Bearer " + operator;
     mockMvc.perform(get("/v1/operator/api-keys").header("Authorization", operatorKey))
         .andExpect(status().isOk());
@@ -124,7 +124,7 @@ class ApiKeyExpiryAuthTest extends IntegrationTestBase {
 
   @Test
   void operatorLastUsedAtIsStampedOnSuccess() throws Exception {
-    String operatorKey = "Bearer " + operatorKeys.create().secret();
+    String operatorKey = "Bearer " + operatorKeys.create(null).secret();
     mockMvc.perform(get("/v1/operator/api-keys").header("Authorization", operatorKey))
         .andExpect(status().isOk());
     try (Connection c = adminConnection(); Statement st = c.createStatement();

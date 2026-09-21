@@ -37,7 +37,7 @@ class OperatorGatingTest extends IntegrationTestBase {
   /** One operator key per test, minted via the service (no bootstrap dependency). */
   private String operatorAuth() {
     if (operatorAuth == null) {
-      operatorAuth = "Bearer " + operatorKeys.create().secret();
+      operatorAuth = "Bearer " + operatorKeys.create(null).secret();
     }
     return operatorAuth;
   }
