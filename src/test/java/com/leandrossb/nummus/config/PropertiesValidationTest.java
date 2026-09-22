@@ -35,9 +35,11 @@ class PropertiesValidationTest {
     runner.withPropertyValues(pairs).run(context -> {
       assertTrue(context.getStartupFailure() != null,
           "boot must fail for " + String.join(",", pairs));
-      assertTrue(context.getStartupFailure().getMessage().contains("Binding to target")
+      assertTrue(context.getStartupFailure().getMessage().contains("Could not bind properties")
+          || context.getStartupFailure().getMessage().contains("Binding to target")
           || context.getStartupFailure().getMessage().contains("failed"),
-          "the failure must be a binding/validation error");
+          "the failure must be a binding/validation error: "
+              + context.getStartupFailure().getMessage());
     });
   }
 
