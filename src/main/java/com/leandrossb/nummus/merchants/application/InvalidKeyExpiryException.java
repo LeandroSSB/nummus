@@ -5,6 +5,6 @@ package com.leandrossb.nummus.merchants.application;
 public class InvalidKeyExpiryException extends RuntimeException {
 
   public InvalidKeyExpiryException() {
-    super("expiresIn must be a positive ISO-8601 duration (e.g. P90D) or omitted");
+    super("expiresIn must be an ISO-8601 duration of at least one millisecond (e.g. P90D) or omitted");
   }
 }

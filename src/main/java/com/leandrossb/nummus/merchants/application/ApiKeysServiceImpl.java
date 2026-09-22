@@ -48,7 +48,7 @@ public class ApiKeysServiceImpl implements ApiKeysService {
   }
 
   static void requirePositiveExpiry(Duration expiresIn) {
-    if (expiresIn != null && !expiresIn.isPositive()) {
+    if (expiresIn != null && (!expiresIn.isPositive() || expiresIn.toMillis() < 1)) {
       throw new InvalidKeyExpiryException();
     }
   }
