@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class MerchantsServiceImpl implements MerchantsService {
@@ -35,7 +36,9 @@ public class MerchantsServiceImpl implements MerchantsService {
   }
 
   @Override
-  public boolean updateFeeSchedule(UUID publicId, FeeSchedule fee) {
+  @Transactional
+  public boolean updateFeeSchedule(UUID publicId, FeeSchedule fee, UUID actingOperatorKey) {
+    store.insertFeeScheduleEntry(publicId, fee, actingOperatorKey);
     return store.updateFeeSchedule(publicId, fee);
   }
 

@@ -58,7 +58,7 @@ class KeyExpiryRestApiTest extends IntegrationTestBase {
             .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"expiresIn\":\"PT2H\"}"))
+            .content("{\"label\":\"probe\",\"expiresIn\":\"PT2H\"}"))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.expiresAt").isNotEmpty());
   }

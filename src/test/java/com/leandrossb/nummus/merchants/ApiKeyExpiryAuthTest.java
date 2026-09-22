@@ -71,7 +71,7 @@ class ApiKeyExpiryAuthTest extends IntegrationTestBase {
 
   @Test
   void expiredOperatorKeyIsUnauthorized() throws Exception {
-    String operator = operatorKeys.create(null).secret();
+    String operator = operatorKeys.create("probe", null).secret();
     String operatorKey = "Bearer " + operator;
     mockMvc.perform(get("/v1/operator/api-keys").header("Authorization", operatorKey))
         .andExpect(status().isOk());
@@ -115,7 +115,7 @@ class ApiKeyExpiryAuthTest extends IntegrationTestBase {
 
   @Test
   void operatorLastUsedAtIsStampedOnSuccess() throws Exception {
-    String operatorKey = "Bearer " + operatorKeys.create(null).secret();
+    String operatorKey = "Bearer " + operatorKeys.create("probe", null).secret();
     mockMvc.perform(get("/v1/operator/api-keys").header("Authorization", operatorKey))
         .andExpect(status().isOk());
     try (Connection c = adminConnection(); Statement st = c.createStatement();

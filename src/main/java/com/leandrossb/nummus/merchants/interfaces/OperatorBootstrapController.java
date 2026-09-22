@@ -25,7 +25,7 @@ class OperatorBootstrapController {
 
   @PostMapping("/v1/operator/bootstrap")
   ResponseEntity<CreateKeyResponse> bootstrap(@Valid @RequestBody BootstrapRequest request) {
-    var issued = operatorKeys.bootstrap(request.token());
+    var issued = operatorKeys.bootstrap(request.token(), request.label());
     return ResponseEntity
         .created(URI.create("/v1/operator/api-keys/" + issued.key().publicId()))
         .body(CreateKeyResponse.from(issued));

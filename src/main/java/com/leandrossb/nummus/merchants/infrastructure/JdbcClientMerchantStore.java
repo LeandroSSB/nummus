@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.merchants.infrastructure;
 
+import com.leandrossb.nummus.merchants.application.FeeHistoryEntry;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantStore;
 import com.leandrossb.nummus.merchants.application.ResolvedMerchantKey;
@@ -63,6 +64,45 @@ public class JdbcClientMerchantStore implements MerchantStore {
   }
 
   @Override
+  public List<FeeHistoryEntry> listFeeHistory(UUID merchantPublicId, UUID after, int limit) {
+    return jdbc.sql("""
+        select e.public_id, e.rate, e.fixed, e.valid_from, e.created_by, k.label as created_by_label
+        from merchants.fee_schedule_entry e
+        join merchants.merchant m on m.id = e.merchant_id
+        left join merchants.operator_key k on k.public_id = e.created_by
+        where m.public_id = :merchantPublicId
+          and (:after::uuid is null
+               or e.id < (select f.id from merchants.fee_schedule_entry f
+                          where f.public_id = :after))
+        order by e.id desc
+        limit :limit
+        """)
+        .param("merchantPublicId", merchantPublicId)
+        .param("after", after)
+        .param("limit", limit)
+        .query((rs, i) -> new FeeHistoryEntry(rs.getObject("public_id", UUID.class),
+            rs.getBigDecimal("rate"), rs.getBigDecimal("fixed"),
+            rs.getObject("valid_from", OffsetDateTime.class).toInstant(),
+            rs.getObject("created_by", UUID.class), rs.getString("created_by_label")))
+        .list();
+  }
+
+  @Override
+  public void insertFeeScheduleEntry(UUID merchantPublicId, FeeSchedule fee, UUID createdBy) {
+    jdbc.sql("""
+        insert into merchants.fee_schedule_entry (public_id, merchant_id, rate, fixed, created_by)
+        select :entryId, m.id, :rate, :fixed, :createdBy
+        from merchants.merchant m where m.public_id = :merchantPublicId
+        """)
+        .param("entryId", UUID.randomUUID())
+        .param("rate", fee.rate())
+        .param("fixed", fee.fixedAmount())
+        .param("createdBy", createdBy)
+        .param("merchantPublicId", merchantPublicId)
+        .update();
+  }
+
+  @Override
   public boolean updateFeeSchedule(UUID merchantPublicId, FeeSchedule fee) {
     return jdbc.sql("""
             update merchants.merchant set fee_rate = :rate, fee_fixed = :fixed
@@ -94,7 +134,9 @@ public class JdbcClientMerchantStore implements MerchantStore {
   @Override
   public Optional<ApiKey> findActiveKeyByHash(String keyHash) {
     return jdbc.sql("""
-        select public_id, prefix, status, created_at, expires_at, last_used_at from merchants.api_key
+        select public_id, prefix, status, created_at, expires_at, last_used_at,
+          null as label
+        from merchants.api_key
         where key_hash = :keyHash and status = 'ACTIVE'
         """)
         .param("keyHash", keyHash)
@@ -104,7 +146,8 @@ public class JdbcClientMerchantStore implements MerchantStore {
   @Override
   public List<ApiKey> listKeys(UUID merchantPublicId) {
     return jdbc.sql("""
-        select k.public_id, k.prefix, k.status, k.created_at, k.expires_at, k.last_used_at
+        select k.public_id, k.prefix, k.status, k.created_at, k.expires_at, k.last_used_at,
+          null as label
         from merchants.api_key k join merchants.merchant m on m.id = k.merchant_id
         where m.public_id = :merchantPublicId order by k.id desc
         """)
@@ -192,24 +235,26 @@ public class JdbcClientMerchantStore implements MerchantStore {
   }
 
   @Override
-  public void insertOperatorKey(String keyHash, String prefix, Duration expiresIn) {
+  public void insertOperatorKey(String keyHash, String prefix, Duration expiresIn, String label) {
     jdbc.sql("""
-        insert into merchants.operator_key (public_id, key_hash, prefix, expires_at)
+        insert into merchants.operator_key (public_id, key_hash, prefix, expires_at, label)
         values (:keyId, :keyHash, :prefix,
-          case when :hasExpiry then now() + make_interval(secs => :expiresInSeconds) else null end)
+          case when :hasExpiry then now() + make_interval(secs => :expiresInSeconds) else null end,
+          :label)
         """)
         .param("keyId", UUID.randomUUID())
         .param("keyHash", keyHash)
         .param("prefix", prefix)
         .param("hasExpiry", expiresIn != null)
         .param("expiresInSeconds", expiresIn == null ? 0.0 : expiresIn.toMillis() / 1000.0)
+        .param("label", label)
         .update();
   }
 
   @Override
   public Optional<ApiKey> findActiveOperatorKeyByHash(String keyHash) {
     return jdbc.sql("""
-        select public_id, prefix, status, created_at, expires_at, last_used_at
+        select public_id, prefix, status, created_at, expires_at, last_used_at, label
         from merchants.operator_key
         where key_hash = :keyHash and status = 'ACTIVE'
           and (expires_at is null or expires_at > now())
@@ -219,9 +264,18 @@ public class JdbcClientMerchantStore implements MerchantStore {
   }
 
   @Override
+  public Optional<String> findOperatorKeyLabel(UUID keyPublicId) {
+    return jdbc.sql("""
+        select label from merchants.operator_key where public_id = :keyPublicId
+        """)
+        .param("keyPublicId", keyPublicId)
+        .query(String.class).optional();
+  }
+
+  @Override
   public List<ApiKey> listOperatorKeys() {
     return jdbc.sql("""
-        select public_id, prefix, status, created_at, expires_at, last_used_at
+        select public_id, prefix, status, created_at, expires_at, last_used_at, label
         from merchants.operator_key
         order by id desc
         """)
@@ -254,7 +308,8 @@ public class JdbcClientMerchantStore implements MerchantStore {
   private static ApiKey mapKey(ResultSet rs) throws SQLException {
     return new ApiKey(rs.getObject("public_id", UUID.class), rs.getString("prefix"),
         rs.getString("status"), rs.getObject("created_at", OffsetDateTime.class).toInstant(),
-        instantOrNull(rs, "expires_at"), instantOrNull(rs, "last_used_at"));
+        instantOrNull(rs, "expires_at"), instantOrNull(rs, "last_used_at"),
+        rs.getString("label"));
   }
 
   private static Instant instantOrNull(ResultSet rs, String column) throws SQLException {

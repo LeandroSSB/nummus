@@ -17,6 +17,17 @@ public interface MerchantStore {
 
   Optional<FeeSchedule> findFeeSchedule(UUID merchantPublicId);
 
+  /** Appends one attributed fee-history row for the merchant; the cached
+   *  current columns are updated separately, in the same transaction, by the
+   *  service. createdBy is the acting operator key's public id — nullable only
+   *  for the migration backfill; the service always passes a real key. */
+  void insertFeeScheduleEntry(UUID merchantPublicId, FeeSchedule fee, UUID createdBy);
+
+  /** The merchant's fee-history entries, newest first — a keyset walk on id:
+   *  at most {@code limit} entries strictly older than {@code after} (null
+   *  starts at the newest). createdByLabel is null exactly when createdBy is. */
+  List<FeeHistoryEntry> listFeeHistory(UUID merchantPublicId, UUID after, int limit);
+
   /** @return false when the merchant is unknown. */
   boolean updateFeeSchedule(UUID merchantPublicId, FeeSchedule fee);
 
@@ -51,11 +62,15 @@ public interface MerchantStore {
   /** Best-effort observability stamp; never gates authentication. */
   void stampOperatorKeyLastUsed(String keyHash);
 
-  /** Stores an operator key hash + prefix; the secret never reaches the store. */
-  void insertOperatorKey(String keyHash, String prefix, Duration expiresIn);
+  /** Stores an operator key hash + prefix + label; the secret never reaches
+   *  the store. */
+  void insertOperatorKey(String keyHash, String prefix, Duration expiresIn, String label);
 
   /** The ACTIVE operator key metadata for a hash, if any. */
   Optional<ApiKey> findActiveOperatorKeyByHash(String keyHash);
+
+  /** The label of the operator key with this public id, if any. */
+  Optional<String> findOperatorKeyLabel(UUID keyPublicId);
 
   List<ApiKey> listOperatorKeys();
 

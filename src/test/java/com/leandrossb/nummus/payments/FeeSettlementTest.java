@@ -12,6 +12,7 @@ import com.jayway.jsonpath.JsonPath;
 import com.leandrossb.nummus.merchants.application.ApiKeysService;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
+import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.payments.application.FeeRevenueAccount;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
@@ -40,6 +41,8 @@ class FeeSettlementTest extends IntegrationTestBase {
   private MerchantsService merchants;
   @Autowired
   private ApiKeysService keys;
+  @Autowired
+  private OperatorKeysService operatorKeys;
 
   private record Fixture(String auth, String merchantId, String intentId, String accountId,
       String chargeId) {}
@@ -187,7 +190,8 @@ class FeeSettlementTest extends IntegrationTestBase {
   void settleTimeRateWinsOverCreationTime() throws Exception {
     var f = paidIntent(FeeSchedule.ZERO);                       // quoted at zero
     merchants.updateFeeSchedule(UUID.fromString(f.merchantId()), // raised before settle
-        new FeeSchedule(new BigDecimal("0.01"), BigDecimal.ZERO));
+        new FeeSchedule(new BigDecimal("0.01"), BigDecimal.ZERO),
+        operatorKeys.create("fee-settle-probe", null).key().publicId());
     mockMvc.perform(get("/v1/payment-intents/" + f.intentId()).header("Authorization", f.auth()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SETTLED"));

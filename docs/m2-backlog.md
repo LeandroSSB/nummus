@@ -416,3 +416,30 @@ triaged:
   suites and one exception message) — no lint gate; tighten when those files
   are next touched.
 
+## From the M14 design
+
+M14 closed the M8/M9 attribution threads: operator keys carry immutable
+identity labels (rotations carry the label forward; pre-M14 keys read
+`system`), and every fee-schedule change appends an attributed,
+append-only history entry while the merchant's columns stay the cached
+current value. Known bounds, deliberate:
+
+- **Only fee changes are attributed** — merchant creation, key operations,
+  and conciliation triggers stay unattributed; a general audit log can
+  build on the label seam.
+- **No RBAC and no operator entity** — labels are identity-light; grouping
+  and roles can come later without history rewrites.
+- **PUT retries append per delivery** — a network-level retry of the fee
+  route leaves two identical entries; honest as "applied twice".
+- **`system` is a sentinel, not an actor** — pre-M14 attribution is
+  genuinely absent (NULL rendered as `system`).
+- **Labels are shape-validated only** — non-blank, ≤64 chars, no
+  uniqueness or i18n constraints; the key id disambiguates.
+- **Concurrent fee PUTs** — entry order is identity-sequence order while
+  cache order is merchant-row-lock order, so the cached current can
+  disagree with the newest entry under truly concurrent updates until the next update;
+  per-transaction atomicity holds. Serialize fee changes per merchant if
+  that bound matters.
+- The bootstrap label-before-state ordering is verified by inspection; a
+  focused service-level assertion would pin it.
+
