@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
@@ -115,11 +116,12 @@ class SurfaceAuditTest extends IntegrationTestBase {
     return JsonPath.read(created.getResponse().getContentAsString(), "$.publicId");
   }
 
-  /** A settled intent and its network charge: merchant → account → intent →
-   *  simulator pay → GET settles — the ConciliationAlertsTest recipe. */
   private record SettledPayment(UUID intentId, UUID chargeId) {
   }
 
+  /** Merchant → account → intent → simulator pay → GET settles — the
+   *  ConciliationAlertsTest recipe. Returns the settled intent and its
+   *  network charge. */
   private SettledPayment settlePayment(String merchantName, String holderName) throws Exception {
     String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
         mockMvc, ApiDrivers.operatorAuth(operatorKeys), merchantName);
@@ -229,15 +231,28 @@ class SurfaceAuditTest extends IntegrationTestBase {
   void manualIngestIsAuditedWithWindowBounds() throws Exception {
     var actor = operatorKeys.create("surface-ingest", null, null);
     String actorId = actor.key().publicId().toString();
-    settlePayment("Surface Settle Merchant", "Surface Holder");
-    Instant from = Instant.now().minus(30, ChronoUnit.SECONDS);
-    Instant to = Instant.now().plus(60, ChronoUnit.SECONDS);
+    // A clean settle, parked an hour back DB-side — the same rewrite
+    // ConciliationRestApiTest uses to place a charge. Earlier suites leave
+    // fixtures either fresh (minutes old) or backdated two hours; a window
+    // 45–90 minutes back can hold only this class's settle, whatever order
+    // the classes run in, so the ingest is CONCILED non-vacuously.
+    SettledPayment settled = settlePayment("Surface Settle Merchant", "Surface Holder");
+    try (Connection c = adminConnection(); Statement st = c.createStatement()) {
+      st.executeUpdate("update payments.payment_intent set settled_at = now() - interval '1 hour'"
+          + " where public_id = '" + settled.intentId() + "'");
+      st.executeUpdate("update psp_simulator.charge set updated_at = now() - interval '1 hour'"
+          + " where public_id = '" + settled.chargeId() + "'");
+    }
+    Instant from = Instant.now().minus(90, ChronoUnit.MINUTES);
+    Instant to = Instant.now().minus(45, ChronoUnit.MINUTES);
     MvcResult report = mockMvc.perform(post("/v1/conciliation/reports")
             .header("Authorization", "Bearer " + actor.secret())
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"from\":\"" + from + "\",\"to\":\"" + to + "\"}"))
-        .andExpect(status().isCreated()).andReturn();
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.matched").value(1))
+        .andReturn();
     String body = report.getResponse().getContentAsString();
     Assertions.assertEquals("CONCILED", JsonPath.read(body, "$.status"),
         "a clean settle keeps the ingest CONCILED");
