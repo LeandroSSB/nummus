@@ -75,6 +75,12 @@ public class LedgerServiceImpl implements Ledger {
     return requireAccount(publicId);
   }
 
+  @Override
+  @Transactional
+  public void lockAccount(UUID publicId) {
+    repository.lockAccount(publicId);
+  }
+
   private LedgerAccount transitionStatus(UUID publicId, AccountStatus target, Instant closedAt) {
     var current = repository.findAccount(publicId)
         .orElseThrow(() -> new UnknownAccountException(publicId));

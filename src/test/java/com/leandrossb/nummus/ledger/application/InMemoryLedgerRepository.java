@@ -35,6 +35,13 @@ public class InMemoryLedgerRepository implements LedgerRepository {
   }
 
   @Override
+  public void lockAccount(UUID publicId) {
+    // In-memory fake: no rows to lock, but the unknown-account contract holds.
+    findAccount(publicId).orElseThrow(
+        () -> new com.leandrossb.nummus.ledger.domain.UnknownAccountException(publicId));
+  }
+
+  @Override
   public boolean updateAccountStatus(UUID publicId, AccountStatus status, Instant closedAt) {
     var current = accounts.get(publicId);
     if (current == null) {

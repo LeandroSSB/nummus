@@ -10,6 +10,7 @@ import com.leandrossb.nummus.ledger.domain.PostedPosting;
 import com.leandrossb.nummus.ledger.domain.PostedTransaction;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
 import com.leandrossb.nummus.ledger.domain.StatementLine;
+import com.leandrossb.nummus.ledger.domain.UnknownAccountException;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -59,6 +60,18 @@ public class JdbcClientLedgerRepository implements LedgerRepository {
         .param("publicId", publicId)
         .query((rs, i) -> mapAccount(rs))
         .optional();
+  }
+
+  @Override
+  public void lockAccount(UUID publicId) {
+    int rows = jdbc.sql("select 1 from ledger.ledger_account where public_id = :publicId for update")
+        .param("publicId", publicId)
+        .query((rs, i) -> rs.getInt(1))
+        .list()
+        .size();
+    if (rows == 0) {
+      throw new UnknownAccountException(publicId);
+    }
   }
 
   @Override
@@ -122,7 +135,7 @@ public class JdbcClientLedgerRepository implements LedgerRepository {
           .param("accountPublicId", draft.accountPublicId())
           .update();
       if (inserted != 1) {
-        throw new com.leandrossb.nummus.ledger.domain.UnknownAccountException(draft.accountPublicId());
+        throw new UnknownAccountException(draft.accountPublicId());
       }
     }
     List<PostedPosting> posted = postings.stream()
