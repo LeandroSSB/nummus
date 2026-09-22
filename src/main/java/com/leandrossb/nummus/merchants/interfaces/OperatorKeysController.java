@@ -37,7 +37,7 @@ class OperatorKeysController {
   ResponseEntity<CreateKeyResponse> createKey(AuthenticatedOperator operator,
       @RequestBody(required = false) CreateKeyRequest request) {
     var issued = operatorKeys.create(request == null ? null : request.label(),
-        request == null ? null : request.expiresIn());
+        request == null ? null : request.expiresIn(), operator.keyPublicId());
     return ResponseEntity
         .created(URI.create("/v1/operator/api-keys/" + issued.key().publicId()))
         .body(CreateKeyResponse.from(issued));
@@ -53,7 +53,7 @@ class OperatorKeysController {
   ResponseEntity<RotateKeyResponse> rotateKey(AuthenticatedOperator operator,
       @RequestBody(required = false) RotateKeyRequest request) {
     var rotated = operatorKeys.rotate(operator.keyPublicId(),
-        request == null ? null : request.expiresIn());
+        request == null ? null : request.expiresIn(), operator.keyPublicId());
     return ResponseEntity
         .created(URI.create("/v1/operator/api-keys/" + rotated.issued().key().publicId()))
         .body(RotateKeyResponse.from(rotated));
@@ -61,7 +61,7 @@ class OperatorKeysController {
 
   @DeleteMapping("/{id}")
   ResponseEntity<Void> revoke(AuthenticatedOperator operator, @PathVariable UUID id) {
-    operatorKeys.revoke(id);
+    operatorKeys.revoke(id, operator.keyPublicId());
     return ResponseEntity.noContent().build();
   }
 }

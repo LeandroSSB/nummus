@@ -55,7 +55,9 @@ class FeeSettlementTest extends IntegrationTestBase {
    * GET polls the network and moves it.
    */
   private Fixture newIntent(FeeSchedule fee, String amount) throws Exception {
-    var merchant = merchants.create("fee settle " + UUID.randomUUID(), fee);
+    // Creation is audited against the acting operator key: mint a probe.
+    UUID actingKey = operatorKeys.create("fee-create-probe", null, null).key().publicId();
+    var merchant = merchants.create("fee settle " + UUID.randomUUID(), fee, actingKey);
     var key = keys.create(merchant.publicId(), null);
     String auth = "Bearer " + key.secret();
     var account = mockMvc.perform(post("/v1/accounts")
@@ -191,7 +193,7 @@ class FeeSettlementTest extends IntegrationTestBase {
     var f = paidIntent(FeeSchedule.ZERO);                       // quoted at zero
     merchants.updateFeeSchedule(UUID.fromString(f.merchantId()), // raised before settle
         new FeeSchedule(new BigDecimal("0.01"), BigDecimal.ZERO),
-        operatorKeys.create("fee-settle-probe", null).key().publicId());
+        operatorKeys.create("fee-settle-probe", null, null).key().publicId());
     mockMvc.perform(get("/v1/payment-intents/" + f.intentId()).header("Authorization", f.auth()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SETTLED"));

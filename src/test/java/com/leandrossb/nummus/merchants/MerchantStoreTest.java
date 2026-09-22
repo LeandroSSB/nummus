@@ -9,7 +9,9 @@ import com.leandrossb.nummus.merchants.application.ApiKeysService;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.IssuedApiKey;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
+import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -21,9 +23,17 @@ class MerchantStoreTest extends IntegrationTestBase {
   @Autowired
   private ApiKeysService keys;
 
+  @Autowired
+  private OperatorKeysService operatorKeys;
+
+  /** Merchant creation is audited against the acting operator key: mint a probe. */
+  private UUID probeKey() {
+    return operatorKeys.create("store-probe", null, null).key().publicId();
+  }
+
   @Test
   void createIssuesAKeyThatResolvesAndIsNeverReissued() {
-    var merchant = merchants.create("Store Merchant", FeeSchedule.ZERO);
+    var merchant = merchants.create("Store Merchant", FeeSchedule.ZERO, probeKey());
     var first = merchants.findByApiKey("nummus_sk_definitely-unknown");
     assertTrue(first.isEmpty());
 
@@ -48,7 +58,7 @@ class MerchantStoreTest extends IntegrationTestBase {
     assertEquals(2, keys.list(merchant.publicId()).size());
 
     // Cross-merchant revoke is a miss.
-    var other = merchants.create("Other Merchant", FeeSchedule.ZERO);
+    var other = merchants.create("Other Merchant", FeeSchedule.ZERO, probeKey());
     assertThrows(com.leandrossb.nummus.merchants.application.UnknownApiKeyException.class,
         () -> keys.revoke(other.publicId(), second.key().publicId()));
     assertNotEquals(merchant.publicId(), other.publicId());
@@ -56,7 +66,7 @@ class MerchantStoreTest extends IntegrationTestBase {
 
   @Test
   void secretsAreUniqueAndHashesAreStoredNotSecrets() throws Exception {
-    var merchant = merchants.create("Hash Merchant", FeeSchedule.ZERO);
+    var merchant = merchants.create("Hash Merchant", FeeSchedule.ZERO, probeKey());
     var issued = keys.create(merchant.publicId(), null);
     var another = keys.create(merchant.publicId(), null);
     assertNotEquals(issued.secret(), another.secret());

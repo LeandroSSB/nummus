@@ -45,8 +45,9 @@ class KeyLifecycleAuditTest extends IntegrationTestBase {
   /** (actorKey, action, subjectId) of the latest entries, newest first. */
   private List<String[]> recentEntries(int limit) throws Exception {
     try (Connection c = adminConnection(); Statement st = c.createStatement();
-        ResultSet rs = st.executeQuery("select actor_key::text, action, coalesce(subject_id::text, '') "
-            + "from audit.operator_action order by id desc limit " + limit)) {
+        ResultSet rs = st.executeQuery("select actor_key::text, action, "
+            + "coalesce(subject_id::text, '') from audit.operator_action "
+            + "order by id desc limit " + limit)) {
       List<String[]> out = new ArrayList<>();
       while (rs.next()) {
         out.add(new String[] {rs.getString(1), rs.getString(2), rs.getString(3)});

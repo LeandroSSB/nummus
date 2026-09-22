@@ -20,9 +20,10 @@ public final class ApiDrivers {
   private ApiDrivers() {}
 
   /** A fresh operator bearer value: mints a new operator key per call, so
-   *  each caller gets its own key (and its own rate-limit bucket). */
+   *  each caller gets its own key (and its own rate-limit bucket). Bearer
+   *  probes exist to authenticate, not to act — their mint is unattributed. */
   public static String operatorAuth(OperatorKeysService operatorKeys) {
-    return "Bearer " + operatorKeys.create("probe", null).secret();
+    return "Bearer " + operatorKeys.create("probe", null, null).secret();
   }
 
   /** POSTs the merchant as the operator and returns the first API key's

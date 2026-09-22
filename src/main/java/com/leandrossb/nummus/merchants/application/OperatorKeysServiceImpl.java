@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.merchants.application;
 
+import com.leandrossb.nummus.audit.application.OperatorAudit;
 import com.leandrossb.nummus.merchants.domain.ApiKey;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -8,6 +9,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Operator key lifecycle. Same secret mechanics as merchant keys: 256-bit
  * base64url secret, prefixed, shown exactly once; SHA-256 hash at rest.
  * The first key bootstraps one-time from the configured deployment token.
+ * Every lifecycle action records an audit entry attributed to the calling
+ * key, inside the action's transaction.
  */
 @Service
 public class OperatorKeysServiceImpl implements OperatorKeysService {
@@ -27,13 +31,16 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
   private final MerchantStore store;
   private final OperatorBootstrapProperties bootstrapProperties;
   private final ApiKeyProperties apiKeyProperties;
+  private final OperatorAudit audit;
   private final SecureRandom random = new SecureRandom();
 
   public OperatorKeysServiceImpl(MerchantStore store,
-      OperatorBootstrapProperties bootstrapProperties, ApiKeyProperties apiKeyProperties) {
+      OperatorBootstrapProperties bootstrapProperties, ApiKeyProperties apiKeyProperties,
+      OperatorAudit audit) {
     this.store = store;
     this.bootstrapProperties = bootstrapProperties;
     this.apiKeyProperties = apiKeyProperties;
+    this.audit = audit;
   }
 
   /** Operator labels are immutable audit identity: 1-64 characters after trim. */
@@ -45,8 +52,13 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
 
   @Override
   @Transactional
-  public IssuedApiKey create(String label, Duration expiresIn) {
-    return mint(label, expiresIn);
+  public IssuedApiKey create(String label, Duration expiresIn, UUID actorKey) {
+    IssuedApiKey issued = mint(label, expiresIn);
+    if (actorKey != null) {
+      audit.record(actorKey, "operator_key.minted", "operator_key",
+          issued.key().publicId(), Map.of("label", label));
+    }
+    return issued;
   }
 
   @Override
@@ -56,16 +68,19 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
 
   @Override
   @Transactional
-  public void revoke(UUID keyPublicId) {
+  public void revoke(UUID keyPublicId, UUID actorKey) {
     Objects.requireNonNull(keyPublicId, "keyPublicId must not be null");
     if (!store.revokeOperatorKey(keyPublicId)) {
       throw new UnknownApiKeyException(keyPublicId);
+    }
+    if (actorKey != null) {
+      audit.record(actorKey, "operator_key.revoked", "operator_key", keyPublicId, Map.of());
     }
   }
 
   @Override
   @Transactional
-  public RotatedApiKey rotate(UUID keyPublicId, Duration expiresIn) {
+  public RotatedApiKey rotate(UUID keyPublicId, Duration expiresIn, UUID actorKey) {
     // The replacement inherits the calling key's immutable label.
     String label = store.findOperatorKeyLabel(keyPublicId)
         .orElseThrow(() -> new UnknownApiKeyException(keyPublicId));
@@ -73,6 +88,10 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
     Instant oldKeyExpiresAt = store.retireOperatorKey(keyPublicId,
             apiKeyProperties.rotationGrace())
         .orElseThrow(() -> new UnknownApiKeyException(keyPublicId));
+    if (actorKey != null) {
+      audit.record(actorKey, "operator_key.rotated", "operator_key",
+          issued.key().publicId(), Map.of("label", label, "retiredKey", keyPublicId));
+    }
     return new RotatedApiKey(issued, oldKeyExpiresAt);
   }
 
@@ -106,7 +125,12 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
             presentedToken.getBytes(StandardCharsets.UTF_8))) {
       throw new InvalidBootstrapTokenException();
     }
-    return mint(label, null);
+    IssuedApiKey issued = mint(label, null);
+    // Bootstrap has no calling key: the deployment's first key attributes its
+    // own entry — the audit trail starts with the key that opened it.
+    audit.record(issued.key().publicId(), "operator_key.bootstrapped", "operator_key",
+        issued.key().publicId(), Map.of("label", label));
+    return issued;
   }
 
   private IssuedApiKey mint(String label, Duration expiresIn) {

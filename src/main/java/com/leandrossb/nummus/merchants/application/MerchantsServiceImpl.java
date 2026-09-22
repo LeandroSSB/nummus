@@ -1,11 +1,13 @@
 package com.leandrossb.nummus.merchants.application;
 
+import com.leandrossb.nummus.audit.application.OperatorAudit;
 import com.leandrossb.nummus.merchants.domain.Merchant;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,18 +18,27 @@ import org.springframework.transaction.annotation.Transactional;
 public class MerchantsServiceImpl implements MerchantsService {
 
   private final MerchantStore store;
+  private final OperatorAudit audit;
 
-  public MerchantsServiceImpl(MerchantStore store) {
+  public MerchantsServiceImpl(MerchantStore store, OperatorAudit audit) {
     this.store = store;
+    this.audit = audit;
   }
 
   @Override
-  public Merchant create(String name, FeeSchedule fee) {
+  @Transactional
+  public Merchant create(String name, FeeSchedule fee, UUID actingOperatorKey) {
     Objects.requireNonNull(name, "name must not be null");
     if (name.isBlank()) {
       throw new IllegalArgumentException("name must not be blank");
     }
-    return store.insertMerchant(new Merchant(UUID.randomUUID(), name, Instant.now()), fee);
+    Merchant merchant =
+        store.insertMerchant(new Merchant(UUID.randomUUID(), name, Instant.now()), fee);
+    if (actingOperatorKey != null) {
+      audit.record(actingOperatorKey, "merchant.created", "merchant",
+          merchant.publicId(), Map.of("name", name));
+    }
+    return merchant;
   }
 
   @Override

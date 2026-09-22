@@ -30,7 +30,7 @@ class OperatorAuthRestApiTest extends IntegrationTestBase {
   private OperatorKeysService operatorKeys;
 
   private String operatorKey() {
-    return operatorKeys.create("probe", null).secret();
+    return operatorKeys.create("probe", null, null).secret();
   }
 
   @Test
@@ -70,7 +70,7 @@ class OperatorAuthRestApiTest extends IntegrationTestBase {
         .andExpect(status().isOk());
     // A revoked key stops authenticating immediately: mint a fresh key, revoke
     // it over HTTP with the still-valid auth, then present the dead secret.
-    var revoked = operatorKeys.create("probe", null);
+    var revoked = operatorKeys.create("probe", null, null);
     mockMvc.perform(delete("/v1/operator/api-keys/" + revoked.key().publicId())
             .header("Authorization", auth))
         .andExpect(status().isNoContent());
@@ -93,10 +93,11 @@ class OperatorAuthRestApiTest extends IntegrationTestBase {
 
   /** The operator-key table is shared across methods and suites; the bootstrap
    *  test starts from no ACTIVE keys so JUnit's unspecified method order cannot
-   *  change the outcome. */
+   *  change the outcome. Sweep revocations are fixture hygiene and stay
+   *  unattributed. */
   private void revokeEveryActiveKey() {
     operatorKeys.list().stream()
         .filter(key -> "ACTIVE".equals(key.status()))
-        .forEach(key -> operatorKeys.revoke(key.publicId()));
+        .forEach(key -> operatorKeys.revoke(key.publicId(), null));
   }
 }
