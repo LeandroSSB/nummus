@@ -25,8 +25,12 @@ import com.leandrossb.nummus.ledger.domain.TransactionAlreadyReversedException;
 import com.leandrossb.nummus.ledger.domain.UnknownAccountException;
 import com.leandrossb.nummus.ledger.domain.UnknownTransactionException;
 import com.leandrossb.nummus.payments.domain.ChargeAmountMismatchException;
+import com.leandrossb.nummus.payments.domain.ConcurrentPayoutException;
 import com.leandrossb.nummus.payments.domain.ConcurrentSettlementException;
+import com.leandrossb.nummus.payments.domain.InsufficientFundsException;
+import com.leandrossb.nummus.payments.domain.TransferAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
+import com.leandrossb.nummus.payments.domain.UnknownPayoutException;
 import com.leandrossb.nummus.psp_simulator.domain.ChargeNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.TransferNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownChargeException;
@@ -59,7 +63,8 @@ public class GlobalExceptionHandler {
       UnknownPaymentIntentException.class, UnknownWebhookEndpointException.class,
       UnknownWebhookDeliveryException.class,
       UnknownConciliationReportException.class, UnknownMerchantException.class,
-      UnknownApiKeyException.class, UnknownTransferException.class})
+      UnknownApiKeyException.class, UnknownTransferException.class,
+      UnknownPayoutException.class})
   public ProblemDetail notFound(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
   }
@@ -91,7 +96,8 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler({PaymentAccountNotActiveException.class, AccountNotActiveException.class,
       TransactionAlreadyReversedException.class, ChargeNotPendingException.class,
-      TransferNotPendingException.class, ConcurrentSettlementException.class})
+      TransferNotPendingException.class, ConcurrentSettlementException.class,
+      ConcurrentPayoutException.class})
   public ProblemDetail conflict(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }
@@ -131,8 +137,13 @@ public class GlobalExceptionHandler {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
   }
 
-  @ExceptionHandler(ChargeAmountMismatchException.class)
-  ProblemDetail invariantBreach(ChargeAmountMismatchException e) {
+  @ExceptionHandler(InsufficientFundsException.class)
+  ProblemDetail insufficientFunds(InsufficientFundsException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
+  }
+
+  @ExceptionHandler({ChargeAmountMismatchException.class, TransferAmountMismatchException.class})
+  ProblemDetail invariantBreach(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
   }
 
