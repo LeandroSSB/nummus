@@ -64,10 +64,6 @@ class AttributionSchemaTest extends IntegrationTestBase {
 
   @Test
   void existingMerchantsCarryExactlyOneSeedEntryWithNullAttribution() throws Exception {
-    try (Connection c = adminConnection(); Statement st = c.createStatement()) {
-      st.executeUpdate("insert into merchants.merchant (public_id, name, fee_rate, fee_fixed) "
-          + "values ('" + UUID.randomUUID() + "', 'seed probe', 0.0123, 1.75)");
-    }
     // V16's backfill ran at migration time, before this row existed — a merchant
     // created after migration has no seed until its first fee PUT. So assert the
     // backfill against a PRE-EXISTING merchant instead: the seed merchant.

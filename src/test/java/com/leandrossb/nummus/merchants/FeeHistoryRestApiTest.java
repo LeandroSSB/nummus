@@ -161,6 +161,7 @@ class FeeHistoryRestApiTest extends IntegrationTestBase {
         .andExpect(jsonPath("$[0].entryId").exists())
         .andExpect(jsonPath("$[0].validFrom").exists())
         .andExpect(jsonPath("$[0].createdBy").value(merchant.operatorKeyPublicId()))
+        .andExpect(jsonPath("$[0].createdByLabel").value("fee-probe"))
         .andExpect(header().exists("Next-Cursor"))
         .andExpect(jsonPath("$[0].rate").value(0.0300))
         .andReturn();

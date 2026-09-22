@@ -53,7 +53,10 @@ class OperatorLabelRestApiTest extends IntegrationTestBase {
         .andReturn();
     String keyId = com.jayway.jsonpath.JsonPath.read(minted.getResponse().getContentAsString(), "$.keyId");
     MvcResult listed = mockMvc.perform(get("/v1/operator/api-keys").header("Authorization", auth))
-        .andExpect(status().isOk()).andReturn();
+        .andExpect(status().isOk())
+        // The listing is newest-first (order by id desc): the just-minted key leads.
+        .andExpect(jsonPath("$[0].label").value("ci-runner"))
+        .andReturn();
     org.junit.jupiter.api.Assertions.assertTrue(
         listed.getResponse().getContentAsString().contains(keyId));
   }
