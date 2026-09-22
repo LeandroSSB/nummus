@@ -82,7 +82,7 @@ grant select, insert on merchants.fee_schedule_entry to nummus_app;
 2. **Labels:** operator mint without a label → 400; blank → 400; 65 chars → 400; valid → 201 with label echoed; listing shows labels; rotate carries the label; bootstrap requires one.
 3. **History behavior:** a fee PUT appends one entry attributed to the acting key AND updates the cache (asserted together); a second change yields two entries newest-first; a no-op PUT still appends; settle-after-change flows stay green (cache read path).
 4. **Listing:** pagination walk with `Next-Cursor`; unknown cursor → empty page; foreign merchant → 404; limit 0/101 → 400; `createdByLabel` joins correctly and renders `system` for NULL.
-5. **Operator-only:** the history route 401s for merchant keys; merchant surfaces never expose labels or history.
+5. **Operator-only:** the history route 403s for merchant keys (role mismatch, the M8 vocabulary); merchant surfaces never expose labels or history.
 
 Baseline at plan time: 329 tests, all green.
 
