@@ -21,19 +21,28 @@ public class ConciliationService {
   private final PaymentsService payments;
   private final ConciliationStore store;
   private final ConciliationAlerts alerts;
+  private final ConciliationProperties properties;
 
   public ConciliationService(SettlementReportSource reportSource, PaymentsService payments,
-      ConciliationStore store, ConciliationAlerts alerts) {
+      ConciliationStore store, ConciliationAlerts alerts, ConciliationProperties properties) {
     this.reportSource = reportSource;
     this.payments = payments;
     this.store = store;
     this.alerts = alerts;
+    this.properties = properties;
   }
 
   /** Manual ingest: an operator asking for a window always gets the report
-   *  back, even a fully quiet one. */
+   *  back, even a fully quiet one — unless its end reaches further ahead of
+   *  now than the slack allows. A future-dated report here would hold the
+   *  scheduled window start past the lagged now and stall every tick. */
   @Transactional
   public SettlementReportSummary ingest(Instant from, Instant to) {
+    if (to.isAfter(Instant.now().plus(properties.maxWindowAhead()))) {
+      throw new IllegalArgumentException(
+          "window end is too far in the future: " + to + " (allowed ahead: "
+              + properties.maxWindowAhead() + ")");
+    }
     return persist(matchWindow(from, to));
   }
 

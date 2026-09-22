@@ -17,5 +17,6 @@ public record ConciliationProperties(
     @DefaultValue("300000") @Min(1) long pollDelayMs,
     @DefaultValue("60000") @Min(1) long initialDelayMs,
     @DefaultValue("PT30S") @DurationMin(nanos = 0) Duration windowLag,
+    /** How far ahead of now the manual ingest route may accept a window end. */
     @DefaultValue("PT5M") @DurationMin(nanos = 0, inclusive = false) Duration maxWindowAhead) {
 }

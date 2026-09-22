@@ -111,6 +111,17 @@ public class JdbcClientConciliationStore implements ConciliationStore {
   }
 
   @Override
+  public Optional<Instant> latestReportEnd() {
+    // max() over an empty table still returns one row with a NULL column —
+    // map that to Optional.empty(), not an NPE.
+    return jdbc.sql("select max(period_to) from conciliation.settlement_report")
+        .query((rs, i) -> {
+          OffsetDateTime end = rs.getObject(1, OffsetDateTime.class);
+          return end == null ? null : end.toInstant();
+        }).optional();
+  }
+
+  @Override
   public Instant selfHealingWindowStart() {
     return jdbc.sql("""
         select greatest(s.last_window_end,
