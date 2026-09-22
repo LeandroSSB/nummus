@@ -81,20 +81,28 @@ class ConciliationStallGuardTest extends IntegrationTestBase {
 
   @Test
   void stalledTicksWarnOncePerEpisode() throws Exception {
-    // Plant a future-dated report directly (the route guard now blocks the
-    // HTTP path; SQL is how a legacy row would exist).
-    try (Connection c = adminConnection(); Statement st = c.createStatement()) {
-      st.executeUpdate("insert into conciliation.settlement_report "
-          + "(public_id, period_from, period_to, status, matched_count, amount_mismatched_count, "
-          + "missing_internal_count, missing_external_count) values ('"
-          + UUID.randomUUID() + "', now() - interval '1 minute', now() + interval '1 hour', "
-          + "'CONCILED', 0, 0, 0, 0)");
-    }
+    // The worker bean (and its stall latch) is a singleton shared with the
+    // other conciliation suites: an earlier suite's no-op tick may already
+    // have latched an episode. Clear the reports and push the marker ahead of
+    // the lagged now, so this test's first tick provably takes the no-op path
+    // and re-arms through the no-reports branch — then observe a fresh episode.
+    clearReports();
+    setLastWindowEnd("now() + interval '1 hour'");
     Logger workerLogger = (Logger) LoggerFactory.getLogger(ConciliationWorker.class);
     ListAppender<ILoggingEvent> appender = new ListAppender<>();
     appender.start();
     workerLogger.addAppender(appender);
     try {
+      worker.tick();
+      // Plant a future-dated report directly (the route guard now blocks the
+      // HTTP path; SQL is how a legacy row would exist).
+      try (Connection c = adminConnection(); Statement st = c.createStatement()) {
+        st.executeUpdate("insert into conciliation.settlement_report "
+            + "(public_id, period_from, period_to, status, matched_count, amount_mismatched_count, "
+            + "missing_internal_count, missing_external_count) values ('"
+            + UUID.randomUUID() + "', now() - interval '1 minute', now() + interval '1 hour', "
+            + "'CONCILED', 0, 0, 0, 0)");
+      }
       worker.tick();
       worker.tick();
     } finally {
@@ -108,6 +116,26 @@ class ConciliationStallGuardTest extends IntegrationTestBase {
     try (Connection c = adminConnection(); Statement st = c.createStatement()) {
       st.executeUpdate("update conciliation.settlement_report set period_to = now() - interval '2 hours' "
           + "where period_to > now()");
+    }
+  }
+
+  /** Every report row — the stall detector's input must start empty here.
+   *  Later suites scope their assertions to their own rows or deltas, so a
+   *  wiped report table never leaks into them (WorkerTest's @BeforeAll does
+   *  the same class of cross-suite hygiene in the other direction). */
+  private void clearReports() throws Exception {
+    try (Connection c = adminConnection(); Statement st = c.createStatement()) {
+      st.executeUpdate("delete from conciliation.report_line");
+      st.executeUpdate("delete from conciliation.settlement_report");
+    }
+  }
+
+  /** The same DB-side marker pin ConciliationWorkerTest uses: a tick of this
+   *  class never ingests a window it did not choose itself. */
+  private void setLastWindowEnd(String sqlExpression) throws Exception {
+    try (Connection c = adminConnection(); Statement st = c.createStatement()) {
+      st.executeUpdate("update conciliation.ingest_state set last_window_end = " + sqlExpression
+          + ", updated_at = now() where id = 1");
     }
   }
 }
