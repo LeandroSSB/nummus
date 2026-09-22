@@ -95,7 +95,18 @@ class AuditLogRestApiTest extends IntegrationTestBase {
             .content("{\"name\":\"Audit Filter Merchant\"}"))
         .andExpect(status().isCreated()).andReturn();
     String merchantId = JsonPath.read(created.getResponse().getContentAsString(), "$.merchantId");
-    operatorKeys.create("filter-minted", null, actor.key().publicId()); // newer than the creation
+    var minted = operatorKeys.create("filter-minted", null,
+        actor.key().publicId()); // newer than the creation
+    // Unfiltered first — the null-action listing branch with rows on the page:
+    // the newest entry overall must be this class's just-created mint.
+    mockMvc.perform(get("/v1/operator/audit-log")
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
+            .param("limit", "5"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].action").value("operator_key.minted"))
+        .andExpect(jsonPath("$[0].subjectId").value(minted.key().publicId().toString()))
+        .andExpect(jsonPath("$[0].subjectType").value("operator_key"))
+        .andExpect(jsonPath("$[0].actorKey").value(actor.key().publicId().toString()));
     mockMvc.perform(get("/v1/operator/audit-log")
             .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .param("action", "merchant.created"))
