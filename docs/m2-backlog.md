@@ -437,7 +437,7 @@ current value. Known bounds, deliberate:
   uniqueness or i18n constraints; the key id disambiguates.
 - **Concurrent fee PUTs** — entry order is identity-sequence order while
   cache order is merchant-row-lock order, so the cached current can
-  briefly disagree with the newest entry under truly concurrent updates;
+  disagree with the newest entry under truly concurrent updates until the next update;
   per-transaction atomicity holds. Serialize fee changes per merchant if
   that bound matters.
 - The bootstrap label-before-state ordering is verified by inspection; a
