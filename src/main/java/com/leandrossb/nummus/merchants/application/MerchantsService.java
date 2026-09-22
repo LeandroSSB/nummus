@@ -19,7 +19,8 @@ public interface MerchantsService {
 
   /** Appends an attributed history entry and updates the cached current
    *  schedule in one transaction. @param actingOperatorKey the calling
-   *  operator key's public id (attribution). @return false when the merchant
-   *  is unknown. */
+   *  operator key's public id (attribution) — it must exist, the history row
+   *  references it (HTTP callers always satisfy this via the resolved
+   *  authenticated key). @return false when the merchant is unknown. */
   boolean updateFeeSchedule(UUID publicId, FeeSchedule fee, UUID actingOperatorKey);
 }

@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.merchants.infrastructure;
 
+import com.leandrossb.nummus.merchants.application.FeeHistoryEntry;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantStore;
 import com.leandrossb.nummus.merchants.application.ResolvedMerchantKey;
@@ -60,6 +61,30 @@ public class JdbcClientMerchantStore implements MerchantStore {
         .param("id", merchantPublicId)
         .query((rs, i) -> new FeeSchedule(rs.getBigDecimal("fee_rate"), rs.getBigDecimal("fee_fixed")))
         .optional();
+  }
+
+  @Override
+  public List<FeeHistoryEntry> listFeeHistory(UUID merchantPublicId, UUID after, int limit) {
+    return jdbc.sql("""
+        select e.public_id, e.rate, e.fixed, e.valid_from, e.created_by, k.label as created_by_label
+        from merchants.fee_schedule_entry e
+        join merchants.merchant m on m.id = e.merchant_id
+        left join merchants.operator_key k on k.public_id = e.created_by
+        where m.public_id = :merchantPublicId
+          and (:after::uuid is null
+               or e.id < (select f.id from merchants.fee_schedule_entry f
+                          where f.public_id = :after))
+        order by e.id desc
+        limit :limit
+        """)
+        .param("merchantPublicId", merchantPublicId)
+        .param("after", after)
+        .param("limit", limit)
+        .query((rs, i) -> new FeeHistoryEntry(rs.getObject("public_id", UUID.class),
+            rs.getBigDecimal("rate"), rs.getBigDecimal("fixed"),
+            rs.getObject("valid_from", OffsetDateTime.class).toInstant(),
+            rs.getObject("created_by", UUID.class), rs.getString("created_by_label")))
+        .list();
   }
 
   @Override

@@ -23,6 +23,11 @@ public interface MerchantStore {
    *  for the migration backfill; the service always passes a real key. */
   void insertFeeScheduleEntry(UUID merchantPublicId, FeeSchedule fee, UUID createdBy);
 
+  /** The merchant's fee-history entries, newest first — a keyset walk on id:
+   *  at most {@code limit} entries strictly older than {@code after} (null
+   *  starts at the newest). createdByLabel is null exactly when createdBy is. */
+  List<FeeHistoryEntry> listFeeHistory(UUID merchantPublicId, UUID after, int limit);
+
   /** @return false when the merchant is unknown. */
   boolean updateFeeSchedule(UUID merchantPublicId, FeeSchedule fee);
 
