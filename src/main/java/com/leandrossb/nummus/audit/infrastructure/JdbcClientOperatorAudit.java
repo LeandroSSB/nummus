@@ -2,6 +2,7 @@ package com.leandrossb.nummus.audit.infrastructure;
 
 import com.leandrossb.nummus.audit.application.OperatorActionRecord;
 import com.leandrossb.nummus.audit.application.OperatorAudit;
+import com.leandrossb.nummus.audit.application.OperatorAuditLog;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -14,7 +15,7 @@ import tools.jackson.databind.ObjectMapper;
 /** The audit log's single adapter: writes inside the caller's transaction
  *  (MANDATORY), reads for the listing (newest-first keyset). */
 @Component
-public class JdbcClientOperatorAudit implements OperatorAudit {
+public class JdbcClientOperatorAudit implements OperatorAudit, OperatorAuditLog {
 
   private final JdbcClient jdbc;
   private final ObjectMapper objectMapper;
@@ -42,6 +43,7 @@ public class JdbcClientOperatorAudit implements OperatorAudit {
   }
 
   /** Listing read: newest-first keyset; action is an optional exact filter. */
+  @Override
   public List<OperatorActionRecord> list(UUID after, String action, int limit) {
     return jdbc.sql("""
         select a.public_id, a.actor_key, k.label as actor_label, a.action, a.subject_type,
@@ -50,7 +52,7 @@ public class JdbcClientOperatorAudit implements OperatorAudit {
         left join merchants.operator_key k on k.public_id = a.actor_key
         where (:after::uuid is null or a.id < (select f.id from audit.operator_action f
               where f.public_id = :after))
-          and (:action is null or a.action = :action)
+          and (:action::text is null or a.action = :action)
         order by a.id desc
         limit :limit
         """)
