@@ -28,7 +28,9 @@ import com.leandrossb.nummus.payments.domain.ChargeAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.ConcurrentSettlementException;
 import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
 import com.leandrossb.nummus.psp_simulator.domain.ChargeNotPendingException;
+import com.leandrossb.nummus.psp_simulator.domain.TransferNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownChargeException;
+import com.leandrossb.nummus.psp_simulator.domain.UnknownTransferException;
 import com.leandrossb.nummus.webhooks.application.UnsafeWebhookUrlException;
 import com.leandrossb.nummus.webhooks.domain.UnknownWebhookDeliveryException;
 import com.leandrossb.nummus.webhooks.domain.UnknownWebhookEndpointException;
@@ -57,7 +59,7 @@ public class GlobalExceptionHandler {
       UnknownPaymentIntentException.class, UnknownWebhookEndpointException.class,
       UnknownWebhookDeliveryException.class,
       UnknownConciliationReportException.class, UnknownMerchantException.class,
-      UnknownApiKeyException.class})
+      UnknownApiKeyException.class, UnknownTransferException.class})
   public ProblemDetail notFound(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
   }
@@ -89,7 +91,7 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler({PaymentAccountNotActiveException.class, AccountNotActiveException.class,
       TransactionAlreadyReversedException.class, ChargeNotPendingException.class,
-      ConcurrentSettlementException.class})
+      TransferNotPendingException.class, ConcurrentSettlementException.class})
   public ProblemDetail conflict(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }

@@ -5,10 +5,15 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Deterministic in-memory network for unit tests: charges stay PENDING until driven. */
+/**
+ * Deterministic in-memory network for unit tests: charges and transfers stay
+ * PENDING until driven.
+ */
 public class FakePaymentNetwork implements PaymentNetwork {
 
   private final Map<UUID, NetworkCharge> charges = new ConcurrentHashMap<>();
+
+  private final Map<UUID, NetworkTransfer> transfers = new ConcurrentHashMap<>();
 
   @Override
   public NetworkCharge createCharge(Money amount) {
@@ -41,5 +46,18 @@ public class FakePaymentNetwork implements PaymentNetwork {
   private void transition(UUID chargePublicId, ChargeStatus target) {
     charges.computeIfPresent(chargePublicId,
         (id, charge) -> new NetworkCharge(id, charge.amount(), target));
+  }
+
+  @Override
+  public NetworkTransfer createPayoutTransfer(Money amount, String destinationBankKey) {
+    var transfer = new NetworkTransfer(UUID.randomUUID(), amount, destinationBankKey,
+        ChargeStatus.PENDING);
+    transfers.put(transfer.publicId(), transfer);
+    return transfer;
+  }
+
+  @Override
+  public NetworkTransfer getPayoutTransfer(UUID transferPublicId) {
+    return transfers.get(transferPublicId);
   }
 }
