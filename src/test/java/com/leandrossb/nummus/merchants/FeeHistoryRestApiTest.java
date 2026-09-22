@@ -1,15 +1,19 @@
 package com.leandrossb.nummus.merchants;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
 import com.leandrossb.nummus.merchants.application.IssuedApiKey;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.merchants.application.SeedMerchant;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -127,18 +131,90 @@ class FeeHistoryRestApiTest extends IntegrationTestBase {
   }
 
   @Test
-  void aSecondChangeYieldsTwoEntriesNewestFirst() throws Exception {
+  void aSecondChangeYieldsTwoEntries() throws Exception {
     var merchant = createMerchantAsOperator("History C", null);
 
     putFee(merchant, "0.01", "0.10");
     putFee(merchant, "0.02", "0.20");
 
     assertEquals(2, entryCountForMerchant(merchant.merchantId()));
-    // The cache carries the SECOND rate; Task 4 pins the id-desc listing order.
+    // The cache carries the SECOND rate; the fee-history listing test pins
+    // the id-desc order of the entries themselves.
     mockMvc.perform(get("/v1/merchants/" + merchant.merchantId())
             .header("Authorization", "Bearer " + merchant.operatorSecret()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.fee.rate").value(0.02))
         .andExpect(jsonPath("$.fee.fixedAmount").value(0.20));
+  }
+
+  @Test
+  void feeHistoryPaginatesWithNextCursor() throws Exception {
+    var merchant = createMerchantAsOperator("History D", null);
+    putFee(merchant, "0.0100", "0.10");
+    putFee(merchant, "0.0200", "0.20");
+    putFee(merchant, "0.0300", "0.30");
+    MvcResult page1 = mockMvc
+        .perform(get("/v1/merchants/" + merchant.merchantId() + "/fee-history")
+            .header("Authorization", "Bearer " + merchant.operatorSecret()).param("limit", "2"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(2))
+        .andExpect(jsonPath("$[0].entryId").exists())
+        .andExpect(jsonPath("$[0].validFrom").exists())
+        .andExpect(jsonPath("$[0].createdBy").value(merchant.operatorKeyPublicId()))
+        .andExpect(header().exists("Next-Cursor"))
+        .andExpect(jsonPath("$[0].rate").value(0.0300))
+        .andReturn();
+    String cursor = page1.getResponse().getHeader("Next-Cursor");
+    mockMvc.perform(get("/v1/merchants/" + merchant.merchantId() + "/fee-history")
+            .header("Authorization", "Bearer " + merchant.operatorSecret())
+            .param("limit", "2").param("after", cursor))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(header().doesNotExist("Next-Cursor"))
+        .andExpect(jsonPath("$[0].rate").value(0.0100));
+  }
+
+  @Test
+  void unknownCursorYieldsAnEmptyPage() throws Exception {
+    var merchant = createMerchantAsOperator("History E", null);
+    mockMvc.perform(get("/v1/merchants/" + merchant.merchantId() + "/fee-history")
+            .header("Authorization", "Bearer " + merchant.operatorSecret())
+            .param("after", UUID.randomUUID().toString()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(0))
+        .andExpect(header().doesNotExist("Next-Cursor"));
+  }
+
+  @Test
+  void feeHistoryBoundsAndScoping() throws Exception {
+    var merchant = createMerchantAsOperator("History F", null);
+    mockMvc.perform(get("/v1/merchants/" + merchant.merchantId() + "/fee-history")
+            .header("Authorization", "Bearer " + merchant.operatorSecret()).param("limit", "0"))
+        .andExpect(status().isBadRequest());
+    mockMvc.perform(get("/v1/merchants/" + merchant.merchantId() + "/fee-history")
+            .header("Authorization", "Bearer " + merchant.operatorSecret()).param("limit", "101"))
+        .andExpect(status().isBadRequest());
+    mockMvc.perform(get("/v1/merchants/" + UUID.randomUUID() + "/fee-history")
+            .header("Authorization", "Bearer " + merchant.operatorSecret()))
+        .andExpect(status().isNotFound());
+    // Merchant keys never reach the history surface — the M8 role mismatch 403.
+    String merchantKey = ApiDrivers.createMerchantAndGetKey(mockMvc,
+        "Bearer " + merchant.operatorSecret(), "History Gated");
+    mockMvc.perform(get("/v1/merchants/" + merchant.merchantId() + "/fee-history")
+            .header("Authorization", "Bearer " + merchantKey))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void seedAttributionRendersAsSystem() throws Exception {
+    // The PRE-EXISTING seed merchant's only entry is the V16 backfill: its
+    // actor predates operator identity, so the null attribution renders
+    // "system". A merchant created after the migration has no seed.
+    mockMvc.perform(get("/v1/merchants/" + SeedMerchant.PUBLIC_ID + "/fee-history")
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].createdByLabel").value("system"))
+        .andExpect(jsonPath("$[0].createdBy").value(nullValue()));
   }
 }
