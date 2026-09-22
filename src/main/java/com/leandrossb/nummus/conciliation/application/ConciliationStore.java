@@ -23,6 +23,9 @@ public interface ConciliationStore {
   /** Lines of one report, insertion order. */
   List<MatchedLine> findLines(UUID reportPublicId);
 
+  /** The latest report's period_to, if any — the stall detector's input. */
+  Optional<Instant> latestReportEnd();
+
   /** greatest(ingest_state.last_window_end, max(settlement_report.period_to)):
    *  manual ingests that covered pending territory are never re-covered. */
   Instant selfHealingWindowStart();

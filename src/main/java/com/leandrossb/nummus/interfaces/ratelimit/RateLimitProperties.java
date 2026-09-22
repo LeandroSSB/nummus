@@ -1,7 +1,9 @@
 package com.leandrossb.nummus.interfaces.ratelimit;
 
+import jakarta.validation.constraints.Min;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Per-tenant throttling: merchant requests bucket by merchant id, operator
@@ -10,9 +12,10 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * state — a restart resets buckets (documented bound).
  */
 @ConfigurationProperties(prefix = "nummus.ratelimit")
+@Validated
 public record RateLimitProperties(
-    @DefaultValue("600") int merchantCapacity,
-    @DefaultValue("10") int merchantRefillPerSecond,
-    @DefaultValue("120") int operatorCapacity,
-    @DefaultValue("2") int operatorRefillPerSecond) {
+    @DefaultValue("600") @Min(1) int merchantCapacity,
+    @DefaultValue("10") @Min(0) int merchantRefillPerSecond,
+    @DefaultValue("120") @Min(1) int operatorCapacity,
+    @DefaultValue("2") @Min(0) int operatorRefillPerSecond) {
 }

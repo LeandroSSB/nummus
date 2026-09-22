@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.jayway.jsonpath.JsonPath;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
@@ -30,16 +31,12 @@ class FeeRestApiTest extends IntegrationTestBase {
   @Autowired
   private SimulatorService simulator;
 
-  private String operatorAuth() {
-    return "Bearer " + operatorKeys.create(null).secret();
-  }
-
   private record Merchant(String key, String id) {}
 
   /** Creates a merchant over HTTP with the given fee body (null = none) and returns its key + id. */
   private Merchant newMerchant(String feeBody) throws Exception {
     var created = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth()).header(KEY, UUID.randomUUID().toString())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content(feeBody == null ? "{\"name\":\"fee api merchant\"}"
                 : "{\"name\":\"fee api merchant\",\"fee\":" + feeBody + "}"))
@@ -75,28 +72,28 @@ class FeeRestApiTest extends IntegrationTestBase {
   @Test
   void operatorUpdatesFeeAndReplayIsIdempotent() throws Exception {
     var merchant = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth()).header(KEY, UUID.randomUUID().toString())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"fee target\"}"))
         .andExpect(status().isCreated()).andReturn();
     String id = com.jayway.jsonpath.JsonPath.read(merchant.getResponse().getContentAsString(), "$.merchantId");
     String idem = UUID.randomUUID().toString();
 
     var first = mockMvc.perform(put("/v1/merchants/" + id + "/fee")
-            .header("Authorization", operatorAuth()).header(KEY, idem)
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)).header(KEY, idem)
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"rate\":0.0099,\"fixedAmount\":0.39}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.fee.rate").value(0.0099))
         .andExpect(jsonPath("$.fee.fixedAmount").value(0.39)).andReturn();
     var replay = mockMvc.perform(put("/v1/merchants/" + id + "/fee")
-            .header("Authorization", operatorAuth()).header(KEY, idem)
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)).header(KEY, idem)
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"rate\":0.0099,\"fixedAmount\":0.39}"))
         .andExpect(status().isOk()).andReturn();
     org.junit.jupiter.api.Assertions.assertEquals(first.getResponse().getContentAsString(),
         replay.getResponse().getContentAsString());
 
-    mockMvc.perform(get("/v1/merchants/" + id).header("Authorization", operatorAuth()))
+    mockMvc.perform(get("/v1/merchants/" + id).header("Authorization", ApiDrivers.operatorAuth(operatorKeys)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.fee.rate").value(0.0099));
   }
@@ -104,15 +101,15 @@ class FeeRestApiTest extends IntegrationTestBase {
   @Test
   void invalidFeeIsBadRequestAndUnknownMerchantIsNotFound() throws Exception {
     mockMvc.perform(put("/v1/merchants/" + UUID.randomUUID() + "/fee")
-            .header("Authorization", operatorAuth()).header(KEY, UUID.randomUUID().toString())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"rate\":0.0099,\"fixedAmount\":0.39}"))
         .andExpect(status().isNotFound());
     mockMvc.perform(put("/v1/merchants/" + anyMerchantId() + "/fee")
-            .header("Authorization", operatorAuth()).header(KEY, UUID.randomUUID().toString())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"rate\":1.0,\"fixedAmount\":0}"))
         .andExpect(status().isBadRequest());
     mockMvc.perform(put("/v1/merchants/" + anyMerchantId() + "/fee")
-            .header("Authorization", operatorAuth()).header(KEY, UUID.randomUUID().toString())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"rate\":-0.1,\"fixedAmount\":0}"))
         .andExpect(status().isBadRequest());
   }
@@ -129,7 +126,7 @@ class FeeRestApiTest extends IntegrationTestBase {
   @Test
   void createMerchantWithFeeCarriesItInTheResponse() throws Exception {
     mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth()).header(KEY, UUID.randomUUID().toString())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"name\":\"fee born\",\"fee\":{\"rate\":0.015,\"fixedAmount\":0}}"))
         .andExpect(status().isCreated())
@@ -148,7 +145,7 @@ class FeeRestApiTest extends IntegrationTestBase {
 
     // Rate change moves the estimate on read; nothing is frozen per intent.
     mockMvc.perform(put("/v1/merchants/" + merchant.id() + "/fee")
-            .header("Authorization", operatorAuth()).header(KEY, UUID.randomUUID().toString())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"rate\":0.02,\"fixedAmount\":0}"))
         .andExpect(status().isOk());
     String intentId = JsonPath.read(intent, "$.publicId");
@@ -174,7 +171,7 @@ class FeeRestApiTest extends IntegrationTestBase {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SETTLED"));
     mockMvc.perform(put("/v1/merchants/" + merchant.id() + "/fee")
-            .header("Authorization", operatorAuth()).header(KEY, UUID.randomUUID().toString())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)).header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"rate\":0.05,\"fixedAmount\":0}"))
         .andExpect(status().isOk());
     mockMvc.perform(get("/v1/payment-intents/" + intentId)

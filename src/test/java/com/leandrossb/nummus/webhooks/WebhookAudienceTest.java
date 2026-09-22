@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
@@ -28,25 +29,12 @@ class WebhookAudienceTest extends IntegrationTestBase {
   @Autowired
   private OperatorKeysService operatorKeys;
 
-  private String operatorAuth() {
-    return "Bearer " + operatorKeys.create(null).secret();
-  }
-
-  private String createMerchantAndGetKey(String name) throws Exception {
-    MvcResult created = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    return com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.apiKey.secret");
-  }
-
   private String registerEndpointAndGetId(String bearer) throws Exception {
     MvcResult created = mockMvc.perform(post("/v1/webhook-endpoints")
             .header("Authorization", "Bearer " + bearer)
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"url\":\"http://127.0.0.1:9/audience-" + UUID.randomUUID() + "\"}"))
+            .content("{\"url\":\"" + ApiDrivers.loopbackUrl("audience") + "\"}"))
         .andExpect(status().isCreated()).andReturn();
     return com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.publicId");
   }
@@ -77,8 +65,10 @@ class WebhookAudienceTest extends IntegrationTestBase {
 
   @Test
   void settledEventDeliversOnlyToTheOwningMerchantsEndpoint() throws Exception {
-    String a = createMerchantAndGetKey("Audience A");
-    String b = createMerchantAndGetKey("Audience B");
+    String a = ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Audience A");
+    String b = ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Audience B");
     String aEndpoint = registerEndpointAndGetId(a);
     String bEndpoint = registerEndpointAndGetId(b);
 

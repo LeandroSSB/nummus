@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -17,7 +18,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
 
 @AutoConfigureMockMvc
 class RequestBodyCapRestTest extends IntegrationTestBase {
@@ -35,18 +35,10 @@ class RequestBodyCapRestTest extends IntegrationTestBase {
   @Autowired
   private OperatorKeysService operatorKeys;
 
-  private String createMerchantAndGetKey() throws Exception {
-    MvcResult created = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", "Bearer " + operatorKeys.create(null).secret())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Cap Merchant\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    return com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.apiKey.secret");
-  }
-
   @Test
   void oversizedMerchantWriteIs413AndLeavesNoIdempotencyRow() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey();
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+        mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Cap Merchant");
     String idemKey = UUID.randomUUID().toString();
     String oversized = "{\"holderName\":\"" + "x".repeat(200) + "\"}";
     mockMvc.perform(post("/v1/accounts")

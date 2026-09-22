@@ -385,3 +385,34 @@ The whole-branch review found no production defect. Items it raised:
   the app only UPDATEs** (the migration seeds the single row; the check
   constraint forbids a second). Harmless least-privilege excess.
 
+## From the M13 design
+
+M13 hardened operations: uniform startup validation on every `nummus.*`
+knob (one binding error instead of a permanently-429ing or overflow-prone
+runtime), the two-layer future-dated-ingest stall guard (route 400 plus a
+once-per-episode scheduler warn), sub-millisecond `expiresIn` rejection,
+`TransactionTemplate` failure logging with real atomicity, shared REST test
+drivers, and the M12 review's pins. Known bounds, deliberate:
+
+- **Validation is startup-time only** — runtime re-binding or refresh of
+  properties stays out of scope.
+- **The stall warn is per-process** — a second instance warns independently
+  (the workers' single-process stance).
+- **No pagination-helper extraction** — the two mirrored controllers are
+  pinned independently; extraction waits for a third copy.
+
+## From the M13 review
+
+The whole-branch review found no production defect. Backlog-grade items it
+triaged:
+
+- **`latestReportEnd`'s empty-table path is exercised only incidentally** —
+  a direct assertion against a wiped table would pin the null-safety
+  regression the M13 plan's original snippet carried.
+- **`ConciliationWorkerTest` cannot run as the sole `-Dtest`** — its static
+  `@BeforeAll` precedes Flyway when no other class has started the context;
+  focused runs must include a companion suite.
+- **~15 added Java lines exceed 100 columns** (fee/deliveries/endpoints test
+  suites and one exception message) — no lint gate; tighten when those files
+  are next touched.
+

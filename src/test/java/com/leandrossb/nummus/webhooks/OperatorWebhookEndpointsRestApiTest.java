@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -26,25 +27,15 @@ class OperatorWebhookEndpointsRestApiTest extends IntegrationTestBase {
 
   private static final String KEY = "Idempotency-Key";
 
-  /** Port 9 (discard): a loopback URL the URL policy accepts that nothing
-   *  ever contacts. Unique path per registration keeps fixtures disjoint. */
-  private static String loopbackUrl(String tag) {
-    return "http://127.0.0.1:9/" + tag + "-" + UUID.randomUUID();
-  }
-
   @Autowired
   private MockMvc mockMvc;
 
   @Autowired
   private OperatorKeysService operatorKeys;
 
-  private String operatorAuth() {
-    return "Bearer " + operatorKeys.create(null).secret();
-  }
-
   private String registerOperatorEndpoint(String url, String typesJson) throws Exception {
     MvcResult created = mockMvc.perform(post("/v1/operator/webhook-endpoints")
-            .header("Authorization", operatorAuth())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"url\":\"" + url + "\",\"eventTypes\":" + typesJson + "}"))
@@ -54,13 +45,13 @@ class OperatorWebhookEndpointsRestApiTest extends IntegrationTestBase {
 
   @Test
   void registerCreatesWithSecretOnceAndPolicyRejectsUnsafeUrls() throws Exception {
-    String body = registerOperatorEndpoint(loopbackUrl("hook"), "[\"conciliation.report_open\"]");
+    String body = registerOperatorEndpoint(ApiDrivers.loopbackUrl("hook"), "[\"conciliation.report_open\"]");
     org.junit.jupiter.api.Assertions.assertTrue(
         com.jayway.jsonpath.JsonPath.read(body, "$.secret").toString().startsWith("whsec_"));
     String endpointId = com.jayway.jsonpath.JsonPath.read(body, "$.publicId");
     // The secret never comes back: listing carries ids and prefixes only.
     MvcResult listed = mockMvc.perform(get("/v1/operator/webhook-endpoints")
-            .header("Authorization", operatorAuth()))
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)))
         .andExpect(status().isOk()).andReturn();
     org.junit.jupiter.api.Assertions.assertTrue(
         listed.getResponse().getContentAsString().contains(endpointId));
@@ -68,7 +59,7 @@ class OperatorWebhookEndpointsRestApiTest extends IntegrationTestBase {
         listed.getResponse().getContentAsString().contains("whsec_"));
     // The M10 URL policy applies to the operator namespace too.
     mockMvc.perform(post("/v1/operator/webhook-endpoints")
-            .header("Authorization", operatorAuth())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"url\":\"http://192.168.0.9/hook\",\"eventTypes\":[]}"))
@@ -78,22 +69,24 @@ class OperatorWebhookEndpointsRestApiTest extends IntegrationTestBase {
   @Test
   void unknownEventTypesAreRejected() throws Exception {
     mockMvc.perform(post("/v1/operator/webhook-endpoints")
-            .header("Authorization", operatorAuth())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"url\":\"" + loopbackUrl("bad") + "\",\"eventTypes\":[\"made.up.event\"]}"))
+            .content("{\"url\":\"" + ApiDrivers.loopbackUrl("bad") + "\",\"eventTypes\":[\"made.up.event\"]}"))
         .andExpect(status().isBadRequest());
   }
 
   @Test
   void namespacesAreIsolatedInBothDirections() throws Exception {
     // Operator listing never shows merchant endpoints...
-    String operatorAuth = operatorAuth();
+    String operatorAuth = ApiDrivers.operatorAuth(operatorKeys);
+    String merchantBearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+        mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Namespace Merchant");
     MvcResult merchantEndpoint = mockMvc.perform(post("/v1/webhook-endpoints")
-            .header("Authorization", seedMerchantBearer())
+            .header("Authorization", merchantBearer)
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"url\":\"" + loopbackUrl("m-hook") + "\",\"eventTypes\":[]}"))
+            .content("{\"url\":\"" + ApiDrivers.loopbackUrl("m-hook") + "\",\"eventTypes\":[]}"))
         .andExpect(status().isCreated()).andReturn();
     String merchantEndpointId = com.jayway.jsonpath.JsonPath.read(
         merchantEndpoint.getResponse().getContentAsString(), "$.publicId");
@@ -110,26 +103,13 @@ class OperatorWebhookEndpointsRestApiTest extends IntegrationTestBase {
 
   @Test
   void deleteIsSoftAndThenUnknown() throws Exception {
-    String body = registerOperatorEndpoint(loopbackUrl("gone"), "[]");
+    String body = registerOperatorEndpoint(ApiDrivers.loopbackUrl("gone"), "[]");
     String endpointId = com.jayway.jsonpath.JsonPath.read(body, "$.publicId");
     mockMvc.perform(delete("/v1/operator/webhook-endpoints/" + endpointId)
-            .header("Authorization", operatorAuth()))
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)))
         .andExpect(status().isNoContent());
     mockMvc.perform(get("/v1/operator/webhook-endpoints/" + endpointId)
-            .header("Authorization", operatorAuth()))
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)))
         .andExpect(status().isNotFound());
-  }
-
-  /** A merchant fixture's Authorization header value: the first API key's
-   *  secret is shown exactly once, here as the bearer credential. */
-  private String seedMerchantBearer() throws Exception {
-    MvcResult merchant = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"name\":\"Namespace Merchant\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    return "Bearer " + com.jayway.jsonpath.JsonPath.read(
-        merchant.getResponse().getContentAsString(), "$.apiKey.secret");
   }
 }

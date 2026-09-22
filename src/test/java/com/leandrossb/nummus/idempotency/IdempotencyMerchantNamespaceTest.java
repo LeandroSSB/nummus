@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -12,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
 
 @AutoConfigureMockMvc
 class IdempotencyMerchantNamespaceTest extends IntegrationTestBase {
@@ -30,18 +30,9 @@ class IdempotencyMerchantNamespaceTest extends IntegrationTestBase {
   /** One operator key per test — merchant creation and conciliation ingest are operator-gated. */
   private String operatorAuth() {
     if (operatorAuth == null) {
-      operatorAuth = "Bearer " + operatorKeys.create(null).secret();
+      operatorAuth = ApiDrivers.operatorAuth(operatorKeys);
     }
     return operatorAuth;
-  }
-
-  private String createMerchantAndGetKey(String name) throws Exception {
-    MvcResult created = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    return com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.apiKey.secret");
   }
 
   private String openAccount(String bearer, String holder) throws Exception {
@@ -54,8 +45,8 @@ class IdempotencyMerchantNamespaceTest extends IntegrationTestBase {
 
   @Test
   void theSameKeyExecutesIndependentlyPerMerchant() throws Exception {
-    String a = createMerchantAndGetKey("Idem A");
-    String b = createMerchantAndGetKey("Idem B");
+    String a = ApiDrivers.createMerchantAndGetKey(mockMvc, operatorAuth(), "Idem A");
+    String b = ApiDrivers.createMerchantAndGetKey(mockMvc, operatorAuth(), "Idem B");
     openAccount(a, "Holder A");
     openAccount(b, "Holder B");
     String sharedKey = UUID.randomUUID().toString();

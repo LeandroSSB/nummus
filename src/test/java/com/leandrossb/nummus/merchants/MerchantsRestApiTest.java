@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,7 @@ class MerchantsRestApiTest extends IntegrationTestBase {
   /** One operator key per test — merchant creation is operator-gated. */
   private String operatorAuth() {
     if (operatorAuth == null) {
-      operatorAuth = "Bearer " + operatorKeys.create(null).secret();
+      operatorAuth = ApiDrivers.operatorAuth(operatorKeys);
     }
     return operatorAuth;
   }
@@ -60,7 +61,7 @@ class MerchantsRestApiTest extends IntegrationTestBase {
 
   @Test
   void selfServeKeyLifecycleOverMe() throws Exception {
-    String firstKey = createMerchant("Me Merchant");
+    String firstKey = ApiDrivers.createMerchantAndGetKey(mockMvc, operatorAuth(), "Me Merchant");
     String auth = "Bearer " + firstKey;
 
     mockMvc.perform(get("/v1/me").header("Authorization", auth))
@@ -87,14 +88,5 @@ class MerchantsRestApiTest extends IntegrationTestBase {
         .andExpect(status().isUnauthorized());
     mockMvc.perform(delete("/v1/me/api-keys/" + secondKeyId).header("Authorization", auth))
         .andExpect(status().isNotFound());
-  }
-
-  private String createMerchant(String name) throws Exception {
-    MvcResult created = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    return com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.apiKey.secret");
   }
 }

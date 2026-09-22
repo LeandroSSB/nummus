@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -30,19 +31,6 @@ class ApiKeyExpiryAuthTest extends IntegrationTestBase {
   @Autowired
   private OperatorKeysService operatorKeys;
 
-  private String operatorAuth() {
-    return "Bearer " + operatorKeys.create(null).secret();
-  }
-
-  private String createMerchantAndGetKey(String name) throws Exception {
-    MvcResult created = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    return com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.apiKey.secret");
-  }
-
   private String firstKeyId(String bearer) throws Exception {
     MvcResult listed = mockMvc.perform(get("/v1/me/api-keys").header("Authorization", bearer))
         .andExpect(status().isOk()).andReturn();
@@ -58,7 +46,8 @@ class ApiKeyExpiryAuthTest extends IntegrationTestBase {
 
   @Test
   void expiredMerchantKeyIsUnauthorized() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey("Expired Merchant");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Expired Merchant");
     mockMvc.perform(get("/v1/me").header("Authorization", bearer)).andExpect(status().isOk());
     expireKey(firstKeyId(bearer));
     mockMvc.perform(get("/v1/me").header("Authorization", bearer))
@@ -67,7 +56,8 @@ class ApiKeyExpiryAuthTest extends IntegrationTestBase {
 
   @Test
   void nearFutureExpiryAuthenticatesUntilItPasses() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey("Countdown Merchant");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Countdown Merchant");
     String keyId = firstKeyId(bearer);
     try (Connection c = adminConnection(); Statement st = c.createStatement()) {
       st.executeUpdate("update merchants.api_key set expires_at = now() + interval '2 seconds' "
@@ -100,7 +90,8 @@ class ApiKeyExpiryAuthTest extends IntegrationTestBase {
 
   @Test
   void lastUsedAtIsStampedOnSuccessAndNotOn401() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey("Stamped Merchant");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Stamped Merchant");
     String keyId = firstKeyId(bearer);
     mockMvc.perform(get("/v1/me").header("Authorization", bearer)).andExpect(status().isOk());
     String first;
@@ -137,7 +128,8 @@ class ApiKeyExpiryAuthTest extends IntegrationTestBase {
 
   @Test
   void listingsExposeTheLifecycleColumns() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey("Listed Merchant");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Listed Merchant");
     String keyId = firstKeyId(bearer);
     try (Connection c = adminConnection(); Statement st = c.createStatement()) {
       st.executeUpdate("update merchants.api_key set expires_at = now() + interval '1 day' "
