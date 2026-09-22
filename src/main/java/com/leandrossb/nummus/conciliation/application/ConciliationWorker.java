@@ -5,7 +5,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Scheduled tumbling-window re-ingest: start self-heals past manual ingests,
@@ -24,23 +25,24 @@ public class ConciliationWorker {
   private final ConciliationService conciliation;
   private final ConciliationStore store;
   private final ConciliationProperties properties;
+  private final TransactionTemplate transactions;
 
   /** The stalled-episode latch: warn once, re-arm when the stall clears. */
   private volatile boolean stallWarned;
 
   public ConciliationWorker(ConciliationService conciliation, ConciliationStore store,
-      ConciliationProperties properties) {
+      ConciliationProperties properties, PlatformTransactionManager transactionManager) {
     this.conciliation = conciliation;
     this.store = store;
     this.properties = properties;
+    this.transactions = new TransactionTemplate(transactionManager);
   }
 
   @Scheduled(fixedDelayString = "${nummus.conciliation.poll-delay-ms:300000}",
       initialDelayString = "${nummus.conciliation.initial-delay-ms:60000}")
-  @Transactional
   public void tick() {
     try {
-      runWindow();
+      transactions.executeWithoutResult(status -> runWindow());
     } catch (Exception e) {
       LOGGER.warn("conciliation ingest tick failed; the window will retry", e);
     }

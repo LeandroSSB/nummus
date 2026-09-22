@@ -1,7 +1,7 @@
 package com.leandrossb.nummus.merchants.application;
 
 /** A mint/rotation request carried an expiresIn that is not a positive
- *  ISO-8601 duration. */
+ *  ISO-8601 duration, or one shorter than one millisecond. */
 public class InvalidKeyExpiryException extends RuntimeException {
 
   public InvalidKeyExpiryException() {
