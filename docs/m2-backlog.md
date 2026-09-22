@@ -443,3 +443,23 @@ current value. Known bounds, deliberate:
 - The bootstrap label-before-state ordering is verified by inspection; a
   focused service-level assertion would pin it.
 
+## From the M15 design
+
+M15 completed the attribution story: every operator state-changing write
+except fee changes (which carry their own M14 typed trail) lands in one
+append-only, operator-readable audit log, recorded in the action's own
+transaction. Known bounds, deliberate:
+
+- **No retroactive backfill** — the log begins at M15; pre-M15 history is
+  absent, not synthesized.
+- **Fee changes are not double-recorded** — the M14 typed history is their
+  audit trail.
+- **Every operator sees the whole log** — role-level; no actor filter or
+  scoping until RBAC lands on the M14 seam.
+- **`detail` is advisory display data** — no schema contract; never a
+  source of truth.
+- **Reads are not audited** — only state-changing writes record; the log
+  is not a query journal.
+- **Scheduled ticks log nothing** — the machine is not an operator; only
+  the manual ingest route records.
+
