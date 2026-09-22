@@ -22,7 +22,7 @@ public final class ApiDrivers {
   /** A fresh operator bearer value: mints a new operator key per call, so
    *  each caller gets its own key (and its own rate-limit bucket). */
   public static String operatorAuth(OperatorKeysService operatorKeys) {
-    return "Bearer " + operatorKeys.create(null).secret();
+    return "Bearer " + operatorKeys.create("probe", null).secret();
   }
 
   /** POSTs the merchant as the operator and returns the first API key's

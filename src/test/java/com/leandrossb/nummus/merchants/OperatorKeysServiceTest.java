@@ -28,19 +28,19 @@ class OperatorKeysServiceTest extends IntegrationTestBase {
     // From a clean state the token comparison is reached: a wrong token is
     // rejected before anything is minted.
     assertThrows(InvalidBootstrapTokenException.class,
-        () -> operatorKeys.bootstrap("wrong-token-with-same-length!!"));
+        () -> operatorKeys.bootstrap("wrong-token-with-same-length!!", "probe"));
 
-    var first = operatorKeys.bootstrap("test-bootstrap-token");
+    var first = operatorKeys.bootstrap("test-bootstrap-token", "probe");
     assertTrue(first.secret().startsWith("nummus_sk_"));
     assertTrue(operatorKeys.findByRawKey(first.secret()).isPresent());
 
     // The first mint consumed the one-time bootstrap: the same token is now
     // locked out even though it still matches.
     assertThrows(BootstrapAlreadyUsedException.class,
-        () -> operatorKeys.bootstrap("test-bootstrap-token"));
+        () -> operatorKeys.bootstrap("test-bootstrap-token", "probe"));
 
     // Self-serve lifecycle still works after bootstrap is consumed.
-    var minted = operatorKeys.create(null);
+    var minted = operatorKeys.create("probe", null);
     assertNotEquals(first.secret(), minted.secret());
     operatorKeys.revoke(minted.key().publicId());
     assertTrue(operatorKeys.findByRawKey(minted.secret()).isEmpty());
@@ -52,9 +52,9 @@ class OperatorKeysServiceTest extends IntegrationTestBase {
   @Test
   void revokingEveryKeyReopensBootstrap() {
     revokeEveryActiveKey();
-    var key = operatorKeys.create(null);
+    var key = operatorKeys.create("probe", null);
     operatorKeys.revoke(key.key().publicId());
-    var again = operatorKeys.bootstrap("test-bootstrap-token");
+    var again = operatorKeys.bootstrap("test-bootstrap-token", "probe");
     assertTrue(again.secret().startsWith("nummus_sk_"));
   }
 

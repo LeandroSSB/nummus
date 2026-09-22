@@ -30,7 +30,7 @@ class OperatorAuthRestApiTest extends IntegrationTestBase {
   private OperatorKeysService operatorKeys;
 
   private String operatorKey() {
-    return operatorKeys.create(null).secret();
+    return operatorKeys.create("probe", null).secret();
   }
 
   @Test
@@ -38,16 +38,16 @@ class OperatorAuthRestApiTest extends IntegrationTestBase {
     revokeEveryActiveKey();
     mockMvc.perform(post("/v1/operator/bootstrap")
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"token\":\"rest-bootstrap-token\"}"))
+            .content("{\"token\":\"rest-bootstrap-token\",\"label\":\"bootstrap\"}"))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.secret").isNotEmpty());
     mockMvc.perform(post("/v1/operator/bootstrap")
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"token\":\"rest-bootstrap-token\"}"))
+            .content("{\"token\":\"rest-bootstrap-token\",\"label\":\"bootstrap\"}"))
         .andExpect(status().isGone());
     mockMvc.perform(post("/v1/operator/bootstrap")
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"token\":\"wrong-length-token-123\"}"))
+            .content("{\"token\":\"wrong-length-token-123\",\"label\":\"bootstrap\"}"))
         .andExpect(status().isGone()); // consumed beats invalid — hasActiveKey is checked first
   }
 
@@ -55,7 +55,8 @@ class OperatorAuthRestApiTest extends IntegrationTestBase {
   void selfServeKeyLifecycle() throws Exception {
     String auth = "Bearer " + operatorKey();
     MvcResult minted = mockMvc.perform(post("/v1/operator/api-keys")
-            .header("Authorization", auth).header(KEY, UUID.randomUUID().toString()))
+            .header("Authorization", auth).header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON).content("{\"label\":\"probe\"}"))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.secret").isNotEmpty()).andReturn();
     String keyId = com.jayway.jsonpath.JsonPath.read(minted.getResponse().getContentAsString(), "$.keyId");
@@ -69,7 +70,7 @@ class OperatorAuthRestApiTest extends IntegrationTestBase {
         .andExpect(status().isOk());
     // A revoked key stops authenticating immediately: mint a fresh key, revoke
     // it over HTTP with the still-valid auth, then present the dead secret.
-    var revoked = operatorKeys.create(null);
+    var revoked = operatorKeys.create("probe", null);
     mockMvc.perform(delete("/v1/operator/api-keys/" + revoked.key().publicId())
             .header("Authorization", auth))
         .andExpect(status().isNoContent());

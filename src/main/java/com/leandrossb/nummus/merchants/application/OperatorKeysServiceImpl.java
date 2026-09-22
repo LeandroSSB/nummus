@@ -36,10 +36,17 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
     this.apiKeyProperties = apiKeyProperties;
   }
 
+  /** Operator labels are immutable audit identity: 1-64 characters after trim. */
+  static void requireValidLabel(String label) {
+    if (label == null || label.isBlank() || label.strip().length() > 64) {
+      throw new InvalidOperatorLabelException();
+    }
+  }
+
   @Override
   @Transactional
-  public IssuedApiKey create(Duration expiresIn) {
-    return mint(expiresIn);
+  public IssuedApiKey create(String label, Duration expiresIn) {
+    return mint(label, expiresIn);
   }
 
   @Override
@@ -59,7 +66,10 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
   @Override
   @Transactional
   public RotatedApiKey rotate(UUID keyPublicId, Duration expiresIn) {
-    IssuedApiKey issued = mint(expiresIn);
+    // The replacement inherits the calling key's immutable label.
+    String label = store.findOperatorKeyLabel(keyPublicId)
+        .orElseThrow(() -> new UnknownApiKeyException(keyPublicId));
+    IssuedApiKey issued = mint(label, expiresIn);
     Instant oldKeyExpiresAt = store.retireOperatorKey(keyPublicId,
             apiKeyProperties.rotationGrace())
         .orElseThrow(() -> new UnknownApiKeyException(keyPublicId));
@@ -80,7 +90,10 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
 
   @Override
   @Transactional
-  public IssuedApiKey bootstrap(String presentedToken) {
+  public IssuedApiKey bootstrap(String presentedToken, String label) {
+    // Label validation precedes every bootstrap-state check so a malformed
+    // request is a 400 regardless of the deployment's one-time state.
+    requireValidLabel(label);
     String configured = bootstrapProperties.bootstrapToken();
     if (configured == null || configured.isBlank()) {
       throw new BootstrapUnavailableException();
@@ -93,16 +106,17 @@ public class OperatorKeysServiceImpl implements OperatorKeysService {
             presentedToken.getBytes(StandardCharsets.UTF_8))) {
       throw new InvalidBootstrapTokenException();
     }
-    return mint(null);
+    return mint(label, null);
   }
 
-  private IssuedApiKey mint(Duration expiresIn) {
+  private IssuedApiKey mint(String label, Duration expiresIn) {
+    requireValidLabel(label);
     ApiKeysServiceImpl.requirePositiveExpiry(expiresIn);
     byte[] secret = new byte[32];
     random.nextBytes(secret);
     String rawKey = PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
     String keyHash = MerchantsServiceImpl.sha256Hex(rawKey);
-    store.insertOperatorKey(keyHash, rawKey.substring(0, 12), expiresIn);
+    store.insertOperatorKey(keyHash, rawKey.substring(0, 12), expiresIn, label);
     // The store owns key identity; read the persisted row back so the returned
     // metadata (public_id, created_at, expires_at) is what revoke/list will match on.
     ApiKey stored = store.findActiveOperatorKeyByHash(keyHash)

@@ -107,7 +107,7 @@ class OperatorGatingTest extends IntegrationTestBase {
     // locked — it does not exist.
     mockMvc.perform(post("/v1/operator/bootstrap")
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"token\":\"anything\"}"))
+            .content("{\"token\":\"anything\",\"label\":\"probe\"}"))
         .andExpect(status().isNotFound());
   }
 }

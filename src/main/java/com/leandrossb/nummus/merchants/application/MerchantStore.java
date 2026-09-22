@@ -51,11 +51,15 @@ public interface MerchantStore {
   /** Best-effort observability stamp; never gates authentication. */
   void stampOperatorKeyLastUsed(String keyHash);
 
-  /** Stores an operator key hash + prefix; the secret never reaches the store. */
-  void insertOperatorKey(String keyHash, String prefix, Duration expiresIn);
+  /** Stores an operator key hash + prefix + label; the secret never reaches
+   *  the store. */
+  void insertOperatorKey(String keyHash, String prefix, Duration expiresIn, String label);
 
   /** The ACTIVE operator key metadata for a hash, if any. */
   Optional<ApiKey> findActiveOperatorKeyByHash(String keyHash);
+
+  /** The label of the operator key with this public id, if any. */
+  Optional<String> findOperatorKeyLabel(UUID keyPublicId);
 
   List<ApiKey> listOperatorKeys();
 

@@ -36,7 +36,8 @@ class OperatorKeysController {
   @PostMapping
   ResponseEntity<CreateKeyResponse> createKey(AuthenticatedOperator operator,
       @RequestBody(required = false) CreateKeyRequest request) {
-    var issued = operatorKeys.create(request == null ? null : request.expiresIn());
+    var issued = operatorKeys.create(request == null ? null : request.label(),
+        request == null ? null : request.expiresIn());
     return ResponseEntity
         .created(URI.create("/v1/operator/api-keys/" + issued.key().publicId()))
         .body(CreateKeyResponse.from(issued));

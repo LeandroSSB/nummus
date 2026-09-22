@@ -25,7 +25,7 @@ class WebhookRegistrationPolicyTest extends IntegrationTestBase {
 
   private String merchantKey() throws Exception {
     var created = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", "Bearer " + operatorKeys.create(null).secret())
+            .header("Authorization", "Bearer " + operatorKeys.create("probe", null).secret())
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"policy probe\"}"))
         .andExpect(status().isCreated()).andReturn();
