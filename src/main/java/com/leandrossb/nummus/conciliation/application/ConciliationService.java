@@ -1,7 +1,9 @@
 package com.leandrossb.nummus.conciliation.application;
 
+import com.leandrossb.nummus.audit.application.OperatorAudit;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -12,7 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
  * matches them purely, and persists report + lines immutably — one transaction.
  * An OPEN tally pushes its report-open digest through the same transaction, so
  * the alert commits with the report or not at all. The manual path always
- * persists; the scheduled path skips a window that carried no lines at all.
+ * persists and is attributed to the calling key in the audit log; the
+ * scheduled path has no operator, records nothing, and skips a window that
+ * carried no lines at all.
  */
 @Service
 public class ConciliationService {
@@ -22,14 +26,17 @@ public class ConciliationService {
   private final ConciliationStore store;
   private final ConciliationAlerts alerts;
   private final ConciliationProperties properties;
+  private final OperatorAudit audit;
 
   public ConciliationService(SettlementReportSource reportSource, PaymentsService payments,
-      ConciliationStore store, ConciliationAlerts alerts, ConciliationProperties properties) {
+      ConciliationStore store, ConciliationAlerts alerts, ConciliationProperties properties,
+      OperatorAudit audit) {
     this.reportSource = reportSource;
     this.payments = payments;
     this.store = store;
     this.alerts = alerts;
     this.properties = properties;
+    this.audit = audit;
   }
 
   /** Manual ingest: an operator asking for a window always gets the report
@@ -37,20 +44,21 @@ public class ConciliationService {
    *  now than the slack allows. A future-dated report here would hold the
    *  scheduled window start past the lagged now and stall every tick. */
   @Transactional
-  public SettlementReportSummary ingest(Instant from, Instant to) {
+  public SettlementReportSummary ingest(Instant from, Instant to, UUID actorKey) {
     if (to.isAfter(Instant.now().plus(properties.maxWindowAhead()))) {
       throw new IllegalArgumentException(
           "window end is too far in the future: " + to + " (allowed ahead: "
               + properties.maxWindowAhead() + ")");
     }
-    return persist(matchWindow(from, to));
+    return persist(matchWindow(from, to), actorKey);
   }
 
-  /** Scheduled path: an empty window (zero lines both sides) persists nothing. */
+  /** Scheduled path: an empty window (zero lines both sides) persists nothing,
+   *  and no operator is acting — a tick records no audit entry. */
   @Transactional
   public Optional<SettlementReportSummary> ingestIfAnyLines(Instant from, Instant to) {
     var matched = matchWindow(from, to);
-    return matched.empty() ? Optional.empty() : Optional.of(persist(matched));
+    return matched.empty() ? Optional.empty() : Optional.of(persist(matched, null));
   }
 
   /** Fetch-and-match, with emptiness decided before anything is inserted. */
@@ -66,13 +74,19 @@ public class ConciliationService {
   }
 
   /** Persists the report and — when it lands OPEN — pushes its digest, both in
-   *  the caller's transaction. */
-  private SettlementReportSummary persist(MatchedWindow matched) {
+   *  the caller's transaction. A non-null actor leaves its audit entry in the
+   *  same transaction, carrying the ingested window's bounds. */
+  private SettlementReportSummary persist(MatchedWindow matched, UUID actorKey) {
     var tally = matched.outcome().summary();
     var summary = new SettlementReportSummary(UUID.randomUUID(), matched.from(), matched.to(),
         tally.conciled() ? "CONCILED" : "OPEN", tally.matched(), tally.amountMismatched(),
         tally.missingInternal(), tally.missingExternal(), Instant.now());
     store.insert(summary, matched.outcome().lines());
+    if (actorKey != null) {
+      audit.record(actorKey, "conciliation.ingested", "conciliation_report",
+          summary.publicId(),
+          Map.of("from", matched.from().toString(), "to", matched.to().toString()));
+    }
     if ("OPEN".equals(summary.status())) {
       alerts.reportOpen(summary.publicId(), matched.from(), matched.to(), summary.matched(),
           summary.amountMismatched(), summary.missingInternal(), summary.missingExternal());

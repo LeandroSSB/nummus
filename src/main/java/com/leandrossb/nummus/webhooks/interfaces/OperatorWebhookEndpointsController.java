@@ -34,7 +34,8 @@ class OperatorWebhookEndpointsController {
   @PostMapping
   ResponseEntity<CreateEndpointResponse> create(AuthenticatedOperator operator,
       @Valid @RequestBody CreateEndpointRequest request) {
-    var endpoint = endpoints.registerOperator(URI.create(request.url()), request.eventTypes());
+    var endpoint = endpoints.registerOperator(URI.create(request.url()), request.eventTypes(),
+        operator.keyPublicId());
     return ResponseEntity
         .created(URI.create("/v1/operator/webhook-endpoints/" + endpoint.publicId()))
         .body(CreateEndpointResponse.from(endpoint));
@@ -52,7 +53,7 @@ class OperatorWebhookEndpointsController {
 
   @DeleteMapping("/{id}")
   ResponseEntity<Void> delete(AuthenticatedOperator operator, @PathVariable UUID id) {
-    endpoints.delete(null, id);
+    endpoints.deleteOperator(id, operator.keyPublicId());
     return ResponseEntity.noContent().build();
   }
 }
