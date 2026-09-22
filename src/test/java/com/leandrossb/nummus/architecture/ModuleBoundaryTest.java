@@ -90,4 +90,17 @@ class ModuleBoundaryTest {
           .should().dependOnClassesThat()
           .resideInAnyPackage("..merchants.domain..", "..merchants.infrastructure..",
               "..merchants.interfaces..");
+
+  @ArchTest
+  static final ArchRule auditStaysSelfContained =
+      noClasses().that().resideInAPackage("..audit..")
+          .should().dependOnClassesThat()
+          .resideInAnyPackage("..accounts..", "..ledger..", "..payments..",
+              "..webhooks..", "..conciliation..", "..psp_simulator..", "..merchants..");
+
+  @ArchTest
+  static final ArchRule foreignModulesTouchOnlyTheAuditApplicationPort =
+      noClasses().that().resideOutsideOfPackage("..audit..")
+          .should().dependOnClassesThat()
+          .resideInAnyPackage("..audit.infrastructure..", "..audit.interfaces..");
 }
