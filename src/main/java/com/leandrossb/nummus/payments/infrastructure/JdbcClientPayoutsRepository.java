@@ -61,6 +61,48 @@ public class JdbcClientPayoutsRepository implements PayoutsRepository {
         .optional();
   }
 
+  @Override
+  public boolean markSettled(UUID publicId, UUID executeTransactionPublicId, Instant settledAt,
+      Money feeAmount) {
+    int updated = jdbc.sql("""
+        update payments.payout
+        set status = 'SETTLED', settled_at = :settledAt, fee_amount = :fee,
+            execute_transaction_public_id = :executeTx
+        where public_id = :publicId and status = 'REQUESTED'
+        """)
+        .param("settledAt", toOffsetDateTime(settledAt))
+        .param("fee", feeAmount == null ? null : feeAmount.amount())
+        .param("executeTx", executeTransactionPublicId)
+        .param("publicId", publicId)
+        .update();
+    return updated == 1;
+  }
+
+  @Override
+  public boolean markFailed(UUID publicId, UUID returnTransactionPublicId) {
+    return markReturned(publicId, "FAILED", returnTransactionPublicId);
+  }
+
+  @Override
+  public boolean markExpired(UUID publicId, UUID returnTransactionPublicId) {
+    return markReturned(publicId, "EXPIRED", returnTransactionPublicId);
+  }
+
+  /** The two non-settling terminals share one guarded shape: stamp the return
+   *  link, win only while the row is still REQUESTED. */
+  private boolean markReturned(UUID publicId, String target, UUID returnTransactionPublicId) {
+    int updated = jdbc.sql("""
+        update payments.payout
+        set status = :status, return_transaction_public_id = :returnTx
+        where public_id = :publicId and status = 'REQUESTED'
+        """)
+        .param("status", target)
+        .param("returnTx", returnTransactionPublicId)
+        .param("publicId", publicId)
+        .update();
+    return updated == 1;
+  }
+
   private Payout mapPayout(ResultSet rs) throws SQLException {
     OffsetDateTime settledAt = rs.getObject("settled_at", OffsetDateTime.class);
     BigDecimal feeAmount = rs.getBigDecimal("fee_amount");

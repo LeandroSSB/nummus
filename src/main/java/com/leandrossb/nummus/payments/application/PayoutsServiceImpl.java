@@ -3,16 +3,25 @@ package com.leandrossb.nummus.payments.application;
 import com.leandrossb.nummus.accounts.application.AccountsService;
 import com.leandrossb.nummus.accounts.domain.AccountStatus;
 import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
+import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
 import com.leandrossb.nummus.ledger.application.Ledger;
 import com.leandrossb.nummus.ledger.application.PostTransactionCommand;
 import com.leandrossb.nummus.ledger.domain.Direction;
+import com.leandrossb.nummus.ledger.domain.Money;
+import com.leandrossb.nummus.ledger.domain.PostedTransaction;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
+import com.leandrossb.nummus.merchants.application.FeeSchedule;
+import com.leandrossb.nummus.merchants.application.MerchantsService;
+import com.leandrossb.nummus.payments.domain.ConcurrentPayoutException;
 import com.leandrossb.nummus.payments.domain.CreatePayoutCommand;
 import com.leandrossb.nummus.payments.domain.InsufficientFundsException;
 import com.leandrossb.nummus.payments.domain.Payout;
 import com.leandrossb.nummus.payments.domain.PayoutStatus;
+import com.leandrossb.nummus.payments.domain.TransferAmountMismatchException;
+import com.leandrossb.nummus.payments.domain.UnknownPayoutException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -30,13 +39,17 @@ public class PayoutsServiceImpl implements PayoutsService {
   private final AccountsService accounts;
   private final PaymentNetwork network;
   private final PayoutsRepository repository;
+  private final PayoutLifecycleEvents payoutEvents;
+  private final MerchantsService merchants;
 
   public PayoutsServiceImpl(Ledger ledger, AccountsService accounts, PaymentNetwork network,
-      PayoutsRepository repository) {
+      PayoutsRepository repository, PayoutLifecycleEvents payoutEvents, MerchantsService merchants) {
     this.ledger = ledger;
     this.accounts = accounts;
     this.network = network;
     this.repository = repository;
+    this.payoutEvents = payoutEvents;
+    this.merchants = merchants;
   }
 
   @Override
@@ -68,5 +81,97 @@ public class PayoutsServiceImpl implements PayoutsService {
     return repository.insert(new Payout(payoutId, account.publicId(), cmd.amount(),
         PayoutStatus.REQUESTED, cmd.destinationBankKey(), transfer.publicId(),
         Instant.now().plus(ttl), Instant.now(), null, null, reservation.publicId(), null, null));
+  }
+
+  @Override
+  @Transactional
+  public Payout get(UUID merchantPublicId, UUID publicId) {
+    var payout = repository.findByPublicId(publicId)
+        .orElseThrow(() -> new UnknownPayoutException(publicId));
+    // Ownership precedes every lazy transition and the transfer poll: never act
+    // on another merchant's payout — for them it is indistinguishable from an
+    // unknown one (the PaymentsServiceImpl.get precedent).
+    try {
+      accounts.get(merchantPublicId, payout.accountPublicId());
+    } catch (UnknownPaymentAccountException e) {
+      throw new UnknownPayoutException(publicId);
+    }
+    if (payout.status() != PayoutStatus.REQUESTED) {
+      return payout;
+    }
+    // Unlike intent expiry, payout expiry MOVES MONEY: post the return legs
+    // first, then the guarded mark. A lost race throws so the transaction —
+    // posting included — rolls back (the ConcurrentSettlement precedent).
+    if (Instant.now().isAfter(payout.expiresAt())) {
+      var posted = returnLegs(merchantPublicId, payout);
+      if (!repository.markExpired(publicId, posted.publicId())) {
+        throw new ConcurrentPayoutException(publicId);
+      }
+      var expired = repository.findByPublicId(publicId).orElseThrow();
+      payoutEvents.publish(toEvent(merchantPublicId, PayoutEventTypes.EXPIRED, expired, null, null));
+      return expired;
+    }
+    var transfer = network.getPayoutTransfer(payout.transferPublicId());
+    if (transfer.amount().compareTo(payout.amount()) != 0) {
+      throw new TransferAmountMismatchException(transfer.publicId(), payout.amount(), transfer.amount());
+    }
+    return switch (transfer.status()) {
+      case PENDING -> payout;
+      case FAILED -> {
+        var posted = returnLegs(merchantPublicId, payout);
+        if (!repository.markFailed(publicId, posted.publicId())) {
+          throw new ConcurrentPayoutException(publicId);
+        }
+        var failed = repository.findByPublicId(publicId).orElseThrow();
+        payoutEvents.publish(toEvent(merchantPublicId, PayoutEventTypes.FAILED, failed, null, null));
+        yield failed;
+      }
+      case SUCCEEDED -> execute(payout, merchantPublicId);
+    };
+  }
+
+  /** Releases the reservation: the reserve debits what the request credited,
+   *  the merchant's ledger account is made whole. */
+  private PostedTransaction returnLegs(UUID merchantPublicId, Payout payout) {
+    var ledgerAccount = accounts.get(merchantPublicId, payout.accountPublicId()).ledgerAccountPublicId();
+    return ledger.post(new PostTransactionCommand("payout " + payout.publicId() + " return",
+        List.of(new PostingDraft(PayoutReservedAccount.PUBLIC_ID, Direction.DEBIT, payout.amount()),
+            new PostingDraft(ledgerAccount, Direction.CREDIT, payout.amount()))));
+  }
+
+  /** Settles the payout out of the reserve. The fee is a settle-time fact:
+   *  whatever schedule the merchant carries when the money moves is the one
+   *  that prices this execution (the settle precedent). */
+  private Payout execute(Payout payout, UUID merchantPublicId) {
+    var ledgerAccount = accounts.get(merchantPublicId, payout.accountPublicId()).ledgerAccountPublicId();
+    var schedule = merchants.findFeeSchedule(merchantPublicId).orElse(FeeSchedule.ZERO);
+    var fee = Money.of(schedule.payoutFixedAmount(), payout.amount().currency());
+    var postings = new ArrayList<PostingDraft>();
+    postings.add(new PostingDraft(PayoutReservedAccount.PUBLIC_ID, Direction.DEBIT, payout.amount()));
+    postings.add(new PostingDraft(PaymentClearingAccount.PUBLIC_ID, Direction.CREDIT, payout.amount()));
+    if (fee.isPositive()) {
+      postings.add(new PostingDraft(ledgerAccount, Direction.DEBIT, fee));
+      postings.add(new PostingDraft(FeeRevenueAccount.PUBLIC_ID, Direction.CREDIT, fee));
+    }
+    var posted = ledger.post(new PostTransactionCommand("payout " + payout.publicId() + " execute", postings));
+    if (!repository.markSettled(payout.publicId(), posted.publicId(), Instant.now(), fee)) {
+      // A racing execution won the guarded transition; roll this posting back
+      // with the transaction and let the caller re-read the SETTLED state.
+      throw new ConcurrentPayoutException(payout.publicId());
+    }
+    var settled = repository.findByPublicId(payout.publicId()).orElseThrow();
+    payoutEvents.publish(toEvent(merchantPublicId, PayoutEventTypes.SETTLED, settled, fee,
+        payout.amount().subtract(fee)));
+    return settled;
+  }
+
+  private static PayoutLifecycleEvent toEvent(UUID merchantPublicId, String type, Payout payout,
+      Money fee, Money netAmount) {
+    return new PayoutLifecycleEvent(merchantPublicId, type, payout.publicId(),
+        payout.accountPublicId(), payout.amount(), payout.status().name(),
+        payout.transferPublicId(), payout.destinationBankKey(), payout.settledAt(),
+        payout.status() == PayoutStatus.SETTLED
+            ? payout.executeTransactionPublicId() : payout.returnTransactionPublicId(),
+        fee, netAmount);
   }
 }

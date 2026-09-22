@@ -12,4 +12,10 @@ import java.util.UUID;
 public interface PayoutsService {
 
   Payout create(UUID merchantPublicId, CreatePayoutCommand cmd);
+
+  /** Reads the payout, lazily driving its terminal transition: expiry returns
+   *  the reservation, a failed transfer returns it, a succeeded one executes
+   *  it out of the reserve (charging the settle-time payout fee). Terminal
+   *  states are returned as-is without polling the network. */
+  Payout get(UUID merchantPublicId, UUID publicId);
 }
