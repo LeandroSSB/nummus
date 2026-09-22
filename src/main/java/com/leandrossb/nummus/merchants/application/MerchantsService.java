@@ -17,6 +17,9 @@ public interface MerchantsService {
 
   Optional<FeeSchedule> findFeeSchedule(UUID publicId);
 
-  /** @return false when the merchant is unknown. */
-  boolean updateFeeSchedule(UUID publicId, FeeSchedule fee);
+  /** Appends an attributed history entry and updates the cached current
+   *  schedule in one transaction. @param actingOperatorKey the calling
+   *  operator key's public id (attribution). @return false when the merchant
+   *  is unknown. */
+  boolean updateFeeSchedule(UUID publicId, FeeSchedule fee, UUID actingOperatorKey);
 }

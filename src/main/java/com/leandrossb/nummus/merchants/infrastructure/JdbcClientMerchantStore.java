@@ -63,6 +63,21 @@ public class JdbcClientMerchantStore implements MerchantStore {
   }
 
   @Override
+  public void insertFeeScheduleEntry(UUID merchantPublicId, FeeSchedule fee, UUID createdBy) {
+    jdbc.sql("""
+        insert into merchants.fee_schedule_entry (public_id, merchant_id, rate, fixed, created_by)
+        select :entryId, m.id, :rate, :fixed, :createdBy
+        from merchants.merchant m where m.public_id = :merchantPublicId
+        """)
+        .param("entryId", UUID.randomUUID())
+        .param("rate", fee.rate())
+        .param("fixed", fee.fixedAmount())
+        .param("createdBy", createdBy)
+        .param("merchantPublicId", merchantPublicId)
+        .update();
+  }
+
+  @Override
   public boolean updateFeeSchedule(UUID merchantPublicId, FeeSchedule fee) {
     return jdbc.sql("""
             update merchants.merchant set fee_rate = :rate, fee_fixed = :fixed

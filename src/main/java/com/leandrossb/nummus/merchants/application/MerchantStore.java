@@ -17,6 +17,12 @@ public interface MerchantStore {
 
   Optional<FeeSchedule> findFeeSchedule(UUID merchantPublicId);
 
+  /** Appends one attributed fee-history row for the merchant; the cached
+   *  current columns are updated separately, in the same transaction, by the
+   *  service. createdBy is the acting operator key's public id — nullable only
+   *  for the migration backfill; the service always passes a real key. */
+  void insertFeeScheduleEntry(UUID merchantPublicId, FeeSchedule fee, UUID createdBy);
+
   /** @return false when the merchant is unknown. */
   boolean updateFeeSchedule(UUID merchantPublicId, FeeSchedule fee);
 

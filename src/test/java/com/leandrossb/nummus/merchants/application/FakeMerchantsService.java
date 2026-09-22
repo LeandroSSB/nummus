@@ -32,7 +32,7 @@ public final class FakeMerchantsService implements MerchantsService {
   }
 
   @Override
-  public boolean updateFeeSchedule(UUID publicId, FeeSchedule fee) {
+  public boolean updateFeeSchedule(UUID publicId, FeeSchedule fee, UUID actingOperatorKey) {
     return false;
   }
 }

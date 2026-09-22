@@ -57,7 +57,8 @@ class MerchantsController {
   @PutMapping("/{id}/fee")
   ResponseEntity<MerchantResponse> updateFee(AuthenticatedOperator operator, @PathVariable UUID id,
       @Valid @RequestBody UpdateFeeRequest request) {
-    merchants.updateFeeSchedule(id, new FeeSchedule(request.rate(), request.fixedAmount()));
+    merchants.updateFeeSchedule(id, new FeeSchedule(request.rate(), request.fixedAmount()),
+        operator.keyPublicId());
     var merchant = merchants.find(id).orElseThrow(() -> new UnknownMerchantException(id));
     return ResponseEntity.ok(MerchantResponse.from(merchant,
         merchants.findFeeSchedule(id).orElseThrow()));

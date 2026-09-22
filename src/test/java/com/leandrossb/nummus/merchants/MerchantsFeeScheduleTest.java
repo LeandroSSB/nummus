@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.InvalidFeeScheduleException;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
+import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -18,6 +19,9 @@ class MerchantsFeeScheduleTest extends IntegrationTestBase {
 
   @Autowired
   private MerchantsService merchants;
+
+  @Autowired
+  private OperatorKeysService operatorKeys;
 
   @Test
   void createPersistsTheScheduleAndDefaultsToZero() {
@@ -36,11 +40,13 @@ class MerchantsFeeScheduleTest extends IntegrationTestBase {
   @Test
   void updateReplacesTheScheduleAndReportsUnknownMerchants() {
     var merchant = merchants.create("updatee", FeeSchedule.ZERO);
+    // History attribution references a real operator key (FK).
+    UUID actingKey = operatorKeys.create("fee-update-probe", null).key().publicId();
     assertTrue(merchants.updateFeeSchedule(merchant.publicId(),
-        new FeeSchedule(new BigDecimal("0.015"), BigDecimal.ZERO)));
+        new FeeSchedule(new BigDecimal("0.015"), BigDecimal.ZERO), actingKey));
     assertEquals(0, merchants.findFeeSchedule(merchant.publicId()).orElseThrow()
         .rate().compareTo(new BigDecimal("0.015")));
-    assertFalse(merchants.updateFeeSchedule(UUID.randomUUID(), FeeSchedule.ZERO));
+    assertFalse(merchants.updateFeeSchedule(UUID.randomUUID(), FeeSchedule.ZERO, actingKey));
   }
 
   @Test
