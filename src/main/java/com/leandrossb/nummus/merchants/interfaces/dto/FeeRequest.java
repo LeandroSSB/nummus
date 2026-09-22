@@ -6,7 +6,10 @@ import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
-/** A fee schedule over the wire: a fraction of gross plus a fixed BRL amount. */
+/** A fee schedule over the wire: a fraction of gross plus a fixed BRL amount
+ *  per settlement, plus a fixed BRL amount per payout. The payout component
+ *  is optional — absent means zero — and its range is enforced by
+ *  {@link com.leandrossb.nummus.merchants.application.FeeSchedule} itself. */
 public record FeeRequest(
     @NotNull
     @DecimalMin(value = "0", message = "rate must be >= 0")
@@ -14,5 +17,6 @@ public record FeeRequest(
     @Digits(integer = 0, fraction = 6) BigDecimal rate,
     @NotNull
     @DecimalMin(value = "0", message = "fixedAmount must be >= 0")
-    @Digits(integer = 15, fraction = 4) BigDecimal fixedAmount) {
+    @Digits(integer = 15, fraction = 4) BigDecimal fixedAmount,
+    @Digits(integer = 15, fraction = 4) BigDecimal payoutFixedAmount) {
 }

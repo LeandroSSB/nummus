@@ -106,7 +106,7 @@ class FeeSettlementTest extends IntegrationTestBase {
 
   @Test
   void settlesThreeLegsWithFeeCreditedToRevenue() throws Exception {
-    var f = paidIntent(new FeeSchedule(new BigDecimal("0.0099"), new BigDecimal("0.39")));
+    var f = paidIntent(new FeeSchedule(new BigDecimal("0.0099"), new BigDecimal("0.39"), BigDecimal.ZERO));
     mockMvc.perform(get("/v1/payment-intents/" + f.intentId()).header("Authorization", f.auth()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SETTLED"));
@@ -171,7 +171,7 @@ class FeeSettlementTest extends IntegrationTestBase {
   void cappedFeeSettlesTwoLegsWithEntireGrossAsFee() throws Exception {
     // The fixed component alone (0.39) exceeds the 0.10 gross: the cap binds,
     // net is zero, and the merchant leg is omitted rather than posted at 0.00.
-    var f = paidIntent(new FeeSchedule(BigDecimal.ZERO, new BigDecimal("0.39")), "0.10");
+    var f = paidIntent(new FeeSchedule(BigDecimal.ZERO, new BigDecimal("0.39"), BigDecimal.ZERO), "0.10");
     mockMvc.perform(get("/v1/payment-intents/" + f.intentId()).header("Authorization", f.auth()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SETTLED"));
@@ -192,7 +192,7 @@ class FeeSettlementTest extends IntegrationTestBase {
   void settleTimeRateWinsOverCreationTime() throws Exception {
     var f = paidIntent(FeeSchedule.ZERO);                       // quoted at zero
     merchants.updateFeeSchedule(UUID.fromString(f.merchantId()), // raised before settle
-        new FeeSchedule(new BigDecimal("0.01"), BigDecimal.ZERO),
+        new FeeSchedule(new BigDecimal("0.01"), BigDecimal.ZERO, BigDecimal.ZERO),
         operatorKeys.create("fee-settle-probe", null, null).key().publicId());
     mockMvc.perform(get("/v1/payment-intents/" + f.intentId()).header("Authorization", f.auth()))
         .andExpect(status().isOk())
@@ -207,7 +207,7 @@ class FeeSettlementTest extends IntegrationTestBase {
 
   @Test
   void settledEventCarriesFeeAndNet() throws Exception {
-    var f = paidIntent(new FeeSchedule(new BigDecimal("0.0099"), new BigDecimal("0.39")));
+    var f = paidIntent(new FeeSchedule(new BigDecimal("0.0099"), new BigDecimal("0.39"), BigDecimal.ZERO));
     mockMvc.perform(get("/v1/payment-intents/" + f.intentId()).header("Authorization", f.auth()))
         .andExpect(status().isOk());
     try (var c = adminConnection(); var st = c.createStatement()) {

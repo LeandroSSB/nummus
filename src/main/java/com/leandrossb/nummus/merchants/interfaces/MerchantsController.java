@@ -3,7 +3,6 @@ package com.leandrossb.nummus.merchants.interfaces;
 import com.leandrossb.nummus.interfaces.auth.AuthenticatedOperator;
 import com.leandrossb.nummus.interfaces.idempotency.Idempotent;
 import com.leandrossb.nummus.merchants.application.ApiKeysService;
-import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantStore;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.merchants.application.UnknownMerchantException;
@@ -64,8 +63,7 @@ class MerchantsController {
   @PutMapping("/{id}/fee")
   ResponseEntity<MerchantResponse> updateFee(AuthenticatedOperator operator, @PathVariable UUID id,
       @Valid @RequestBody UpdateFeeRequest request) {
-    merchants.updateFeeSchedule(id, new FeeSchedule(request.rate(), request.fixedAmount()),
-        operator.keyPublicId());
+    merchants.updateFeeSchedule(id, request.feeSchedule(), operator.keyPublicId());
     var merchant = merchants.find(id).orElseThrow(() -> new UnknownMerchantException(id));
     return ResponseEntity.ok(MerchantResponse.from(merchant,
         merchants.findFeeSchedule(id).orElseThrow()));

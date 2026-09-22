@@ -9,5 +9,5 @@ import java.util.UUID;
  *  — is null only for the migration backfill: the pre-attribution sentinel
  *  rendered "system" on the REST surface. */
 public record FeeHistoryEntry(UUID entryId, BigDecimal rate, BigDecimal fixed,
-    Instant validFrom, UUID createdBy, String createdByLabel) {
+    BigDecimal payoutFixed, Instant validFrom, UUID createdBy, String createdByLabel) {
 }

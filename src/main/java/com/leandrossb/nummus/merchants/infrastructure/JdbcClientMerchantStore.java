@@ -34,14 +34,16 @@ public class JdbcClientMerchantStore implements MerchantStore {
   @Override
   public Merchant insertMerchant(Merchant merchant, FeeSchedule fee) {
     jdbc.sql("""
-        insert into merchants.merchant (public_id, name, created_at, fee_rate, fee_fixed)
-        values (:publicId, :name, :createdAt, :rate, :fixed)
+        insert into merchants.merchant
+          (public_id, name, created_at, fee_rate, fee_fixed, payout_fee_fixed)
+        values (:publicId, :name, :createdAt, :rate, :fixed, :payoutFixed)
         """)
         .param("publicId", merchant.publicId())
         .param("name", merchant.name())
         .param("createdAt", toOffsetDateTime(merchant.createdAt()))
         .param("rate", fee.rate())
         .param("fixed", fee.fixedAmount())
+        .param("payoutFixed", fee.payoutFixedAmount())
         .update();
     return merchant;
   }
@@ -57,16 +59,19 @@ public class JdbcClientMerchantStore implements MerchantStore {
 
   @Override
   public Optional<FeeSchedule> findFeeSchedule(UUID merchantPublicId) {
-    return jdbc.sql("select fee_rate, fee_fixed from merchants.merchant where public_id = :id")
+    return jdbc.sql(
+        "select fee_rate, fee_fixed, payout_fee_fixed from merchants.merchant where public_id = :id")
         .param("id", merchantPublicId)
-        .query((rs, i) -> new FeeSchedule(rs.getBigDecimal("fee_rate"), rs.getBigDecimal("fee_fixed")))
+        .query((rs, i) -> new FeeSchedule(rs.getBigDecimal("fee_rate"),
+            rs.getBigDecimal("fee_fixed"), rs.getBigDecimal("payout_fee_fixed")))
         .optional();
   }
 
   @Override
   public List<FeeHistoryEntry> listFeeHistory(UUID merchantPublicId, UUID after, int limit) {
     return jdbc.sql("""
-        select e.public_id, e.rate, e.fixed, e.valid_from, e.created_by, k.label as created_by_label
+        select e.public_id, e.rate, e.fixed, e.payout_fixed, e.valid_from, e.created_by,
+          k.label as created_by_label
         from merchants.fee_schedule_entry e
         join merchants.merchant m on m.id = e.merchant_id
         left join merchants.operator_key k on k.public_id = e.created_by
@@ -81,7 +86,7 @@ public class JdbcClientMerchantStore implements MerchantStore {
         .param("after", after)
         .param("limit", limit)
         .query((rs, i) -> new FeeHistoryEntry(rs.getObject("public_id", UUID.class),
-            rs.getBigDecimal("rate"), rs.getBigDecimal("fixed"),
+            rs.getBigDecimal("rate"), rs.getBigDecimal("fixed"), rs.getBigDecimal("payout_fixed"),
             rs.getObject("valid_from", OffsetDateTime.class).toInstant(),
             rs.getObject("created_by", UUID.class), rs.getString("created_by_label")))
         .list();
@@ -90,13 +95,15 @@ public class JdbcClientMerchantStore implements MerchantStore {
   @Override
   public void insertFeeScheduleEntry(UUID merchantPublicId, FeeSchedule fee, UUID createdBy) {
     jdbc.sql("""
-        insert into merchants.fee_schedule_entry (public_id, merchant_id, rate, fixed, created_by)
-        select :entryId, m.id, :rate, :fixed, :createdBy
+        insert into merchants.fee_schedule_entry
+          (public_id, merchant_id, rate, fixed, payout_fixed, created_by)
+        select :entryId, m.id, :rate, :fixed, :payoutFixed, :createdBy
         from merchants.merchant m where m.public_id = :merchantPublicId
         """)
         .param("entryId", UUID.randomUUID())
         .param("rate", fee.rate())
         .param("fixed", fee.fixedAmount())
+        .param("payoutFixed", fee.payoutFixedAmount())
         .param("createdBy", createdBy)
         .param("merchantPublicId", merchantPublicId)
         .update();
@@ -105,11 +112,13 @@ public class JdbcClientMerchantStore implements MerchantStore {
   @Override
   public boolean updateFeeSchedule(UUID merchantPublicId, FeeSchedule fee) {
     return jdbc.sql("""
-            update merchants.merchant set fee_rate = :rate, fee_fixed = :fixed
+            update merchants.merchant
+            set fee_rate = :rate, fee_fixed = :fixed, payout_fee_fixed = :payoutFixed
             where public_id = :id
             """)
         .param("rate", fee.rate())
         .param("fixed", fee.fixedAmount())
+        .param("payoutFixed", fee.payoutFixedAmount())
         .param("id", merchantPublicId)
         .update() == 1;
   }
