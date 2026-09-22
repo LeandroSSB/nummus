@@ -14,6 +14,7 @@ import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -58,7 +59,7 @@ class ConciliationRestApiTest extends IntegrationTestBase {
   /** One operator key per test — conciliation is operator-gated. */
   private String operatorAuth() {
     if (operatorAuth == null) {
-      operatorAuth = "Bearer " + operatorKeys.create(null).secret();
+      operatorAuth = ApiDrivers.operatorAuth(operatorKeys);
     }
     return operatorAuth;
   }

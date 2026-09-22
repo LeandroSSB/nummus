@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -14,7 +15,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
 
 /** Gating E2E over the operator surfaces: keyless is 401, merchant keys are
  *  403 in both directions, and the operator's own writes keep working —
@@ -37,24 +37,15 @@ class OperatorGatingTest extends IntegrationTestBase {
   /** One operator key per test, minted via the service (no bootstrap dependency). */
   private String operatorAuth() {
     if (operatorAuth == null) {
-      operatorAuth = "Bearer " + operatorKeys.create(null).secret();
+      operatorAuth = ApiDrivers.operatorAuth(operatorKeys);
     }
     return operatorAuth;
   }
 
-  /** POST /v1/merchants as operator — the only way a merchant key is born. */
-  private String createMerchantKey() throws Exception {
-    MvcResult created = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Op Fixture Merchant\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    return com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.apiKey.secret");
-  }
-
   @Test
   void operatorRoutesRejectKeylessAndMerchantKeys() throws Exception {
-    String merchantKey = createMerchantKey();
+    String merchantKey = ApiDrivers.createMerchantAndGetKey(
+            mockMvc, operatorAuth(), "Op Fixture Merchant");
     mockMvc.perform(get("/v1/merchants/" + UUID.randomUUID()))
         .andExpect(status().isUnauthorized());
     mockMvc.perform(get("/v1/merchants/" + UUID.randomUUID())
@@ -85,7 +76,8 @@ class OperatorGatingTest extends IntegrationTestBase {
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.merchantId").exists())
         .andExpect(jsonPath("$.apiKey.secret").isNotEmpty());
-    String merchantKey = createMerchantKey();
+    String merchantKey = ApiDrivers.createMerchantAndGetKey(
+            mockMvc, operatorAuth(), "Op Fixture Merchant");
     mockMvc.perform(post("/v1/merchants")
             .header("Authorization", "Bearer " + merchantKey)
             .header(KEY, UUID.randomUUID().toString())

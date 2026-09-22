@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -30,18 +31,9 @@ class MerchantScopingTest extends IntegrationTestBase {
   /** One operator key per test — merchant creation is operator-gated. */
   private String operatorAuth() {
     if (operatorAuth == null) {
-      operatorAuth = "Bearer " + operatorKeys.create(null).secret();
+      operatorAuth = ApiDrivers.operatorAuth(operatorKeys);
     }
     return operatorAuth;
-  }
-
-  private String createMerchantAndGetKey(String name) throws Exception {
-    MvcResult created = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    return com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.apiKey.secret");
   }
 
   private String openAccount(String bearer) throws Exception {
@@ -55,8 +47,8 @@ class MerchantScopingTest extends IntegrationTestBase {
 
   @Test
   void merchantARoutesCannotSeeMerchantBResources() throws Exception {
-    String a = createMerchantAndGetKey("Merchant A");
-    String b = createMerchantAndGetKey("Merchant B");
+    String a = ApiDrivers.createMerchantAndGetKey(mockMvc, operatorAuth(), "Merchant A");
+    String b = ApiDrivers.createMerchantAndGetKey(mockMvc, operatorAuth(), "Merchant B");
     String aLocation = openAccount(a);
 
     // The owner sees it; the other merchant gets 404 on every surface.
@@ -80,8 +72,8 @@ class MerchantScopingTest extends IntegrationTestBase {
 
   @Test
   void intentsAreInvisibleAcrossMerchants() throws Exception {
-    String a = createMerchantAndGetKey("Intent A");
-    String b = createMerchantAndGetKey("Intent B");
+    String a = ApiDrivers.createMerchantAndGetKey(mockMvc, operatorAuth(), "Intent A");
+    String b = ApiDrivers.createMerchantAndGetKey(mockMvc, operatorAuth(), "Intent B");
     String accountLocation = openAccount(a);
     String accountId = accountLocation.substring(accountLocation.lastIndexOf('/') + 1);
     MvcResult intentCreated = mockMvc.perform(post("/v1/payment-intents")
@@ -107,8 +99,8 @@ class MerchantScopingTest extends IntegrationTestBase {
 
   @Test
   void webhookEndpointsAreIsolatedPerMerchant() throws Exception {
-    String a = createMerchantAndGetKey("Hook A");
-    String b = createMerchantAndGetKey("Hook B");
+    String a = ApiDrivers.createMerchantAndGetKey(mockMvc, operatorAuth(), "Hook A");
+    String b = ApiDrivers.createMerchantAndGetKey(mockMvc, operatorAuth(), "Hook B");
     MvcResult endpoint = mockMvc.perform(post("/v1/webhook-endpoints")
             .header("Authorization", "Bearer " + a)
             .header(KEY, UUID.randomUUID().toString())

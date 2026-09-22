@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import com.leandrossb.nummus.webhooks.application.WebhookStore;
 import java.sql.Connection;
@@ -32,12 +33,6 @@ class OperatorWebhookDeliveriesRestApiTest extends IntegrationTestBase {
 
   private static final String KEY = "Idempotency-Key";
 
-  /** Port 9 (discard): a loopback URL the URL policy accepts that nothing
-   *  ever contacts. Unique path per registration keeps fixtures disjoint. */
-  private static String loopbackUrl(String tag) {
-    return "http://127.0.0.1:9/" + tag + "-" + UUID.randomUUID();
-  }
-
   @Autowired
   private MockMvc mockMvc;
 
@@ -47,16 +42,12 @@ class OperatorWebhookDeliveriesRestApiTest extends IntegrationTestBase {
   @Autowired
   private WebhookStore webhookStore;
 
-  private String operatorAuth() {
-    return "Bearer " + operatorKeys.create(null).secret();
-  }
-
   private String registerOperatorEndpoint() throws Exception {
     MvcResult created = mockMvc.perform(post("/v1/operator/webhook-endpoints")
-            .header("Authorization", operatorAuth())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"url\":\"" + loopbackUrl("deliveries") + "\",\"eventTypes\":[]}"))
+            .content("{\"url\":\"" + ApiDrivers.loopbackUrl("deliveries") + "\",\"eventTypes\":[]}"))
         .andExpect(status().isCreated()).andReturn();
     return com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.publicId");
   }
@@ -75,14 +66,14 @@ class OperatorWebhookDeliveriesRestApiTest extends IntegrationTestBase {
     String endpointId = registerOperatorEndpoint();
     seedEvents(3);
     MvcResult page1 = mockMvc.perform(get("/v1/operator/webhook-endpoints/" + endpointId + "/deliveries")
-            .header("Authorization", operatorAuth()).param("limit", "2"))
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)).param("limit", "2"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(2))
         .andExpect(header().exists("Next-Cursor"))
         .andReturn();
     String cursor = page1.getResponse().getHeader("Next-Cursor");
     mockMvc.perform(get("/v1/operator/webhook-endpoints/" + endpointId + "/deliveries")
-            .header("Authorization", operatorAuth()).param("limit", "2").param("after", cursor))
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)).param("limit", "2").param("after", cursor))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(1))
         .andExpect(header().doesNotExist("Next-Cursor"));
@@ -93,7 +84,7 @@ class OperatorWebhookDeliveriesRestApiTest extends IntegrationTestBase {
     String endpointId = registerOperatorEndpoint();
     seedEvents(1);
     MvcResult listed = mockMvc.perform(get("/v1/operator/webhook-endpoints/" + endpointId + "/deliveries")
-            .header("Authorization", operatorAuth()))
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)))
         .andExpect(status().isOk()).andReturn();
     String deliveryId = com.jayway.jsonpath.JsonPath.read(
         listed.getResponse().getContentAsString(), "$[0].deliveryId");
@@ -103,11 +94,11 @@ class OperatorWebhookDeliveriesRestApiTest extends IntegrationTestBase {
           + "where public_id = '" + deliveryId + "'");
     }
     mockMvc.perform(post("/v1/operator/webhook-deliveries/" + deliveryId + "/redrive")
-            .header("Authorization", operatorAuth())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString()))
         .andExpect(status().isAccepted());
     mockMvc.perform(get("/v1/operator/webhook-endpoints/" + endpointId + "/deliveries")
-            .header("Authorization", operatorAuth()).param("status", "PENDING"))
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)).param("status", "PENDING"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[0].deliveryId").value(deliveryId))
         .andExpect(jsonPath("$[0].attempts").value(0));
@@ -116,25 +107,20 @@ class OperatorWebhookDeliveriesRestApiTest extends IntegrationTestBase {
   @Test
   void operatorRoutesNeverTouchMerchantDeliveries() throws Exception {
     // A merchant endpoint + delivery...
-    MvcResult merchant = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Parity Merchant\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    String bearer = com.jayway.jsonpath.JsonPath.read(
-        merchant.getResponse().getContentAsString(), "$.apiKey.secret");
+    String bearer = ApiDrivers.createMerchantAndGetKey(
+        mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Parity Merchant");
     MvcResult endpoint = mockMvc.perform(post("/v1/webhook-endpoints")
             .header("Authorization", "Bearer " + bearer)
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"url\":\"" + loopbackUrl("m-hook") + "\",\"eventTypes\":[]}"))
+            .content("{\"url\":\"" + ApiDrivers.loopbackUrl("m-hook") + "\",\"eventTypes\":[]}"))
         .andExpect(status().isCreated()).andReturn();
     String merchantEndpointId = com.jayway.jsonpath.JsonPath.read(
         endpoint.getResponse().getContentAsString(), "$.publicId");
     // ...is invisible on the operator surface: listing 404s, redrive of any
     // delivery under it is unreachable because the listing never yields ids.
     mockMvc.perform(get("/v1/operator/webhook-endpoints/" + merchantEndpointId + "/deliveries")
-            .header("Authorization", operatorAuth()))
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys)))
         .andExpect(status().isNotFound());
   }
 }

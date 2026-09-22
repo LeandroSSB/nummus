@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -19,7 +20,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
 
 /** Tight buckets per test class; every test mints fresh merchants/keys, so
  *  each gets a fresh bucket and tests cannot interfere. The operator bucket
@@ -44,22 +44,10 @@ class RateLimitFilterTest extends IntegrationTestBase {
   @Autowired
   private OperatorKeysService operatorKeys;
 
-  private String operatorAuth() {
-    return "Bearer " + operatorKeys.create(null).secret();
-  }
-
-  private String createMerchantAndGetKey(String name) throws Exception {
-    MvcResult created = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    return com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.apiKey.secret");
-  }
-
   @Test
   void merchantBucketRejectsWith429AndRetryAfter() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey("Limited Merchant");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Limited Merchant");
     mockMvc.perform(get("/v1/me").header("Authorization", bearer)).andExpect(status().isOk());
     mockMvc.perform(get("/v1/me").header("Authorization", bearer)).andExpect(status().isOk());
     mockMvc.perform(get("/v1/me").header("Authorization", bearer))
@@ -71,7 +59,8 @@ class RateLimitFilterTest extends IntegrationTestBase {
 
   @Test
   void bucketRefillsOverTime() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey("Refill Merchant");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Refill Merchant");
     mockMvc.perform(get("/v1/me").header("Authorization", bearer)).andExpect(status().isOk());
     mockMvc.perform(get("/v1/me").header("Authorization", bearer)).andExpect(status().isOk());
     mockMvc.perform(get("/v1/me").header("Authorization", bearer))
@@ -83,8 +72,10 @@ class RateLimitFilterTest extends IntegrationTestBase {
 
   @Test
   void merchantsHaveIsolatedBuckets() throws Exception {
-    String a = "Bearer " + createMerchantAndGetKey("Isolated A");
-    String b = "Bearer " + createMerchantAndGetKey("Isolated B");
+    String a = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Isolated A");
+    String b = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Isolated B");
     mockMvc.perform(get("/v1/me").header("Authorization", a)).andExpect(status().isOk());
     mockMvc.perform(get("/v1/me").header("Authorization", a)).andExpect(status().isOk());
     mockMvc.perform(get("/v1/me").header("Authorization", a))
@@ -95,7 +86,7 @@ class RateLimitFilterTest extends IntegrationTestBase {
 
   @Test
   void operatorBucketRejectsIndependently() throws Exception {
-    String operator = operatorAuth();
+    String operator = ApiDrivers.operatorAuth(operatorKeys);
     for (int i = 0; i < 3; i++) {
       mockMvc.perform(post("/v1/merchants")
               .header("Authorization", operator)
@@ -120,7 +111,8 @@ class RateLimitFilterTest extends IntegrationTestBase {
       mockMvc.perform(get("/v1/me")).andExpect(status().isUnauthorized());
     }
     String idemKey = UUID.randomUUID().toString();
-    String bearer = "Bearer " + createMerchantAndGetKey("Rowless Merchant");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Rowless Merchant");
     mockMvc.perform(get("/v1/me").header("Authorization", bearer)).andExpect(status().isOk());
     mockMvc.perform(get("/v1/me").header("Authorization", bearer)).andExpect(status().isOk());
     // The rate-limited POST is refused pre-controller: no idempotency row.

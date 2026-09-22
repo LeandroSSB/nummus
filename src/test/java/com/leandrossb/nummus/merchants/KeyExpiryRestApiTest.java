@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -29,22 +30,10 @@ class KeyExpiryRestApiTest extends IntegrationTestBase {
   @Autowired
   private OperatorKeysService operatorKeys;
 
-  private String operatorAuth() {
-    return "Bearer " + operatorKeys.create(null).secret();
-  }
-
-  private String createMerchantAndGetKey(String name) throws Exception {
-    MvcResult created = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    return com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.apiKey.secret");
-  }
-
   @Test
   void merchantMintWithExpiresInStoresAndReturnsIt() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey("Expiring Mint");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Expiring Mint");
     MvcResult minted = mockMvc.perform(post("/v1/me/api-keys")
             .header("Authorization", bearer)
             .header(KEY, UUID.randomUUID().toString())
@@ -66,7 +55,7 @@ class KeyExpiryRestApiTest extends IntegrationTestBase {
   @Test
   void operatorMintWithExpiresInStoresIt() throws Exception {
     mockMvc.perform(post("/v1/operator/api-keys")
-            .header("Authorization", operatorAuth())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"expiresIn\":\"PT2H\"}"))
@@ -76,7 +65,8 @@ class KeyExpiryRestApiTest extends IntegrationTestBase {
 
   @Test
   void nonPositiveExpiresInIsRejected() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey("Bad Expiry");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Bad Expiry");
     mockMvc.perform(post("/v1/me/api-keys")
             .header("Authorization", bearer)
             .header(KEY, UUID.randomUUID().toString())
@@ -87,7 +77,8 @@ class KeyExpiryRestApiTest extends IntegrationTestBase {
 
   @Test
   void garbageExpiresInIsRejected() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey("Garbage Expiry");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Garbage Expiry");
     mockMvc.perform(post("/v1/me/api-keys")
             .header("Authorization", bearer)
             .header(KEY, UUID.randomUUID().toString())

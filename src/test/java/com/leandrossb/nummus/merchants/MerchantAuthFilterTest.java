@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,7 @@ class MerchantAuthFilterTest extends IntegrationTestBase {
   /** One operator key per test — the merchants surface is operator-gated. */
   private String operatorAuth() {
     if (operatorAuth == null) {
-      operatorAuth = "Bearer " + operatorKeys.create(null).secret();
+      operatorAuth = ApiDrivers.operatorAuth(operatorKeys);
     }
     return operatorAuth;
   }

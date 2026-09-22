@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -53,18 +54,14 @@ class ConciliationAlertsTest extends IntegrationTestBase {
   @Autowired
   private OperatorKeysService operatorKeys;
 
-  private String operatorAuth() {
-    return "Bearer " + operatorKeys.create(null).secret();
-  }
-
   /** Port 9 (discard): a loopback URL the URL policy accepts that nothing
    *  ever contacts. Unique path per registration keeps fixtures disjoint. */
   private String registerOperatorEndpoint(String typesJson) throws Exception {
     MvcResult created = mockMvc.perform(post("/v1/operator/webhook-endpoints")
-            .header("Authorization", operatorAuth())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"url\":\"http://127.0.0.1:9/alerts-" + UUID.randomUUID()
+            .content("{\"url\":\"" + ApiDrivers.loopbackUrl("alerts")
                 + "\",\"eventTypes\":" + typesJson + "}"))
         .andExpect(status().isCreated()).andReturn();
     return JsonPath.read(created.getResponse().getContentAsString(), "$.publicId");
@@ -73,13 +70,8 @@ class ConciliationAlertsTest extends IntegrationTestBase {
   /** Merchant → account → intent → simulator pay → GET settles. Returns the
    *  network charge's public id — the external evidence of the settlement. */
   private UUID settlePayment() throws Exception {
-    MvcResult merchant = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Alert Merchant\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    String bearer = "Bearer "
-        + JsonPath.read(merchant.getResponse().getContentAsString(), "$.apiKey.secret");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+        mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Alert Merchant");
     MvcResult opened = mockMvc.perform(post("/v1/accounts")
             .header("Authorization", bearer)
             .header(KEY, UUID.randomUUID().toString())
@@ -149,7 +141,7 @@ class ConciliationAlertsTest extends IntegrationTestBase {
 
   private MvcResult ingestWindow(Instant from, Instant to) throws Exception {
     return mockMvc.perform(post("/v1/conciliation/reports")
-            .header("Authorization", operatorAuth())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"from\":\"" + from + "\",\"to\":\"" + to + "\"}"))
@@ -205,7 +197,7 @@ class ConciliationAlertsTest extends IntegrationTestBase {
   void rejectedIngestEmitsNothing() throws Exception {
     int before = reportOpenEventCount();
     mockMvc.perform(post("/v1/conciliation/reports")
-            .header("Authorization", operatorAuth())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"from\":\"" + Instant.now() + "\",\"to\":\""

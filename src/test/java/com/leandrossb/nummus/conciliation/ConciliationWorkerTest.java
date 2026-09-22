@@ -11,6 +11,7 @@ import ch.qos.logback.core.read.ListAppender;
 import com.jayway.jsonpath.JsonPath;
 import com.leandrossb.nummus.conciliation.application.ConciliationWorker;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -60,10 +61,6 @@ class ConciliationWorkerTest extends IntegrationTestBase {
 
   @Autowired
   private ConciliationWorker worker;
-
-  private String operatorAuth() {
-    return "Bearer " + operatorKeys.create(null).secret();
-  }
 
   @BeforeAll
   static void clearFutureWindowsFromOtherSuites() throws Exception {
@@ -124,7 +121,7 @@ class ConciliationWorkerTest extends IntegrationTestBase {
     String from = Instant.now().minusSeconds(3600).toString();
     String to = Instant.now().toString();
     mockMvc.perform(post("/v1/conciliation/reports")
-            .header("Authorization", operatorAuth())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"from\":\"" + from + "\",\"to\":\"" + to + "\"}"))
@@ -241,10 +238,10 @@ class ConciliationWorkerTest extends IntegrationTestBase {
    *  ever contacts — the same trick ConciliationAlertsTest uses. */
   private String registerReportOpenEndpoint() throws Exception {
     MvcResult created = mockMvc.perform(post("/v1/operator/webhook-endpoints")
-            .header("Authorization", operatorAuth())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"url\":\"http://127.0.0.1:9/worker-" + UUID.randomUUID()
+            .content("{\"url\":\"" + ApiDrivers.loopbackUrl("worker")
                 + "\",\"eventTypes\":[\"conciliation.report_open\"]}"))
         .andExpect(status().isCreated()).andReturn();
     return JsonPath.read(created.getResponse().getContentAsString(), "$.publicId");
@@ -256,13 +253,8 @@ class ConciliationWorkerTest extends IntegrationTestBase {
    *  ahead of any marker these tests plant. Merchant → account → intent →
    *  simulator pay → GET settles: the same recipe as ConciliationAlertsTest. */
   private UUID settleAndHideExternalCharge() throws Exception {
-    MvcResult merchant = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Worker Merchant\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    String bearer = "Bearer "
-        + JsonPath.read(merchant.getResponse().getContentAsString(), "$.apiKey.secret");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+        mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Worker Merchant");
     MvcResult opened = mockMvc.perform(post("/v1/accounts")
             .header("Authorization", bearer)
             .header(KEY, UUID.randomUUID().toString())

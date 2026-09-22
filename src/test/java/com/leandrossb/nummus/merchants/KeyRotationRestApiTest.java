@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
@@ -34,22 +35,10 @@ class KeyRotationRestApiTest extends IntegrationTestBase {
   @Autowired
   private OperatorKeysService operatorKeys;
 
-  private String operatorAuth() {
-    return "Bearer " + operatorKeys.create(null).secret();
-  }
-
-  private String createMerchantAndGetKey(String name) throws Exception {
-    MvcResult created = mockMvc.perform(post("/v1/merchants")
-            .header("Authorization", operatorAuth())
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
-        .andExpect(status().isCreated()).andReturn();
-    return com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.apiKey.secret");
-  }
-
   @Test
   void merchantRotationReturnsNewSecretAndRetiresTheOldKeyAtGrace() throws Exception {
-    String oldSecret = createMerchantAndGetKey("Rotating Merchant");
+    String oldSecret = ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Rotating Merchant");
     String oldBearer = "Bearer " + oldSecret;
     MvcResult rotated = mockMvc.perform(post("/v1/me/api-keys/current/rotate")
             .header("Authorization", oldBearer)
@@ -76,7 +65,8 @@ class KeyRotationRestApiTest extends IntegrationTestBase {
 
   @Test
   void rotationIsIdempotentAndReplaysTheSameSecret() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey("Idempotent Rotation");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Idempotent Rotation");
     String idemKey = UUID.randomUUID().toString();
     MvcResult first = mockMvc.perform(post("/v1/me/api-keys/current/rotate")
             .header("Authorization", bearer).header(KEY, idemKey)
@@ -98,7 +88,8 @@ class KeyRotationRestApiTest extends IntegrationTestBase {
   void rotationNeverExtendsANearerExpiry() throws Exception {
     // The calling key expires in 2s; rotating with a 2s grace must not push
     // the end past the already-set expiry (least()).
-    String oldSecret = createMerchantAndGetKey("Nearer Expiry");
+    String oldSecret = ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Nearer Expiry");
     String oldBearer = "Bearer " + oldSecret;
     MvcResult minted = mockMvc.perform(post("/v1/me/api-keys")
             .header("Authorization", oldBearer)
@@ -127,7 +118,8 @@ class KeyRotationRestApiTest extends IntegrationTestBase {
 
   @Test
   void expiredKeyCannotRotate() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey("Expired Rotator");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Expired Rotator");
     MvcResult listed = mockMvc.perform(get("/v1/me/api-keys").header("Authorization", bearer))
         .andExpect(status().isOk()).andReturn();
     String keyId = com.jayway.jsonpath.JsonPath.read(
@@ -168,7 +160,8 @@ class KeyRotationRestApiTest extends IntegrationTestBase {
 
   @Test
   void rotateAcceptsExpiresInForTheNewKey() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey("Rotate With Lifetime");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Rotate With Lifetime");
     mockMvc.perform(post("/v1/me/api-keys/current/rotate")
             .header("Authorization", bearer)
             .header(KEY, UUID.randomUUID().toString())
@@ -180,7 +173,8 @@ class KeyRotationRestApiTest extends IntegrationTestBase {
 
   @Test
   void nonPositiveExpiresInOnRotateIsRejected() throws Exception {
-    String bearer = "Bearer " + createMerchantAndGetKey("Rotate Bad Expiry");
+    String bearer = "Bearer " + ApiDrivers.createMerchantAndGetKey(
+            mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Rotate Bad Expiry");
     mockMvc.perform(post("/v1/me/api-keys/current/rotate")
             .header("Authorization", bearer)
             .header(KEY, UUID.randomUUID().toString())

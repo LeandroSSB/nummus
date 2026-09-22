@@ -8,6 +8,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.leandrossb.nummus.conciliation.application.ConciliationWorker;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.sql.Connection;
 import java.sql.Statement;
@@ -41,10 +42,6 @@ class ConciliationStallGuardTest extends IntegrationTestBase {
   @Autowired
   private ConciliationWorker worker;
 
-  private String operatorAuth() {
-    return "Bearer " + operatorKeys.create(null).secret();
-  }
-
   private int reportCount() throws Exception {
     try (Connection c = adminConnection(); Statement st = c.createStatement();
         var rs = st.executeQuery("select count(*) from conciliation.settlement_report")) {
@@ -58,7 +55,7 @@ class ConciliationStallGuardTest extends IntegrationTestBase {
     int before = reportCount();
     String to = Instant.now().plusSeconds(3600).toString();
     mockMvc.perform(post("/v1/conciliation/reports")
-            .header("Authorization", operatorAuth())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"from\":\"" + Instant.now().minusSeconds(60) + "\",\"to\":\"" + to + "\"}"))
@@ -72,7 +69,7 @@ class ConciliationStallGuardTest extends IntegrationTestBase {
     // semantics decide the rest).
     String to = Instant.now().plusSeconds(30).toString();
     mockMvc.perform(post("/v1/conciliation/reports")
-            .header("Authorization", operatorAuth())
+            .header("Authorization", ApiDrivers.operatorAuth(operatorKeys))
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"from\":\"" + Instant.now().minusSeconds(60) + "\",\"to\":\"" + to + "\"}"))
