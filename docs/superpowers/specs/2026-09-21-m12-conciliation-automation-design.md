@@ -59,13 +59,18 @@ One mechanism serves both: the audience is a nullable merchant id, matched with 
 
 ```json
 {
+  "id": "<uuid>",
   "type": "conciliation.report_open",
-  "reportId": "<uuid>",
-  "window": { "from": "…", "to": "…" },
-  "matched": 41,
-  "amountMismatched": 2,
-  "missingInternal": 0,
-  "missingExternal": 1
+  "occurredAt": "…",
+  "data": {
+    "reportId": "<uuid>",
+    "from": "…",
+    "to": "…",
+    "matched": 41,
+    "amountMismatched": 2,
+    "missingInternal": 0,
+    "missingExternal": 1
+  }
 }
 ```
 
