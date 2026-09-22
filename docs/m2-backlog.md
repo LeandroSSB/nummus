@@ -400,3 +400,19 @@ drivers, and the M12 review's pins. Known bounds, deliberate:
   (the workers' single-process stance).
 - **No pagination-helper extraction** — the two mirrored controllers are
   pinned independently; extraction waits for a third copy.
+
+## From the M13 review
+
+The whole-branch review found no production defect. Backlog-grade items it
+triaged:
+
+- **`latestReportEnd`'s empty-table path is exercised only incidentally** —
+  a direct assertion against a wiped table would pin the null-safety
+  regression the M13 plan's original snippet carried.
+- **`ConciliationWorkerTest` cannot run as the sole `-Dtest`** — its static
+  `@BeforeAll` precedes Flyway when no other class has started the context;
+  focused runs must include a companion suite.
+- **~15 added Java lines exceed 100 columns** (fee/deliveries/endpoints test
+  suites and one exception message) — no lint gate; tighten when those files
+  are next touched.
+
