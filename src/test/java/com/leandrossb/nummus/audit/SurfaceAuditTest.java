@@ -64,15 +64,16 @@ class SurfaceAuditTest extends IntegrationTestBase {
   @Autowired
   private ConciliationWorker worker;
 
-  /** (actorKey, action, subjectId) of the latest entries, newest first. */
+  /** (actorKey, action, subjectId, subjectType) of the latest entries, newest first. */
   private List<String[]> recentEntries(int limit) throws Exception {
     try (Connection c = adminConnection(); Statement st = c.createStatement();
         ResultSet rs = st.executeQuery("select actor_key::text, action, "
-            + "coalesce(subject_id::text, '') from audit.operator_action "
+            + "coalesce(subject_id::text, ''), subject_type from audit.operator_action "
             + "order by id desc limit " + limit)) {
       List<String[]> out = new ArrayList<>();
       while (rs.next()) {
-        out.add(new String[] {rs.getString(1), rs.getString(2), rs.getString(3)});
+        out.add(new String[] {rs.getString(1), rs.getString(2), rs.getString(3),
+            rs.getString(4)});
       }
       return out;
     }
@@ -186,6 +187,7 @@ class SurfaceAuditTest extends IntegrationTestBase {
     Assertions.assertEquals("operator_endpoint.registered", top[1]);
     Assertions.assertEquals(actorId, top[0], "the entry is attributed to the calling key");
     Assertions.assertEquals(endpointId, top[2]);
+    Assertions.assertEquals("webhook_endpoint", top[3]);
     Assertions.assertTrue(latestDetail("operator_endpoint.registered").contains(url),
         "the register's detail carries the URL");
 
@@ -196,6 +198,7 @@ class SurfaceAuditTest extends IntegrationTestBase {
     Assertions.assertEquals("operator_endpoint.deleted", top[1]);
     Assertions.assertEquals(actorId, top[0], "the entry is attributed to the calling key");
     Assertions.assertEquals(endpointId, top[2]);
+    Assertions.assertEquals("webhook_endpoint", top[3]);
   }
 
   @Test
@@ -224,6 +227,7 @@ class SurfaceAuditTest extends IntegrationTestBase {
     Assertions.assertEquals("delivery.redriven", top[1]);
     Assertions.assertEquals(actorId, top[0], "the entry is attributed to the calling key");
     Assertions.assertEquals(deliveryId, top[2]);
+    Assertions.assertEquals("webhook_delivery", top[3]);
   }
 
   @Test
@@ -290,14 +294,19 @@ class SurfaceAuditTest extends IntegrationTestBase {
   @Test
   @Order(5)
   void scheduledTicksRecordNothing() throws Exception {
-    // This class's manual ingest (and any earlier suite) left reports whose
-    // period_to reaches past now; they would hold the self-healing start past
-    // the lagged now and no-op the tick. Backdate the stragglers — the same
-    // DB-side rewrite ConciliationWorkerTest applies before pinning a marker.
+    // The self-healing start rides on max(period_to) of ALL reports, so a
+    // marker-pinning test must clear near-now reports, not just future ones:
+    // any row fresher than the lagged now lifts the window start above the
+    // divergence and no-ops the tick. Earlier suites leave reports at or near
+    // wall-clock now (Instant.now(), to = now + 60s), so backdate everything
+    // fresher than five minutes — the -2h shift parks them below both the
+    // -40s divergence and the -90s marker, and whatever is older than that
+    // cannot outbid the marker either.
     try (Connection c = adminConnection(); Statement st = c.createStatement()) {
       st.executeUpdate("update conciliation.settlement_report"
           + " set period_from = period_from - interval '2 hours',"
-          + " period_to = period_to - interval '2 hours' where period_to > now()");
+          + " period_to = period_to - interval '2 hours'"
+          + " where period_to > now() - interval '5 minutes'");
     }
     // A divergence in the live window: settle internally, hide externally, and
     // park the settlement behind the lag so this tick's window covers it.
