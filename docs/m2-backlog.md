@@ -401,6 +401,26 @@ drivers, and the M12 review's pins. Known bounds, deliberate:
 - **No pagination-helper extraction** — the two mirrored controllers are
   pinned independently; extraction waits for a third copy.
 
+## From the M14 design
+
+M14 closed the M8/M9 attribution threads: operator keys carry immutable
+identity labels (rotations carry the label forward; pre-M14 keys read
+`system`), and every fee-schedule change appends an attributed,
+append-only history entry while the merchant's columns stay the cached
+current value. Known bounds, deliberate:
+
+- **Only fee changes are attributed** — merchant creation, key operations,
+  and conciliation triggers stay unattributed; a general audit log can
+  build on the label seam.
+- **No RBAC and no operator entity** — labels are identity-light; grouping
+  and roles can come later without history rewrites.
+- **PUT retries append per delivery** — a network-level retry of the fee
+  route leaves two identical entries; honest as "applied twice".
+- **`system` is a sentinel, not an actor** — pre-M14 attribution is
+  genuinely absent (NULL rendered as `system`).
+- **Labels are shape-validated only** — non-blank, ≤64 chars, no
+  uniqueness or i18n constraints; the key id disambiguates.
+
 ## From the M13 review
 
 The whole-branch review found no production defect. Backlog-grade items it

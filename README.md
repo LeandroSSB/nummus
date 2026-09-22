@@ -13,7 +13,7 @@ Payment providers hold funds on behalf of merchants and must answer, at any mome
 | **Accounts** | Payment accounts for merchants, with full transaction history and derived balances |
 | **Ledger** | Immutable double-entry journal; invariants enforced at write time (balanced transactions, no entry ever updated or deleted) |
 | **Instant payments** | Payment intents and Pix-style dynamic charges: create, expire, settle; per-merchant fees netted into a revenue account on settlement |
-| **Authentication** | Merchant identity with Bearer API keys (hashed at rest, revocable); every merchant-facing resource is tenant-scoped; operators authenticate with separately-bootstrapped keys (merchant creation, conciliation); keys expire on demand, track last use, and rotate with a grace window; authenticated routes are rate-limited per tenant; request bodies are capped |
+| **Authentication** | Merchant identity with Bearer API keys (hashed at rest, revocable); every merchant-facing resource is tenant-scoped; operators authenticate with separately-bootstrapped keys (merchant creation, conciliation); keys expire on demand, track last use, and rotate with a grace window; authenticated routes are rate-limited per tenant; request bodies are capped; operator keys carry immutable identity labels and fee-schedule changes are attributed, append-only history |
 | **Idempotency** | Merchant-facing writes are safe to retry — `Idempotency-Key` handling with stored responses |
 | **Webhooks** | At-least-once event delivery to merchants via transactional outbox, with retries and backoff; registration and delivery reject SSRF targets (two-layer), merchants redrive failed deliveries, succeeded deliveries age out under retention, listings paginate; a second namespace serves operator endpoints (conciliation alerts) |
 | **Conciliation** | Matching of external settlement reports against internal ledger entries, with divergence tracking; re-ingest is scheduled over tumbling self-healing windows and every OPEN report pushes a digest to operator webhooks |
@@ -60,3 +60,4 @@ In active development. Current milestones:
 - [x] M11 — API hardening
 - [x] M12 — Conciliation automation
 - [x] M13 — Operational hardening
+- [x] M14 — Audit attribution
