@@ -401,6 +401,21 @@ drivers, and the M12 review's pins. Known bounds, deliberate:
 - **No pagination-helper extraction** — the two mirrored controllers are
   pinned independently; extraction waits for a third copy.
 
+## From the M13 review
+
+The whole-branch review found no production defect. Backlog-grade items it
+triaged:
+
+- **`latestReportEnd`'s empty-table path is exercised only incidentally** —
+  a direct assertion against a wiped table would pin the null-safety
+  regression the M13 plan's original snippet carried.
+- **`ConciliationWorkerTest` cannot run as the sole `-Dtest`** — its static
+  `@BeforeAll` precedes Flyway when no other class has started the context;
+  focused runs must include a companion suite.
+- **~15 added Java lines exceed 100 columns** (fee/deliveries/endpoints test
+  suites and one exception message) — no lint gate; tighten when those files
+  are next touched.
+
 ## From the M14 design
 
 M14 closed the M8/M9 attribution threads: operator keys carry immutable
@@ -420,19 +435,4 @@ current value. Known bounds, deliberate:
   genuinely absent (NULL rendered as `system`).
 - **Labels are shape-validated only** — non-blank, ≤64 chars, no
   uniqueness or i18n constraints; the key id disambiguates.
-
-## From the M13 review
-
-The whole-branch review found no production defect. Backlog-grade items it
-triaged:
-
-- **`latestReportEnd`'s empty-table path is exercised only incidentally** —
-  a direct assertion against a wiped table would pin the null-safety
-  regression the M13 plan's original snippet carried.
-- **`ConciliationWorkerTest` cannot run as the sole `-Dtest`** — its static
-  `@BeforeAll` precedes Flyway when no other class has started the context;
-  focused runs must include a companion suite.
-- **~15 added Java lines exceed 100 columns** (fee/deliveries/endpoints test
-  suites and one exception message) — no lint gate; tighten when those files
-  are next touched.
 
