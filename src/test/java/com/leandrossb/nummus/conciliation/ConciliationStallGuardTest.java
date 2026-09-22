@@ -93,14 +93,19 @@ class ConciliationStallGuardTest extends IntegrationTestBase {
       worker.tick();
       // Plant a future-dated report directly (the route guard now blocks the
       // HTTP path; SQL is how a legacy row would exist).
+      plantFutureReport();
+      worker.tick();
+      worker.tick();
+      // Re-arm proof: clear the condition by backdating the row, so the next
+      // tick takes the latest<=end branch and resets the latch — then plant a
+      // fresh future-dated row and require a SECOND warn. A sticky latch that
+      // never resets passes the two stalled ticks above.
       try (Connection c = adminConnection(); Statement st = c.createStatement()) {
-        st.executeUpdate("insert into conciliation.settlement_report "
-            + "(public_id, period_from, period_to, status, matched_count, amount_mismatched_count, "
-            + "missing_internal_count, missing_external_count) values ('"
-            + UUID.randomUUID() + "', now() - interval '1 minute', now() + interval '1 hour', "
-            + "'CONCILED', 0, 0, 0, 0)");
+        st.executeUpdate("update conciliation.settlement_report set period_to = now() - interval '2 hours' "
+            + "where period_to > now()");
       }
       worker.tick();
+      plantFutureReport();
       worker.tick();
     } finally {
       workerLogger.detachAppender(appender);
@@ -108,11 +113,25 @@ class ConciliationStallGuardTest extends IntegrationTestBase {
     long stalls = appender.list.stream()
         .filter(e -> e.getLevel() == ch.qos.logback.classic.Level.WARN)
         .filter(e -> e.getFormattedMessage().contains("period_to")).count();
-    Assertions.assertEquals(1, stalls, "one warn per stall episode, not per tick");
-    // Clean up: backdate the planted row so later suites are unaffected.
+    Assertions.assertEquals(2, stalls, "one warn per episode — the latch re-arms once the stall clears");
+    // Clean up: backdate the planted row and restore the ingest marker so
+    // later suites are unaffected.
     try (Connection c = adminConnection(); Statement st = c.createStatement()) {
       st.executeUpdate("update conciliation.settlement_report set period_to = now() - interval '2 hours' "
           + "where period_to > now()");
+    }
+    setLastWindowEnd("now() - interval '2 hours'");
+  }
+
+  /** A legacy-style row whose window ends an hour into the future — the shape
+   *  that holds the worker's lagged window back and trips the stall guard. */
+  private void plantFutureReport() throws Exception {
+    try (Connection c = adminConnection(); Statement st = c.createStatement()) {
+      st.executeUpdate("insert into conciliation.settlement_report "
+          + "(public_id, period_from, period_to, status, matched_count, amount_mismatched_count, "
+          + "missing_internal_count, missing_external_count) values ('"
+          + UUID.randomUUID() + "', now() - interval '1 minute', now() + interval '1 hour', "
+          + "'CONCILED', 0, 0, 0, 0)");
     }
   }
 
