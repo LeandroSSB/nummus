@@ -4,6 +4,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.classic.spi.IThrowableProxy;
+import ch.qos.logback.core.read.ListAppender;
 import com.jayway.jsonpath.JsonPath;
 import com.leandrossb.nummus.conciliation.application.ConciliationWorker;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
@@ -22,6 +26,7 @@ import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
@@ -35,6 +40,8 @@ import org.springframework.test.web.servlet.MvcResult;
  * self-healing marker (manual ingests that covered pending territory are never
  * re-covered), ends at the lagged DB clock, an empty window persists nothing
  * but still advances the marker, and report + digest + advance commit together.
+ * A tick whose report write fails warns once with the real cause, rolls
+ * everything back, and never lets a wrapper exception escape.
  */
 @TestMethodOrder(OrderAnnotation.class)
 @AutoConfigureMockMvc
@@ -143,6 +150,91 @@ class ConciliationWorkerTest extends IntegrationTestBase {
     Instant pushed = lastWindowEnd();
     worker.tick();
     Assertions.assertEquals(pushed, lastWindowEnd());
+  }
+
+  @Test
+  @Order(5)
+  void aFailedTickLogsOneRealWarnAndRollsBackEverything() throws Exception {
+    // This class's earlier tests left reports whose period_to sits seconds in
+    // the past — the self-healing start would ride on top of them and lift the
+    // window start past the lagged end, no-oping the tick before it ever
+    // reaches the report write. Wipe them so the start falls back to the
+    // planted marker; this is the last ordered test, so nothing upstream cares.
+    clearReports();
+    // A pending divergence gives the tick real work: with an empty matched
+    // window the report write is never attempted and nothing can fail.
+    UUID hidden = settleAndHideExternalCharge();
+    setLastWindowEnd("now() - interval '90 seconds'");
+    Logger workerLogger = (Logger) LoggerFactory.getLogger(ConciliationWorker.class);
+    ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    appender.start();
+    workerLogger.addAppender(appender);
+    int reportsBefore = reportCount();
+    int eventsBefore = countReportOpenEvents();
+    Instant markerBefore = lastWindowEnd();
+    Exception escaped = null;
+    try (Connection c = adminConnection(); Statement st = c.createStatement()) {
+      // A fault the tick cannot walk around, planted after the window is
+      // chosen: the test datasource runs as the container superuser, which
+      // bypasses every ACL check, so a revoked grant would bite nothing. A
+      // NOT VALID check constraint rejects only new rows — the same "the
+      // report write fails inside the inner @Transactional ingest" fault a
+      // lost insert grant produces in production — and is dropped again
+      // before the test lets go.
+      st.executeUpdate("alter table conciliation.settlement_report "
+          + "add constraint halt_insert_for_failed_tick_test check (false) not valid");
+      try {
+        worker.tick();
+      } catch (Exception e) {
+        escaped = e;
+      } finally {
+        st.executeUpdate("alter table conciliation.settlement_report "
+            + "drop constraint halt_insert_for_failed_tick_test");
+      }
+    } finally {
+      workerLogger.detachAppender(appender);
+    }
+    var warns = appender.list.stream()
+        .filter(e -> e.getLevel() == ch.qos.logback.classic.Level.WARN).toList();
+    Assertions.assertEquals(1, warns.size(), "exactly one warn, carrying the real cause");
+    boolean surfaced = appender.list.stream().anyMatch(e ->
+        e.getFormattedMessage().contains("UnexpectedRollbackException")
+            || e.getThrowableProxy() != null && String.valueOf(e.getThrowableProxy().getClassName())
+                .contains("UnexpectedRollbackException"));
+    Assertions.assertFalse(surfaced, "the wrapper exception must never surface in the log");
+    Assertions.assertNull(escaped, "no exception may escape the tick, got " + escaped);
+    String causes = warns.stream().map(e -> flatten(e.getThrowableProxy()))
+        .collect(java.util.stream.Collectors.joining());
+    Assertions.assertTrue(causes.contains("settlement_report")
+        && causes.contains("halt_insert_for_failed_tick_test"),
+        "the warn must carry the original cause, got: " + causes);
+    // Rollback: the pending divergence produced no report, event, line, or advance.
+    Assertions.assertEquals(reportsBefore, reportCount(), "a failed tick persists no report");
+    Assertions.assertEquals(eventsBefore, countReportOpenEvents(),
+        "no alert event may survive a failed tick");
+    Assertions.assertEquals(0, lineCountForCharge(hidden),
+        "no report line may survive a failed tick");
+    Assertions.assertEquals(markerBefore, lastWindowEnd(),
+        "the marker must not advance past a failed tick");
+  }
+
+  /** Every report row — the failed-tick window must be chosen by this test's
+   *  own marker, not by any earlier test's report end (the same wipe
+   *  ConciliationStallGuardTest applies before pinning its marker). */
+  private void clearReports() throws Exception {
+    try (Connection c = adminConnection(); Statement st = c.createStatement()) {
+      st.executeUpdate("delete from conciliation.report_line");
+      st.executeUpdate("delete from conciliation.settlement_report");
+    }
+  }
+
+  /** The whole cause chain of a logged failure, flattened to one string. */
+  private static String flatten(IThrowableProxy thrown) {
+    StringBuilder text = new StringBuilder();
+    for (var cause = thrown; cause != null; cause = cause.getCause()) {
+      text.append(cause.getClassName()).append(": ").append(cause.getMessage()).append(" / ");
+    }
+    return text.toString();
   }
 
   /** Port 9 (discard): a loopback URL the URL policy accepts that nothing
