@@ -49,7 +49,7 @@ class AccountsRestApiTest extends IntegrationTestBase {
    *  Creation is operator-gated — one operator key per fixture mint. */
   @BeforeEach
   void createMerchantFixture() throws Exception {
-    String operatorAuth = "Bearer " + operatorKeys.create("probe", null).secret();
+    String operatorAuth = "Bearer " + operatorKeys.create("probe", null, null).secret();
     MvcResult created = mockMvc.perform(post("/v1/merchants")
             .header("Authorization", operatorAuth)
             .header("Idempotency-Key", UUID.randomUUID().toString())

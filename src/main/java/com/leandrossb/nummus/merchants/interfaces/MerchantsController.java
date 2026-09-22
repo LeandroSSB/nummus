@@ -45,7 +45,8 @@ class MerchantsController {
   @PostMapping
   ResponseEntity<CreateMerchantResponse> create(AuthenticatedOperator operator,
       @Valid @RequestBody CreateMerchantRequest request) {
-    var merchant = merchants.create(request.name(), request.feeSchedule());
+    var merchant = merchants.create(request.name(), request.feeSchedule(),
+        operator.keyPublicId());
     var firstKey = keys.create(merchant.publicId(), null);
     return ResponseEntity
         .created(URI.create("/v1/merchants/" + merchant.publicId()))

@@ -39,21 +39,22 @@ class OperatorKeysServiceTest extends IntegrationTestBase {
     assertThrows(BootstrapAlreadyUsedException.class,
         () -> operatorKeys.bootstrap("test-bootstrap-token", "probe"));
 
-    // Self-serve lifecycle still works after bootstrap is consumed.
-    var minted = operatorKeys.create("probe", null);
+    // Self-serve lifecycle still works after bootstrap is consumed: the
+    // bootstrapped key acts on its own key set.
+    var minted = operatorKeys.create("probe", null, first.key().publicId());
     assertNotEquals(first.secret(), minted.secret());
-    operatorKeys.revoke(minted.key().publicId());
+    operatorKeys.revoke(minted.key().publicId(), first.key().publicId());
     assertTrue(operatorKeys.findByRawKey(minted.secret()).isEmpty());
     assertEquals(keysBefore + 2, operatorKeys.list().size());
     assertThrows(com.leandrossb.nummus.merchants.application.UnknownApiKeyException.class,
-        () -> operatorKeys.revoke(UUID.randomUUID()));
+        () -> operatorKeys.revoke(UUID.randomUUID(), first.key().publicId()));
   }
 
   @Test
   void revokingEveryKeyReopensBootstrap() {
     revokeEveryActiveKey();
-    var key = operatorKeys.create("probe", null);
-    operatorKeys.revoke(key.key().publicId());
+    var key = operatorKeys.create("probe", null, null);
+    operatorKeys.revoke(key.key().publicId(), key.key().publicId());
     var again = operatorKeys.bootstrap("test-bootstrap-token", "probe");
     assertTrue(again.secret().startsWith("nummus_sk_"));
   }
@@ -64,6 +65,6 @@ class OperatorKeysServiceTest extends IntegrationTestBase {
   private void revokeEveryActiveKey() {
     operatorKeys.list().stream()
         .filter(key -> "ACTIVE".equals(key.status()))
-        .forEach(key -> operatorKeys.revoke(key.publicId()));
+        .forEach(key -> operatorKeys.revoke(key.publicId(), null));
   }
 }

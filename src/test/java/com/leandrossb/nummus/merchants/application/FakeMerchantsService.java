@@ -12,7 +12,7 @@ import java.util.UUID;
 public final class FakeMerchantsService implements MerchantsService {
 
   @Override
-  public Merchant create(String name, FeeSchedule fee) {
+  public Merchant create(String name, FeeSchedule fee, UUID actingOperatorKey) {
     throw new UnsupportedOperationException("not used in payments unit scope");
   }
 

@@ -45,7 +45,7 @@ class FeeHistoryRestApiTest extends IntegrationTestBase {
   /** Creates a merchant with a freshly minted operator key; every fee PUT
    *  this test drives afterwards is attributed to that same key. */
   private OperatorMerchant createMerchantAsOperator(String name, String feeBody) throws Exception {
-    IssuedApiKey operatorKey = operatorKeys.create("fee-probe", null);
+    IssuedApiKey operatorKey = operatorKeys.create("fee-probe", null, null);
     MvcResult created = mockMvc.perform(post("/v1/merchants")
             .header("Authorization", "Bearer " + operatorKey.secret())
             .header(KEY, UUID.randomUUID().toString())

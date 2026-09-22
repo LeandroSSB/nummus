@@ -52,7 +52,9 @@ class OperatorWebhookDeliveriesController {
   @Idempotent
   @PostMapping("/v1/operator/webhook-deliveries/{id}/redrive")
   ResponseEntity<Void> redrive(AuthenticatedOperator operator, @PathVariable UUID id) {
-    if (!store.requeueFailedDelivery(null, id)) {
+    // The requeue and its audit entry commit together in the service; the
+    // boolean keeps this route's 404 semantics untouched.
+    if (!endpoints.redriveOperatorDelivery(id, operator.keyPublicId())) {
       throw new UnknownWebhookDeliveryException(id);
     }
     return ResponseEntity.accepted().build();

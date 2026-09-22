@@ -38,7 +38,8 @@ class ConciliationReportsController {
   @PostMapping
   ResponseEntity<ReportSummaryResponse> create(AuthenticatedOperator operator,
       @Valid @RequestBody CreateReportRequest request) {
-    var summary = conciliation.ingest(Instant.parse(request.from()), Instant.parse(request.to()));
+    var summary = conciliation.ingest(Instant.parse(request.from()), Instant.parse(request.to()),
+        operator.keyPublicId());
     return ResponseEntity
         .created(URI.create("/v1/conciliation/reports/" + summary.publicId()))
         .body(ReportSummaryResponse.from(summary));

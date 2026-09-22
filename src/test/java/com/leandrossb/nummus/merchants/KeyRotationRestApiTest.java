@@ -137,7 +137,7 @@ class KeyRotationRestApiTest extends IntegrationTestBase {
 
   @Test
   void operatorRotationWorksTheSameWay() throws Exception {
-    String oldSecret = operatorKeys.create("probe", null).secret();
+    String oldSecret = operatorKeys.create("probe", null, null).secret();
     String oldBearer = "Bearer " + oldSecret;
     MvcResult rotated = mockMvc.perform(post("/v1/operator/api-keys/current/rotate")
             .header("Authorization", oldBearer)
