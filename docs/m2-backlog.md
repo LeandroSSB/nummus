@@ -463,3 +463,23 @@ transaction. Known bounds, deliberate:
 - **Scheduled ticks log nothing** — the machine is not an operator; only
   the manual ingest route records.
 
+## From the M16 design
+
+M16 closed the product loop with money-out: payouts reserve funds in the
+journal at request time under a ledger-account row lock, cross the
+simulated network as transfers, and post their final legs lazily on read.
+Known bounds, deliberate:
+
+- **Payouts are absent from conciliation** — external settlement reports
+  cover charges only; payout reconciliation waits for a product need.
+- **No bank-account registry** — the destination is a validated opaque
+  bank key; payee registration/verification is a future milestone.
+- **No operator surface and no audit entries** — payouts are merchant
+  self-serve, attributed by tenancy.
+- **No payout listing beyond by-id** — the derived merchant statement is
+  the payout history.
+- **The expiry is lazy** — an un-read expired payout holds its reservation
+  until someone reads it; there is no sweeping worker.
+- **Fee is execution-time fact** — the schedule in force when the transfer
+  executes prices the payout, exactly as settlement pricing works.
+
