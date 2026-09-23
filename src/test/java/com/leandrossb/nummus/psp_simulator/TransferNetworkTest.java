@@ -71,6 +71,61 @@ class TransferNetworkTest extends IntegrationTestBase {
   }
 
   @Test
+  void cancelTransitionsPendingToCancelled() throws Exception {
+    var transfer = simulator.createTransfer(Money.ofBrl("10.0000"), "bank.main-01");
+
+    mockMvc.perform(post("/simulator/transfers/{id}/cancel", transfer.publicId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+    // CANCELLED is terminal — a late pay is refused with the not-pending vocabulary.
+    mockMvc.perform(post("/simulator/transfers/{id}/pay", transfer.publicId()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.detail").exists());
+
+    mockMvc.perform(get("/simulator/transfers/{id}", transfer.publicId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+    // The port echoes the same post-attempt state.
+    var other = paymentNetwork.createPayoutTransfer(Money.ofBrl("5.0000"), "bank.main-01");
+    var cancelled = paymentNetwork.cancelPayoutTransfer(other.publicId());
+    assertEquals(ChargeStatus.CANCELLED, cancelled.status());
+    assertEquals(other.publicId(), cancelled.publicId());
+  }
+
+  @Test
+  void cancelOnTerminalIs409() throws Exception {
+    var paid = simulator.createTransfer(Money.ofBrl("1.0000"), "bank.main-01");
+    simulator.payTransfer(paid.publicId());
+    mockMvc.perform(post("/simulator/transfers/{id}/cancel", paid.publicId()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.detail").exists());
+
+    var failed = simulator.createTransfer(Money.ofBrl("1.0000"), "bank.main-01");
+    simulator.failTransfer(failed.publicId());
+    mockMvc.perform(post("/simulator/transfers/{id}/cancel", failed.publicId()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.detail").exists());
+
+    mockMvc.perform(post("/simulator/transfers/{id}/cancel", UUID.randomUUID()))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void cancelledTransfersReleaseNothingButHoldNothing() throws Exception {
+    var transfer = simulator.createTransfer(Money.ofBrl("25.0000"), "bank.main-01");
+    simulator.cancelTransfer(transfer.publicId());
+
+    // Transfers carry no sum cap — cancelling is purely terminal, so a fresh
+    // transfer of the same amount is neither blocked nor an over-issue.
+    var retry = simulator.createTransfer(Money.ofBrl("25.0000"), "bank.main-01");
+    mockMvc.perform(post("/simulator/transfers/{id}/pay", retry.publicId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCEEDED"));
+  }
+
+  @Test
   void networkPortExposesTransfers() throws Exception {
     var transfer = paymentNetwork.createPayoutTransfer(
         Money.of(new BigDecimal("12.50"), Currency.getInstance("BRL")), "bank.main-01");

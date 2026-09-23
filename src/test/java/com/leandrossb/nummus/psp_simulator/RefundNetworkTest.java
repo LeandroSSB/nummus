@@ -124,4 +124,50 @@ class RefundNetworkTest extends IntegrationTestBase {
     assertEquals(0, excess.remaining().compareTo(Money.ofBrl("40.0000")));
     assertEquals(0, excess.requested().compareTo(Money.ofBrl("41.0000")));
   }
+
+  @Test
+  void cancelRefundReleasesTheNetworkRemainder() throws Exception {
+    var charge = simulator.create(Money.ofBrl("100.0000"));
+    var cancelled = paymentNetwork.createChargeRefund(charge.publicId(), Money.ofBrl("60.0000"));
+
+    mockMvc.perform(post("/simulator/refunds/{id}/cancel", cancelled.publicId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+    // CANCELLED released its hold — the same 60.00 is refundable again, and the
+    // retried refund settles on the network.
+    var retry = paymentNetwork.createChargeRefund(charge.publicId(), Money.ofBrl("60.0000"));
+    assertEquals(ChargeStatus.PENDING, retry.status());
+    simulator.payRefund(retry.publicId());
+    assertEquals(ChargeStatus.SUCCEEDED,
+        paymentNetwork.getChargeRefund(retry.publicId()).status());
+
+    // The retry now holds the remainder — the cap itself is still enforced.
+    var excess = assertThrows(RefundExceedsChargeException.class,
+        () -> paymentNetwork.createChargeRefund(charge.publicId(), Money.ofBrl("41.0000")));
+
+    assertEquals(charge.publicId(), excess.chargePublicId());
+    assertEquals(0, excess.remaining().compareTo(Money.ofBrl("40.0000")));
+    assertEquals(0, excess.requested().compareTo(Money.ofBrl("41.0000")));
+  }
+
+  @Test
+  void portCancelReturnsPostAttemptState() throws Exception {
+    var charge = simulator.create(Money.ofBrl("50.0000"));
+
+    // A pending refund: the cancel wins — CANCELLED echoed with identity intact.
+    var pending = paymentNetwork.createChargeRefund(charge.publicId(), Money.ofBrl("10.0000"));
+    var cancelled = paymentNetwork.cancelChargeRefund(pending.publicId());
+    assertEquals(ChargeStatus.CANCELLED, cancelled.status());
+    assertEquals(pending.publicId(), cancelled.publicId());
+    assertEquals(charge.publicId(), cancelled.chargePublicId());
+    assertEquals(0, cancelled.amount().compareTo(Money.ofBrl("10.0000")));
+
+    // An already-terminal refund: no error, the observed state is returned —
+    // the expiry resolution branches on this, it does not catch.
+    var paid = paymentNetwork.createChargeRefund(charge.publicId(), Money.ofBrl("5.0000"));
+    simulator.payRefund(paid.publicId());
+    var observed = paymentNetwork.cancelChargeRefund(paid.publicId());
+    assertEquals(ChargeStatus.SUCCEEDED, observed.status());
+  }
 }
