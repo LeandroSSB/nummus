@@ -5,8 +5,9 @@ import java.util.UUID;
 
 /**
  * Thrown when a payout request exceeds the account's available balance. Carries
- * the derived balance the decision was made against — the reservation fence
- * guarantees it was current under the account's row lock.
+ * the derived balance the decision was made against and the requested total —
+ * the payout amount plus the payout fee the request reserves room for — both
+ * read under the account's row lock.
  */
 public class InsufficientFundsException extends RuntimeException {
 

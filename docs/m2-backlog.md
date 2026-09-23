@@ -481,5 +481,8 @@ Known bounds, deliberate:
 - **The expiry is lazy** — an un-read expired payout holds its reservation
   until someone reads it; there is no sweeping worker.
 - **Fee is execution-time fact** — the schedule in force when the transfer
-  executes prices the payout, exactly as settlement pricing works.
+  executes prices the payout, exactly as settlement pricing works. The
+  request path reserves against the amount plus the payout fee in force at
+  request time; an operator changing the fee between request and execution
+  is attributed in the M14 history.
 

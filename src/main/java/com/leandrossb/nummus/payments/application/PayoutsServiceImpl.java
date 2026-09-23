@@ -67,11 +67,17 @@ public class PayoutsServiceImpl implements PayoutsService {
     }
     // Check-then-reserve cannot race: the row lock on the merchant's ledger
     // account serializes every payout request against this account, and the
-    // reservation posting itself is what later requests derive from.
+    // reservation posting itself is what later requests derive from. The
+    // check prices in the execution fee: the fee leg debits the merchant's
+    // account at settle time, so a full-balance request under a positive fee
+    // would land the merchant at exactly -fee.
     ledger.lockAccount(account.ledgerAccountPublicId());
+    var schedule = merchants.findFeeSchedule(merchantPublicId).orElse(FeeSchedule.ZERO);
+    var payoutFee = Money.of(schedule.payoutFixedAmount(), cmd.amount().currency());
     var available = accounts.balance(merchantPublicId, account.publicId());
-    if (available.compareTo(cmd.amount()) < 0) {
-      throw new InsufficientFundsException(account.publicId(), available, cmd.amount());
+    var includingFee = cmd.amount().add(payoutFee);
+    if (available.compareTo(includingFee) < 0) {
+      throw new InsufficientFundsException(account.publicId(), available, includingFee);
     }
     var payoutId = UUID.randomUUID();
     var transfer = network.createPayoutTransfer(cmd.amount(), cmd.destinationBankKey());
