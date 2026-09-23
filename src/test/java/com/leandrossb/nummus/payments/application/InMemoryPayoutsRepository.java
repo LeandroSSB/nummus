@@ -4,6 +4,8 @@ import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.domain.Payout;
 import com.leandrossb.nummus.payments.domain.PayoutStatus;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,6 +42,15 @@ public class InMemoryPayoutsRepository implements PayoutsRepository {
   @Override
   public boolean markExpired(UUID publicId, UUID returnTransactionPublicId) {
     return guarded(publicId, PayoutStatus.EXPIRED, null, null, null, returnTransactionPublicId);
+  }
+
+  @Override
+  public List<Payout> findSettledBetween(Instant from, Instant to) {
+    return payouts.values().stream()
+        .filter(p -> p.status() == PayoutStatus.SETTLED)
+        .filter(p -> !p.settledAt().isBefore(from) && p.settledAt().isBefore(to))
+        .sorted(Comparator.comparing(Payout::settledAt))
+        .toList();
   }
 
   private synchronized boolean guarded(UUID publicId, PayoutStatus target, UUID executeTx,

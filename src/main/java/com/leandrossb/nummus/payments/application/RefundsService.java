@@ -3,6 +3,8 @@ package com.leandrossb.nummus.payments.application;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.domain.CreateRefundCommand;
 import com.leandrossb.nummus.payments.domain.Refund;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -29,4 +31,8 @@ public interface RefundsService {
    *  EXPIRED refunds released their share and drop out; an intent without
    *  refunds sums to zero. */
   Money refundedTotal(UUID intentPublicId);
+
+  /** Settled refunds in [from, to) — conciliation's view of internal money-out
+   *  settlements, keyed by the network refund each settlement executed. */
+  List<MoneyOutSettlementView> listSettlements(Instant from, Instant to);
 }

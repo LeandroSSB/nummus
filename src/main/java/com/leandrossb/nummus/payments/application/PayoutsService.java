@@ -2,6 +2,8 @@ package com.leandrossb.nummus.payments.application;
 
 import com.leandrossb.nummus.payments.domain.CreatePayoutCommand;
 import com.leandrossb.nummus.payments.domain.Payout;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -18,4 +20,8 @@ public interface PayoutsService {
    *  it out of the reserve (charging the settle-time payout fee). Terminal
    *  states are returned as-is without polling the network. */
   Payout get(UUID merchantPublicId, UUID publicId);
+
+  /** Settled payouts in [from, to) — conciliation's view of internal money-out
+   *  settlements, keyed by the network transfer each payout executed. */
+  List<MoneyOutSettlementView> listSettlements(Instant from, Instant to);
 }

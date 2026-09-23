@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Currency;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -59,6 +60,23 @@ public class JdbcClientPayoutsRepository implements PayoutsRepository {
         .param("publicId", publicId)
         .query((rs, i) -> mapPayout(rs))
         .optional();
+  }
+
+  @Override
+  public List<Payout> findSettledBetween(Instant from, Instant to) {
+    return jdbc.sql("""
+        select public_id, account_public_id, amount, destination_bank_key, status,
+               transfer_public_id, expires_at, created_at, settled_at, fee_amount,
+               request_transaction_public_id, execute_transaction_public_id,
+               return_transaction_public_id
+        from payments.payout
+        where status = 'SETTLED' and settled_at >= :from and settled_at < :to
+        order by settled_at, id
+        """)
+        .param("from", toOffsetDateTime(from))
+        .param("to", toOffsetDateTime(to))
+        .query((rs, i) -> mapPayout(rs))
+        .list();
   }
 
   @Override
