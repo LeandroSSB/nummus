@@ -514,3 +514,21 @@ deliberate:
 - **No listing beyond by-id** — the intent's `refundedTotal` and the
   derived statement are the history.
 
+## From the M18 design
+
+M18 closed the M17 expiry bound: a past-expiry read resolves the in-flight
+network instruction instead of abandoning it — an executed instruction
+settles (the money moved), a pending one is cancelled on the network and
+the hold returns, a failed one returns as before. `CANCELLED` is terminal,
+so late unaccounted pays are impossible and cancelled instructions release
+the network-side remainders. Known bounds, deliberate:
+
+- **No retroactive repair** — pre-M18 EXPIRED rows and their orphaned
+  PENDING instructions stay as-is; operators may cancel orphans through
+  the simulator routes manually.
+- **No early abort surface** — cancelling before expiry stays internal to
+  the resolution path; a merchant-facing void is future product work.
+- **An observed CANCELLED behaves like FAILED** — including the rare
+  pre-expiry observation after a resolver rollback or an operator cancel.
+- **Charges never cancel** — money-in has no expiry abandonment.
+
