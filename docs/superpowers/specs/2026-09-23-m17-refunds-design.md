@@ -24,16 +24,17 @@ M16 payout shape by construction (async boundary forces the two-phase hold).
    the merchant is debited the same full value; revenue never moves. A refund
    of a fully-refunded intent therefore costs the merchant exactly the
    settlement fee — deliberate, documented, no proportional retrofit.
-4. **Two race guards, one documented lock order.**
+4. **Two race guards, one serialization point.**
    - *Refundable balance:* `Σ(refunds of intent in REQUESTED or SETTLED) ≤
-     amount`. The request transaction row-locks the intent (`select ... for
-     update` on `payments.payment_intent`) BEFORE computing the remaining
-     refundable value.
-   - *Funds for the hold:* `available ≥ refund value` under the SAME
-     ledger-account row lock the payout request uses.
-   - Lock order is **intent row → ledger account row**, taken in that order by
-     every writer; the payout path takes only the ledger row, so no cycle
-     exists. Deadlock-freedom by construction is part of the contract tests.
+     amount`. *Funds for the hold:* `available ≥ refund value`.
+   - Both checks run under ONE row lock: the intent's **ledger account row**
+     (`Ledger.lockAccount`) — the exact lock payout requests already take.
+     Every hold on an account (payout or refund, any intent) serializes
+     through it; there is no second lock, no lock order, and deadlock is
+     impossible by construction. (A `select ... for update` on
+     `payments.payment_intent` was considered and rejected: the app role's
+     UPDATE grant on that table is column-scoped, and widening it would break
+     the house's least-privilege grant discipline.)
 5. **The M16 stranding lesson applied up front.** The `OutstandingPayouts`
    port generalizes to `OutstandingHolds.anyPending(account)` — freeze/close
    reject (409) while the account has ANY in-flight hold (REQUESTED payout OR
@@ -66,9 +67,9 @@ never posted (house idiom; refund values are positive by validation).
 
 **Refundable balance.** `remaining(intent) = amount − Σ(refund values where
 status ∈ {REQUESTED, SETTLED})`. A request must satisfy `0 < value ≤
-remaining` AND `available ≥ value` — both checked under the two locks above,
-before any side effect (no refund row, no network refund, no journal row on
-rejection).
+remaining` AND `available ≥ value` — both checked under the account's ledger
+row lock, before any side effect (no refund row, no network refund, no
+journal row on rejection).
 
 ## Lifecycle
 
