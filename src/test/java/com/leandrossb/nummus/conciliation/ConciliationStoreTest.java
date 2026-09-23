@@ -7,6 +7,7 @@ import com.leandrossb.nummus.conciliation.application.MatchedLine;
 import com.leandrossb.nummus.conciliation.application.SettlementReport;
 import com.leandrossb.nummus.conciliation.application.SettlementReportSource;
 import com.leandrossb.nummus.conciliation.application.SettlementReportSummary;
+import com.leandrossb.nummus.conciliation.application.SubjectType;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
@@ -34,10 +35,10 @@ class ConciliationStoreTest extends IntegrationTestBase {
     var summary = new SettlementReportSummary(UUID.randomUUID(),
         Instant.now().minusSeconds(60), Instant.now(), "OPEN", 1, 0, 0, 1, Instant.now());
     var lines = List.of(
-        new MatchedLine("EXTERNAL", charge, Money.ofBrl("10.0000"), intent,
+        new MatchedLine("EXTERNAL", SubjectType.CHARGE, charge, Money.ofBrl("10.0000"), intent,
             Money.ofBrl("10.0000"), "MATCHED"),
-        new MatchedLine("INTERNAL", UUID.randomUUID(), null, UUID.randomUUID(),
-            Money.ofBrl("3.0000"), "MISSING_EXTERNAL"));
+        new MatchedLine("INTERNAL", SubjectType.PAYOUT_TRANSFER, UUID.randomUUID(), null,
+            UUID.randomUUID(), Money.ofBrl("3.0000"), "MISSING_EXTERNAL"));
 
     store.insert(summary, lines);
 
@@ -49,6 +50,7 @@ class ConciliationStoreTest extends IntegrationTestBase {
         .filter(s -> s.publicId().equals(summary.publicId())).count());
     var readLines = store.findLines(summary.publicId());
     assertEquals(2, readLines.size());
+    assertEquals(SubjectType.CHARGE, readLines.get(0).subjectType());
   }
 
   @Test
@@ -59,6 +61,6 @@ class ConciliationStoreTest extends IntegrationTestBase {
     var report = source.fetch(Instant.now().minusSeconds(60), Instant.now().plusSeconds(60));
 
     assertEquals(1, report.lines().stream()
-        .filter(l -> l.chargePublicId().equals(paid.publicId())).count());
+        .filter(l -> l.subjectPublicId().equals(paid.publicId())).count());
   }
 }
