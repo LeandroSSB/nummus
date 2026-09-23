@@ -7,6 +7,7 @@ import com.leandrossb.nummus.ledger.domain.PostedTransaction;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
 import com.leandrossb.nummus.ledger.domain.StatementLine;
 import com.leandrossb.nummus.ledger.domain.Direction;
+import com.leandrossb.nummus.ledger.domain.UnknownAccountException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Comparator;
@@ -32,6 +33,12 @@ public class InMemoryLedgerRepository implements LedgerRepository {
   @Override
   public Optional<LedgerAccount> findAccount(UUID publicId) {
     return Optional.ofNullable(accounts.get(publicId));
+  }
+
+  @Override
+  public void lockAccount(UUID publicId) {
+    // In-memory fake: no rows to lock, but the unknown-account contract holds.
+    findAccount(publicId).orElseThrow(() -> new UnknownAccountException(publicId));
   }
 
   @Override

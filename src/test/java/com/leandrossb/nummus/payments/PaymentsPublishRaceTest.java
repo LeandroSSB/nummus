@@ -40,7 +40,7 @@ class PaymentsPublishRaceTest {
 
   private final Ledger ledger = new LedgerServiceImpl(new InMemoryLedgerRepository());
   private final AccountsService accounts =
-      new AccountsServiceImpl(ledger, new InMemoryAccountsRepository());
+      new AccountsServiceImpl(ledger, new InMemoryAccountsRepository(), id -> false);
   private final FakePaymentNetwork network = new FakePaymentNetwork();
   private final RecordingIntentEvents intentEvents = new RecordingIntentEvents();
   private final MerchantsService merchants = new FakeMerchantsService();

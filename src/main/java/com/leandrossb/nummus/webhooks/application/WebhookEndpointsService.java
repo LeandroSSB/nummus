@@ -3,6 +3,7 @@ package com.leandrossb.nummus.webhooks.application;
 import com.leandrossb.nummus.audit.application.OperatorAudit;
 import com.leandrossb.nummus.conciliation.application.ConciliationEventTypes;
 import com.leandrossb.nummus.payments.application.IntentEventTypes;
+import com.leandrossb.nummus.payments.application.PayoutEventTypes;
 import com.leandrossb.nummus.webhooks.domain.EndpointStatus;
 import com.leandrossb.nummus.webhooks.domain.UnknownWebhookEndpointException;
 import com.leandrossb.nummus.webhooks.domain.WebhookEndpoint;
@@ -14,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +31,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class WebhookEndpointsService {
 
+  /** The merchant catalog: every lifecycle this audience can receive — the
+   *  intent (money-in) and payout (money-out) event types together. */
+  private static final Set<String> MERCHANT_EVENT_TYPES = Stream.concat(
+      IntentEventTypes.ALL.stream(), PayoutEventTypes.ALL.stream())
+      .collect(Collectors.toUnmodifiableSet());
+
   private final WebhookStore store;
   private final OperatorAudit audit;
   private final SecureRandom random = new SecureRandom();
@@ -38,7 +47,7 @@ public class WebhookEndpointsService {
   }
 
   public WebhookEndpoint register(UUID merchantPublicId, URI url, List<String> eventTypes) {
-    return doRegister(merchantPublicId, url, eventTypes, IntentEventTypes.ALL);
+    return doRegister(merchantPublicId, url, eventTypes, MERCHANT_EVENT_TYPES);
   }
 
   /** Operator namespace (merchant_public_id NULL): conciliation alerts. The

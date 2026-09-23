@@ -4,6 +4,7 @@ import com.leandrossb.nummus.accounts.domain.AccountStatus;
 import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
 import com.leandrossb.nummus.accounts.domain.PaymentAccount;
 import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
+import com.leandrossb.nummus.accounts.domain.PayoutsInFlightException;
 import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
 import com.leandrossb.nummus.ledger.application.Ledger;
 import com.leandrossb.nummus.ledger.domain.AccountStatement;
@@ -27,10 +28,13 @@ public class AccountsServiceImpl implements AccountsService {
 
   private final Ledger ledger;
   private final AccountsRepository repository;
+  private final OutstandingPayouts outstandingPayouts;
 
-  public AccountsServiceImpl(Ledger ledger, AccountsRepository repository) {
+  public AccountsServiceImpl(Ledger ledger, AccountsRepository repository,
+      OutstandingPayouts outstandingPayouts) {
     this.ledger = ledger;
     this.repository = repository;
+    this.outstandingPayouts = outstandingPayouts;
   }
 
   @Override
@@ -108,6 +112,17 @@ public class AccountsServiceImpl implements AccountsService {
       throw new PaymentAccountNotActiveException(publicId, current.status());
     }
     ledgerTransition.accept(current.ledgerAccountPublicId());
+    // Guard ordering: the ledger status UPDATE above row-locks the ledger
+    // account — the same row a payout request FOR UPDATEs before inserting —
+    // so a concurrent create either committed first (its REQUESTED row is
+    // visible here) or is still waiting on the lock and will fail its
+    // reservation posting against the non-ACTIVE account. Checking in-flight
+    // payouts only after the update therefore closes the check-then-act race;
+    // throwing rolls the status change back with this transaction.
+    // Unfreeze (target ACTIVE) is exempt: restoring recoverability is its job.
+    if (target != AccountStatus.ACTIVE && outstandingPayouts.anyRequested(publicId)) {
+      throw new PayoutsInFlightException(publicId);
+    }
     repository.updateStatus(merchantPublicId, publicId, target, closedAt);
     return get(merchantPublicId, publicId);
   }

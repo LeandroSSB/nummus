@@ -33,7 +33,7 @@ class PaymentsServiceImplTest {
   private final InMemoryLedgerRepository ledgerRepository = new InMemoryLedgerRepository();
   private final Ledger ledger = new LedgerServiceImpl(ledgerRepository);
   private final AccountsService accounts =
-      new AccountsServiceImpl(ledger, new InMemoryAccountsRepository());
+      new AccountsServiceImpl(ledger, new InMemoryAccountsRepository(), id -> false);
   private final FakePaymentNetwork network = new FakePaymentNetwork();
   private final InMemoryPaymentsRepository repo = new InMemoryPaymentsRepository();
   private final MerchantsService merchants = new FakeMerchantsService();

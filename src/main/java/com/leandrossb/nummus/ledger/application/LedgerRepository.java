@@ -23,6 +23,13 @@ public interface LedgerRepository {
 
   Optional<LedgerAccount> findAccount(UUID publicId);
 
+  /**
+   * Row-locks the account until the surrounding transaction commits. Throws
+   * {@link com.leandrossb.nummus.ledger.domain.UnknownAccountException} when the
+   * account does not exist.
+   */
+  void lockAccount(UUID publicId);
+
   /** @return false when the account does not exist. */
   boolean updateAccountStatus(UUID publicId, AccountStatus status, Instant closedAt);
 

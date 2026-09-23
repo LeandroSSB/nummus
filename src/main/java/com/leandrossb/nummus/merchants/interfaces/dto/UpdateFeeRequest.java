@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.merchants.interfaces.dto;
 
+import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -16,5 +17,12 @@ public record UpdateFeeRequest(
     @Digits(integer = 0, fraction = 6) BigDecimal rate,
     @NotNull
     @DecimalMin(value = "0", message = "fixedAmount must be >= 0")
-    @Digits(integer = 15, fraction = 4) BigDecimal fixedAmount) {
+    @Digits(integer = 15, fraction = 4) BigDecimal fixedAmount,
+    @Digits(integer = 15, fraction = 4) BigDecimal payoutFixedAmount) {
+
+  /** The asserted schedule; an absent payout component means zero. */
+  public FeeSchedule feeSchedule() {
+    return new FeeSchedule(rate, fixedAmount,
+        payoutFixedAmount == null ? BigDecimal.ZERO : payoutFixedAmount);
+  }
 }

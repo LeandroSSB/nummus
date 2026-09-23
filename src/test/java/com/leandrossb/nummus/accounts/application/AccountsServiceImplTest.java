@@ -28,7 +28,7 @@ class AccountsServiceImplTest {
 
   private final Ledger ledger = new LedgerServiceImpl(new InMemoryLedgerRepository());
   private final AccountsService accounts =
-      new AccountsServiceImpl(ledger, new InMemoryAccountsRepository());
+      new AccountsServiceImpl(ledger, new InMemoryAccountsRepository(), id -> false);
 
   @Test
   void openCreatesActiveAccountWithBackingLiabilityLedgerAccount() {

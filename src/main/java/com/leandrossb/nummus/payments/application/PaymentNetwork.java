@@ -13,4 +13,8 @@ public interface PaymentNetwork {
   NetworkCharge createCharge(Money amount);
 
   NetworkCharge getCharge(UUID chargePublicId);
+
+  NetworkTransfer createPayoutTransfer(Money amount, String destinationBankKey);
+
+  NetworkTransfer getPayoutTransfer(UUID transferPublicId);
 }

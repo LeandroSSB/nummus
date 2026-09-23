@@ -18,20 +18,20 @@ class FeeCalculatorTest {
   @Test
   void roundsHalfUpToCentavos() {
     assertEquals(0, FeeCalculator.compute(brl("10.00"),
-        new FeeSchedule(new BigDecimal("0.0099"), BigDecimal.ZERO)).fee()
+        new FeeSchedule(new BigDecimal("0.0099"), BigDecimal.ZERO, BigDecimal.ZERO)).fee()
         .compareTo(brl("0.10")));   // 0.0990 -> 0.10
     assertEquals(0, FeeCalculator.compute(brl("10.00"),
-        new FeeSchedule(new BigDecimal("0.0094"), BigDecimal.ZERO)).fee()
+        new FeeSchedule(new BigDecimal("0.0094"), BigDecimal.ZERO, BigDecimal.ZERO)).fee()
         .compareTo(brl("0.09")));   // 0.0940 -> 0.09
     assertEquals(0, FeeCalculator.compute(brl("10.00"),
-        new FeeSchedule(new BigDecimal("0.0095"), BigDecimal.ZERO)).fee()
+        new FeeSchedule(new BigDecimal("0.0095"), BigDecimal.ZERO, BigDecimal.ZERO)).fee()
         .compareTo(brl("0.10")));   // 0.0950 -> 0.10
   }
 
   @Test
   void composesPercentAndFixed() {
     var breakdown = FeeCalculator.compute(brl("100.00"),
-        new FeeSchedule(new BigDecimal("0.0099"), new BigDecimal("0.39")));
+        new FeeSchedule(new BigDecimal("0.0099"), new BigDecimal("0.39"), BigDecimal.ZERO));
     assertEquals(0, breakdown.fee().compareTo(brl("1.38")));    // 0.99 + 0.39
     assertEquals(0, breakdown.net().compareTo(brl("98.62")));
   }
@@ -46,7 +46,7 @@ class FeeCalculatorTest {
   @Test
   void feeIsCappedAtGross() {
     var breakdown = FeeCalculator.compute(brl("0.10"),
-        new FeeSchedule(BigDecimal.ZERO, new BigDecimal("0.39")));
+        new FeeSchedule(BigDecimal.ZERO, new BigDecimal("0.39"), BigDecimal.ZERO));
     assertEquals(0, breakdown.fee().compareTo(brl("0.10")));
     assertTrue(breakdown.net().isZero());
   }
@@ -54,7 +54,7 @@ class FeeCalculatorTest {
   @Test
   void highScaleGrossRoundsOnce() {
     var breakdown = FeeCalculator.compute(brl("9.9999"),
-        new FeeSchedule(new BigDecimal("0.0099"), BigDecimal.ZERO));
+        new FeeSchedule(new BigDecimal("0.0099"), BigDecimal.ZERO, BigDecimal.ZERO));
     assertEquals(0, breakdown.fee().compareTo(brl("0.10")));      // 0.09899901 -> 0.10
     assertEquals(0, breakdown.net().compareTo(brl("9.8999")));
   }

@@ -26,6 +26,14 @@ public interface Ledger {
   /** The ledger account by public id. */
   LedgerAccount getAccount(UUID publicId);
 
+  /**
+   * Row-locks the account's ledger row, holding the lock until the caller's
+   * transaction commits — the fence that serializes check-then-reserve flows
+   * (payout requests) against one account. Unknown accounts are rejected the
+   * same way {@link #getAccount(UUID)} rejects them.
+   */
+  void lockAccount(UUID publicId);
+
   /** Appends a balanced journal transaction atomically. */
   PostedTransaction post(PostTransactionCommand cmd);
 

@@ -2,6 +2,7 @@ package com.leandrossb.nummus.psp_simulator.interfaces;
 
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.psp_simulator.interfaces.dto.ChargeResponse;
+import com.leandrossb.nummus.psp_simulator.interfaces.dto.TransferResponse;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -9,9 +10,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** The external world's surface: create charges indirectly via PaymentNetwork, act as the payer here. */
+/**
+ * The external world's surface: create charges and transfers indirectly via
+ * PaymentNetwork, act as the payer or the destination bank here.
+ */
 @RestController
-@RequestMapping("/simulator/charges")
+@RequestMapping("/simulator")
 class SimulatorController {
 
   private final SimulatorService simulator;
@@ -20,18 +24,33 @@ class SimulatorController {
     this.simulator = simulator;
   }
 
-  @GetMapping("/{id}")
+  @GetMapping("/charges/{id}")
   ChargeResponse get(@PathVariable UUID id) {
     return ChargeResponse.from(simulator.get(id));
   }
 
-  @PostMapping("/{id}/pay")
+  @PostMapping("/charges/{id}/pay")
   ChargeResponse pay(@PathVariable UUID id) {
     return ChargeResponse.from(simulator.pay(id));
   }
 
-  @PostMapping("/{id}/fail")
+  @PostMapping("/charges/{id}/fail")
   ChargeResponse fail(@PathVariable UUID id) {
     return ChargeResponse.from(simulator.fail(id));
+  }
+
+  @GetMapping("/transfers/{id}")
+  TransferResponse getTransfer(@PathVariable UUID id) {
+    return TransferResponse.from(simulator.getTransfer(id));
+  }
+
+  @PostMapping("/transfers/{id}/pay")
+  TransferResponse payTransfer(@PathVariable UUID id) {
+    return TransferResponse.from(simulator.payTransfer(id));
+  }
+
+  @PostMapping("/transfers/{id}/fail")
+  TransferResponse failTransfer(@PathVariable UUID id) {
+    return TransferResponse.from(simulator.failTransfer(id));
   }
 }

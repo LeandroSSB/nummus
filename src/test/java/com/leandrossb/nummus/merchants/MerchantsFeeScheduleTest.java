@@ -28,7 +28,7 @@ class MerchantsFeeScheduleTest extends IntegrationTestBase {
     // Creation is audited against the acting operator key: mint a probe.
     UUID actingKey = operatorKeys.create("fee-create-probe", null, null).key().publicId();
     var merchant = merchants.create("fee merchant",
-        new FeeSchedule(new BigDecimal("0.0099"), new BigDecimal("0.39")), actingKey);
+        new FeeSchedule(new BigDecimal("0.0099"), new BigDecimal("0.39"), BigDecimal.ZERO), actingKey);
     var stored = merchants.findFeeSchedule(merchant.publicId()).orElseThrow();
     assertEquals(0, stored.rate().compareTo(new BigDecimal("0.0099")));
     assertEquals(0, stored.fixedAmount().compareTo(new BigDecimal("0.39")));
@@ -45,7 +45,7 @@ class MerchantsFeeScheduleTest extends IntegrationTestBase {
     UUID actingKey = operatorKeys.create("fee-update-probe", null, null).key().publicId();
     var merchant = merchants.create("updatee", FeeSchedule.ZERO, actingKey);
     assertTrue(merchants.updateFeeSchedule(merchant.publicId(),
-        new FeeSchedule(new BigDecimal("0.015"), BigDecimal.ZERO), actingKey));
+        new FeeSchedule(new BigDecimal("0.015"), BigDecimal.ZERO, BigDecimal.ZERO), actingKey));
     assertEquals(0, merchants.findFeeSchedule(merchant.publicId()).orElseThrow()
         .rate().compareTo(new BigDecimal("0.015")));
     assertFalse(merchants.updateFeeSchedule(UUID.randomUUID(), FeeSchedule.ZERO, actingKey));
@@ -54,12 +54,12 @@ class MerchantsFeeScheduleTest extends IntegrationTestBase {
   @Test
   void invalidSchedulesAreRejectedAtConstruction() {
     assertThrows(InvalidFeeScheduleException.class,
-        () -> new FeeSchedule(new BigDecimal("-0.1"), BigDecimal.ZERO));
+        () -> new FeeSchedule(new BigDecimal("-0.1"), BigDecimal.ZERO, BigDecimal.ZERO));
     assertThrows(InvalidFeeScheduleException.class,
-        () -> new FeeSchedule(BigDecimal.ONE, BigDecimal.ZERO));
+        () -> new FeeSchedule(BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO));
     assertThrows(InvalidFeeScheduleException.class,
-        () -> new FeeSchedule(BigDecimal.ZERO, new BigDecimal("-0.01")));
+        () -> new FeeSchedule(BigDecimal.ZERO, new BigDecimal("-0.01"), BigDecimal.ZERO));
     assertThrows(NullPointerException.class,
-        () -> new FeeSchedule(null, BigDecimal.ZERO));
+        () -> new FeeSchedule(null, BigDecimal.ZERO, BigDecimal.ZERO));
   }
 }
