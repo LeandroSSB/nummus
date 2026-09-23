@@ -83,11 +83,12 @@ class SimulatorRestApiTest extends IntegrationTestBase {
     mockMvc.perform(get("/simulator/settlement-report")
             .param("from", from.toString()).param("to", to.toString()))
         .andExpect(status().isOk())
-        .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')].status", pending.publicId()))
+        .andExpect(jsonPath(String.format("$[?(@.subjectId == '%s')].status", pending.publicId()))
             .doesNotExist())
-        .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')]", failed.publicId()))
+        .andExpect(jsonPath(String.format("$[?(@.subjectId == '%s')]", failed.publicId()))
             .doesNotExist())
-        .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')].amount", paid.publicId()))
+        .andExpect(jsonPath(String.format(
+            "$[?(@.kind == 'CHARGE' && @.subjectId == '%s')].amount", paid.publicId()))
             .value(8.0000));
 
     // Settled charges are timestamped now, so none of this test's charges can
@@ -97,11 +98,44 @@ class SimulatorRestApiTest extends IntegrationTestBase {
             .param("from", from.toString())
             .param("to", Instant.now().minusSeconds(30).toString()))
         .andExpect(status().isOk())
-        .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')]", paid.publicId()))
+        .andExpect(jsonPath(String.format("$[?(@.subjectId == '%s')]", paid.publicId()))
             .doesNotExist())
-        .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')]", pending.publicId()))
+        .andExpect(jsonPath(String.format("$[?(@.subjectId == '%s')]", pending.publicId()))
             .doesNotExist())
-        .andExpect(jsonPath(String.format("$[?(@.chargeId == '%s')]", failed.publicId()))
+        .andExpect(jsonPath(String.format("$[?(@.subjectId == '%s')]", failed.publicId()))
             .doesNotExist());
+  }
+
+  @Test
+  void settlementReportCoversExecutedMoneyOut() throws Exception {
+    var transfer = simulator.createTransfer(Money.ofBrl("9.0000"), "bank-key-1");
+    simulator.payTransfer(transfer.publicId());
+    var pending = simulator.createTransfer(Money.ofBrl("8.0000"), "bank-key-1");
+    var charge = simulator.create(Money.ofBrl("50.0000"));
+    var refund = simulator.createRefund(charge.publicId(), Money.ofBrl("5.0000"));
+    simulator.payRefund(refund.publicId());
+
+    mockMvc.perform(get("/simulator/settlement-report")
+            .param("from", Instant.now().minusSeconds(60).toString())
+            .param("to", Instant.now().plusSeconds(60).toString()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath(String.format(
+            "$[?(@.kind == 'PAYOUT_TRANSFER' && @.subjectId == '%s')].amount", transfer.publicId()))
+            .value(9.0000))
+        .andExpect(jsonPath(String.format("$[?(@.kind == 'PAYOUT_TRANSFER' && @.subjectId == '%s')]",
+            pending.publicId())).doesNotExist())
+        .andExpect(jsonPath(String.format(
+            "$[?(@.kind == 'CHARGE_REFUND' && @.subjectId == '%s')].amount", refund.publicId()))
+            .value(5.0000));
+
+    // This class has no class-level sweep: push this test's executed money-out
+    // rows outside every later suite's now-window — the same DB-side rewrite
+    // the conciliation sweeps use. The pending rows never enter any report.
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      st.executeUpdate("UPDATE psp_simulator.payout_transfer SET updated_at = now() - interval '2 hours'"
+          + " WHERE public_id = '" + transfer.publicId() + "'");
+      st.executeUpdate("UPDATE psp_simulator.charge_refund SET updated_at = now() - interval '2 hours'"
+          + " WHERE public_id = '" + refund.publicId() + "'");
+    }
   }
 }

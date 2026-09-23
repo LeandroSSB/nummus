@@ -36,9 +36,9 @@ class ConciliationRolesTest extends IntegrationTestBase {
         rs.next();
         rowId = rs.getLong(1);
       }
-      st.executeUpdate("INSERT INTO conciliation.report_line (report_id, origin, charge_public_id,"
-          + " reported_amount, match_status) VALUES (" + rowId + ", 'INTERNAL', '"
-          + UUID.randomUUID() + "', null, 'MISSING_EXTERNAL')");
+      st.executeUpdate("INSERT INTO conciliation.report_line (report_id, origin, subject_type,"
+          + " subject_public_id, reported_amount, match_status) VALUES (" + rowId + ", 'INTERNAL',"
+          + " 'CHARGE', '" + UUID.randomUUID() + "', null, 'MISSING_EXTERNAL')");
       try (ResultSet rs = st.executeQuery(
           "SELECT count(*) FROM conciliation.report_line WHERE report_id = " + rowId)) {
         rs.next();

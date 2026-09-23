@@ -24,11 +24,11 @@ class SimulatorReportController {
     return lines.stream().map(NetworkSettlementResponse::from).toList();
   }
 
-  record NetworkSettlementResponse(java.util.UUID chargeId, java.math.BigDecimal amount,
-      String currency, Instant settledAt) {
+  record NetworkSettlementResponse(String kind, java.util.UUID subjectId,
+      java.math.BigDecimal amount, String currency, Instant settledAt) {
 
     static NetworkSettlementResponse from(NetworkSettlement settlement) {
-      return new NetworkSettlementResponse(settlement.chargePublicId(),
+      return new NetworkSettlementResponse(settlement.kind(), settlement.subjectPublicId(),
           settlement.amount().amount(), settlement.amount().currency().getCurrencyCode(),
           settlement.settledAt());
     }

@@ -16,6 +16,7 @@ import com.leandrossb.nummus.psp_simulator.domain.UnknownChargeException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownRefundException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownTransferException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
 import java.util.Objects;
@@ -71,9 +72,16 @@ public class SimulatorServiceImpl implements SimulatorService {
   public List<NetworkSettlement> settlementReport(Instant from, Instant to) {
     Objects.requireNonNull(from, "from must not be null");
     Objects.requireNonNull(to, "to must not be null");
-    return chargeStore.findSucceededBetween(from, to).stream()
-        .map(charge -> new NetworkSettlement(charge.publicId(), charge.amount(), charge.updatedAt()))
-        .toList();
+    var lines = new ArrayList<NetworkSettlement>();
+    chargeStore.findSucceededBetween(from, to).forEach(charge -> lines.add(
+        new NetworkSettlement("CHARGE", charge.publicId(), charge.amount(), charge.updatedAt())));
+    transferStore.findSucceededBetween(from, to).forEach(transfer -> lines.add(
+        new NetworkSettlement("PAYOUT_TRANSFER", transfer.publicId(), transfer.amount(),
+            transfer.updatedAt())));
+    refundStore.findSucceededBetween(from, to).forEach(refund -> lines.add(
+        new NetworkSettlement("CHARGE_REFUND", refund.publicId(), refund.amount(),
+            refund.updatedAt())));
+    return List.copyOf(lines);
   }
 
   private NetworkCharge transition(UUID publicId, ChargeStatus target) {

@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Currency;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -62,6 +63,20 @@ public class JdbcClientTransferStore implements TransferStore {
         .param("publicId", publicId)
         .update();
     return updated == 1;
+  }
+
+  @Override
+  public List<SimulatedTransfer> findSucceededBetween(Instant from, Instant to) {
+    return jdbc.sql("""
+        select public_id, amount, destination_bank_key, status, created_at, updated_at
+        from psp_simulator.payout_transfer
+        where status = 'SUCCEEDED' and updated_at >= :from and updated_at < :to
+        order by updated_at, id
+        """)
+        .param("from", toOffsetDateTime(from))
+        .param("to", toOffsetDateTime(to))
+        .query((rs, i) -> mapTransfer(rs))
+        .list();
   }
 
   private SimulatedTransfer mapTransfer(ResultSet rs) throws SQLException {

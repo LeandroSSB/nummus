@@ -4,6 +4,7 @@ import com.leandrossb.nummus.ledger.domain.Money;
 import java.time.Instant;
 import java.util.UUID;
 
-/** What the network says it settled: a SUCCEEDED charge in a window. */
-public record NetworkSettlement(UUID chargePublicId, Money amount, Instant settledAt) {
+/** What the network says it settled: a SUCCEEDED instruction in a window —
+ *  kind is CHARGE, PAYOUT_TRANSFER, or CHARGE_REFUND. */
+public record NetworkSettlement(String kind, UUID subjectPublicId, Money amount, Instant settledAt) {
 }

@@ -346,7 +346,7 @@ class ConciliationWorkerTest extends IntegrationTestBase {
   private int lineCountForCharge(UUID chargePublicId) throws Exception {
     try (Connection c = adminConnection(); Statement st = c.createStatement();
         ResultSet rs = st.executeQuery("select count(*) from conciliation.report_line "
-            + "where charge_public_id = '" + chargePublicId + "'")) {
+            + "where subject_public_id = '" + chargePublicId + "'")) {
       rs.next();
       return rs.getInt(1);
     }

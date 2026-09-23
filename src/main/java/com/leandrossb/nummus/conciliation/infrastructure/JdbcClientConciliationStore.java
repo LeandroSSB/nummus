@@ -3,6 +3,7 @@ package com.leandrossb.nummus.conciliation.infrastructure;
 import com.leandrossb.nummus.conciliation.application.ConciliationStore;
 import com.leandrossb.nummus.conciliation.application.MatchedLine;
 import com.leandrossb.nummus.conciliation.application.SettlementReportSummary;
+import com.leandrossb.nummus.conciliation.application.SubjectType;
 import com.leandrossb.nummus.ledger.domain.Money;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -54,15 +55,17 @@ public class JdbcClientConciliationStore implements ConciliationStore {
     for (var line : lines) {
       jdbc.sql("""
           insert into conciliation.report_line
-            (report_id, origin, charge_public_id, reported_amount,
-             internal_intent_public_id, internal_amount, match_status)
-          values (:reportId, :origin, :chargeId, :reported, :intentId, :internal, :status)
+            (report_id, origin, subject_type, subject_public_id, reported_amount,
+             internal_public_id, internal_amount, match_status)
+          values (:reportId, :origin, :subjectType, :subjectId, :reported, :internalId,
+                  :internal, :status)
           """)
           .param("reportId", reportRowId)
           .param("origin", line.origin())
-          .param("chargeId", line.chargePublicId())
+          .param("subjectType", line.subjectType().name())
+          .param("subjectId", line.subjectPublicId())
           .param("reported", line.reportedAmount() == null ? null : line.reportedAmount().amount())
-          .param("intentId", line.internalIntentPublicId())
+          .param("internalId", line.internalPublicId())
           .param("internal", line.internalAmount() == null ? null : line.internalAmount().amount())
           .param("status", line.matchStatus())
           .update();
@@ -94,19 +97,20 @@ public class JdbcClientConciliationStore implements ConciliationStore {
   @Override
   public List<MatchedLine> findLines(UUID reportPublicId) {
     return jdbc.sql("""
-        select l.origin, l.charge_public_id, l.reported_amount,
-               l.internal_intent_public_id, l.internal_amount, l.match_status
+        select l.origin, l.subject_type, l.subject_public_id, l.reported_amount,
+               l.internal_public_id, l.internal_amount, l.match_status
         from conciliation.report_line l
         join conciliation.settlement_report r on r.id = l.report_id
         where r.public_id = :reportPublicId
         order by l.id
         """)
         .param("reportPublicId", reportPublicId)
-        .query((rs, i) -> new MatchedLine(rs.getString(1), rs.getObject(2, UUID.class),
-            rs.getObject(3) == null ? null : Money.of(rs.getBigDecimal(3), BRL),
-            rs.getObject(4, UUID.class),
-            rs.getObject(5) == null ? null : Money.of(rs.getBigDecimal(5), BRL),
-            rs.getString(6)))
+        .query((rs, i) -> new MatchedLine(rs.getString(1), SubjectType.valueOf(rs.getString(2)),
+            rs.getObject(3, UUID.class),
+            rs.getObject(4) == null ? null : Money.of(rs.getBigDecimal(4), BRL),
+            rs.getObject(5, UUID.class),
+            rs.getObject(6) == null ? null : Money.of(rs.getBigDecimal(6), BRL),
+            rs.getString(7)))
         .list();
   }
 

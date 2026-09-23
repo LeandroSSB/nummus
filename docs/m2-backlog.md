@@ -532,3 +532,23 @@ the network-side remainders. Known bounds, deliberate:
   pre-expiry observation after a resolver rollback or an operator cancel.
 - **Charges never cancel** — money-in has no expiry abandonment.
 
+## From the M19 design
+
+M19 closed the M16/M17 conciliation bound: settlement reports cover every
+instruction the network executed — charges, payout transfers, and charge
+refunds — over the same window, marker, and digest. Report lines key by
+subject (kind + network instruction id); the matcher, schema, and REST
+shapes generalized from the charge-shaped key. Known bounds, deliberate:
+
+- **Strict mirror semantics** — internal SETTLED vs network SUCCEEDED only.
+  An executed-but-never-read money-out instruction surfaces as
+  MISSING_INTERNAL with a frozen verdict (the M6 stance for charges,
+  sharpened: reservation legs keep the money accounted, so this flags
+  reconciliation debt, not lost money; reading the resource settles it).
+- **No per-kind tally split** — digest and summary stay aggregate counts.
+- **No retroactive re-match** — pre-M19 reports keep their verdicts under
+  the backfilled shape (the M6 ingest-only bound carries).
+- **Clock-domain bound carries** — settled_at (JVM) vs updated_at (DB) at
+  window edges for the two new kinds; the 30s lag absorbs it, and a real
+  PSP adapter still owes the settlement-timestamp contract.
+

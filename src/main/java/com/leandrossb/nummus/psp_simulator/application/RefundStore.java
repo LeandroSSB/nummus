@@ -3,6 +3,8 @@ package com.leandrossb.nummus.psp_simulator.application;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.application.ChargeStatus;
 import com.leandrossb.nummus.psp_simulator.domain.SimulatedRefund;
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,4 +21,7 @@ public interface RefundStore {
   /** Sum of refund amounts still holding or moving money on the charge — PENDING and
    * SUCCEEDED rows; FAILED refunds are released and never counted. Zero when none. */
   Money totalRefunded(UUID chargePublicId);
+
+  /** SUCCEEDED refunds with updated_at in [from, to), ordered by updated_at then id. */
+  List<SimulatedRefund> findSucceededBetween(Instant from, Instant to);
 }

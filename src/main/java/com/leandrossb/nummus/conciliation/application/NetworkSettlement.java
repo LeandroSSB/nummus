@@ -5,5 +5,6 @@ import java.time.Instant;
 import java.util.UUID;
 
 /** One line of the network's settlement report, in conciliation's vocabulary. */
-public record NetworkSettlement(UUID chargePublicId, Money amount, Instant settledAt) {
+public record NetworkSettlement(SubjectType subjectType, UUID subjectPublicId, Money amount,
+    Instant settledAt) {
 }

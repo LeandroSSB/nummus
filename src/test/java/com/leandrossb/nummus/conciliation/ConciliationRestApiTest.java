@@ -12,7 +12,13 @@ import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.application.PaymentsService;
+import com.leandrossb.nummus.payments.application.PayoutsService;
+import com.leandrossb.nummus.payments.application.RefundsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
+import com.leandrossb.nummus.payments.domain.CreatePayoutCommand;
+import com.leandrossb.nummus.payments.domain.CreateRefundCommand;
+import com.leandrossb.nummus.payments.domain.Payout;
+import com.leandrossb.nummus.payments.domain.Refund;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
@@ -22,13 +28,17 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+@TestMethodOrder(OrderAnnotation.class)
 @AutoConfigureMockMvc
 class ConciliationRestApiTest extends IntegrationTestBase {
 
@@ -39,6 +49,14 @@ class ConciliationRestApiTest extends IntegrationTestBase {
 
   private static final List<UUID> networkCharges = new ArrayList<>();
 
+  private static final List<UUID> settledPayouts = new ArrayList<>();
+
+  private static final List<UUID> paidTransfers = new ArrayList<>();
+
+  private static final List<UUID> settledRefunds = new ArrayList<>();
+
+  private static final List<UUID> paidNetworkRefunds = new ArrayList<>();
+
   @Autowired
   private MockMvc mockMvc;
 
@@ -47,6 +65,12 @@ class ConciliationRestApiTest extends IntegrationTestBase {
 
   @Autowired
   private PaymentsService payments;
+
+  @Autowired
+  private PayoutsService payouts;
+
+  @Autowired
+  private RefundsService refunds;
 
   @Autowired
   private SimulatorService simulator;
@@ -75,7 +99,87 @@ class ConciliationRestApiTest extends IntegrationTestBase {
     return result.getResponse().getContentAsString();
   }
 
+  /** Funds a fresh account with a settled 1000 charge, pays `amount` out, and
+   *  reads the payout to settlement. Registers every fixture for the sweep. */
+  private Payout settlePayout(String amount) {
+    var account = accountsService.open(SeedMerchant.PUBLIC_ID,
+        new OpenAccountCommand("Concile Payout Merchant"));
+    var intent = payments.create(SeedMerchant.PUBLIC_ID,
+        new CreateIntentCommand(account.publicId(), Money.ofBrl("1000.0000"), null));
+    settledIntents.add(intent.publicId());
+    networkCharges.add(intent.chargePublicId());
+    simulator.pay(intent.chargePublicId());
+    payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
+    var payout = payouts.create(SeedMerchant.PUBLIC_ID,
+        new CreatePayoutCommand(account.publicId(), Money.ofBrl(amount), "bank-key-1", null));
+    simulator.payTransfer(payout.transferPublicId());
+    paidTransfers.add(payout.transferPublicId());
+    var settled = payouts.get(SeedMerchant.PUBLIC_ID, payout.publicId());
+    settledPayouts.add(settled.publicId());
+    return settled;
+  }
+
+  /** The lazy-noise shape: the transfer executes, nobody ever reads the
+   *  payout, so the books never post the settlement. */
+  private Payout settlePayoutUnread(String amount) {
+    var account = accountsService.open(SeedMerchant.PUBLIC_ID,
+        new OpenAccountCommand("Unread Payout Merchant"));
+    var intent = payments.create(SeedMerchant.PUBLIC_ID,
+        new CreateIntentCommand(account.publicId(), Money.ofBrl("1000.0000"), null));
+    settledIntents.add(intent.publicId());
+    networkCharges.add(intent.chargePublicId());
+    simulator.pay(intent.chargePublicId());
+    payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
+    var payout = payouts.create(SeedMerchant.PUBLIC_ID,
+        new CreatePayoutCommand(account.publicId(), Money.ofBrl(amount), "bank-key-1", null));
+    simulator.payTransfer(payout.transferPublicId());
+    paidTransfers.add(payout.transferPublicId());
+    return payout;
+  }
+
+  /** Settles a fresh 50 intent, refunds `amount`, and reads the refund to
+   *  settlement. Registers every fixture for the sweep. */
+  private Refund settleRefund(String amount) {
+    var account = accountsService.open(SeedMerchant.PUBLIC_ID,
+        new OpenAccountCommand("Concile Refund Merchant"));
+    var intent = payments.create(SeedMerchant.PUBLIC_ID,
+        new CreateIntentCommand(account.publicId(), Money.ofBrl("50.0000"), null));
+    settledIntents.add(intent.publicId());
+    networkCharges.add(intent.chargePublicId());
+    simulator.pay(intent.chargePublicId());
+    payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
+    var refund = refunds.create(SeedMerchant.PUBLIC_ID, intent.publicId(),
+        new CreateRefundCommand(Money.ofBrl(amount), null));
+    simulator.payRefund(refund.networkRefundPublicId());
+    paidNetworkRefunds.add(refund.networkRefundPublicId());
+    var settled = refunds.get(SeedMerchant.PUBLIC_ID, refund.publicId());
+    settledRefunds.add(settled.publicId());
+    return settled;
+  }
+
+  /** The refund flavor of the lazy-noise shape: network side executed, the
+   *  refund row is never read. */
+  private Refund settleRefundUnread(String amount) {
+    var account = accountsService.open(SeedMerchant.PUBLIC_ID,
+        new OpenAccountCommand("Unread Refund Merchant"));
+    var intent = payments.create(SeedMerchant.PUBLIC_ID,
+        new CreateIntentCommand(account.publicId(), Money.ofBrl("50.0000"), null));
+    settledIntents.add(intent.publicId());
+    networkCharges.add(intent.chargePublicId());
+    simulator.pay(intent.chargePublicId());
+    payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
+    var refund = refunds.create(SeedMerchant.PUBLIC_ID, intent.publicId(),
+        new CreateRefundCommand(Money.ofBrl(amount), null));
+    simulator.payRefund(refund.networkRefundPublicId());
+    paidNetworkRefunds.add(refund.networkRefundPublicId());
+    return refund;
+  }
+
+  /** Runs first so its window sees only its own fixtures — the CONCILED and
+   *  matched-count pins are global over the window, and the divergence tests
+   *  leave their in-window fixtures behind until the class sweep. */
   @Test
+  @Order(1)
   void settledIntentsConcileAndReplayIdempotently() throws Exception {
     // Scoped window: everything this test settles lands after `start`, and the
     // 30s back-margin absorbs DB-lag on the simulator's `updated_at` (DB clock)
@@ -178,6 +282,90 @@ class ConciliationRestApiTest extends IntegrationTestBase {
   }
 
   @Test
+  void settledPayoutsAndRefundsConcileUnderTheirKinds() throws Exception {
+    Instant start = Instant.now();
+    var payout = settlePayout("30.0000");
+    var refund = settleRefund("10.0000");
+
+    String body = ingest(start.minusSeconds(30).toString(), Instant.now().plusSeconds(60).toString());
+    String reportId = com.jayway.jsonpath.JsonPath.read(body, "$.reportId");
+
+    mockMvc.perform(get("/v1/conciliation/reports/" + reportId).header("Authorization", operatorAuth()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath(
+            "$.lines[?(@.subjectType == 'PAYOUT_TRANSFER' && @.matchStatus == 'MATCHED' && @.subjectId == '"
+                + payout.transferPublicId() + "')]").isNotEmpty())
+        .andExpect(jsonPath(
+            "$.lines[?(@.subjectType == 'CHARGE_REFUND' && @.matchStatus == 'MATCHED' && @.subjectId == '"
+                + refund.networkRefundPublicId() + "')]").isNotEmpty());
+  }
+
+  @Test
+  void executedButUnreadPayoutIsMissingInternal() throws Exception {
+    Instant start = Instant.now();
+    var payout = settlePayoutUnread("25.0000"); // payTransfer, then NEVER payouts.get
+
+    String body = ingest(start.minusSeconds(30).toString(), Instant.now().plusSeconds(60).toString());
+    String reportId = com.jayway.jsonpath.JsonPath.read(body, "$.reportId");
+
+    mockMvc.perform(get("/v1/conciliation/reports/" + reportId).header("Authorization", operatorAuth()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath(
+            "$.lines[?(@.subjectType == 'PAYOUT_TRANSFER' && @.matchStatus == 'MISSING_INTERNAL' && @.subjectId == '"
+                + payout.transferPublicId() + "')]").isNotEmpty());
+  }
+
+  @Test
+  void payoutAmountMismatchAndMissingExternalSurface() throws Exception {
+    Instant start = Instant.now();
+    var tampered = settlePayout("20.0000");
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      st.executeUpdate("UPDATE psp_simulator.payout_transfer SET amount = amount + 1"
+          + " WHERE public_id = '" + tampered.transferPublicId() + "'");
+    }
+    var excluded = settlePayout("21.0000");
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      st.executeUpdate("UPDATE psp_simulator.payout_transfer SET updated_at = now() - interval '2 hours'"
+          + " WHERE public_id = '" + excluded.transferPublicId() + "'");
+    }
+
+    String body = ingest(start.minusSeconds(30).toString(), Instant.now().plusSeconds(60).toString());
+    String reportId = com.jayway.jsonpath.JsonPath.read(body, "$.reportId");
+
+    mockMvc.perform(get("/v1/conciliation/reports/" + reportId).header("Authorization", operatorAuth()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath(
+            "$.lines[?(@.subjectType == 'PAYOUT_TRANSFER' && @.matchStatus == 'AMOUNT_MISMATCH' && @.subjectId == '"
+                + tampered.transferPublicId() + "')]").isNotEmpty())
+        .andExpect(jsonPath(
+            "$.lines[?(@.subjectType == 'PAYOUT_TRANSFER' && @.matchStatus == 'MISSING_EXTERNAL' && @.subjectId == '"
+                + excluded.transferPublicId() + "')]").isNotEmpty());
+  }
+
+  @Test
+  void refundDivergencesMirrorPayouts() throws Exception {
+    Instant start = Instant.now();
+    var unread = settleRefundUnread("11.0000");   // payRefund, then NEVER refunds.get
+    var tampered = settleRefund("12.0000");
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      st.executeUpdate("UPDATE psp_simulator.charge_refund SET amount = amount + 1"
+          + " WHERE public_id = '" + tampered.networkRefundPublicId() + "'");
+    }
+
+    String body = ingest(start.minusSeconds(30).toString(), Instant.now().plusSeconds(60).toString());
+    String reportId = com.jayway.jsonpath.JsonPath.read(body, "$.reportId");
+
+    mockMvc.perform(get("/v1/conciliation/reports/" + reportId).header("Authorization", operatorAuth()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath(
+            "$.lines[?(@.subjectType == 'CHARGE_REFUND' && @.matchStatus == 'MISSING_INTERNAL' && @.subjectId == '"
+                + unread.networkRefundPublicId() + "')]").isNotEmpty())
+        .andExpect(jsonPath(
+            "$.lines[?(@.subjectType == 'CHARGE_REFUND' && @.matchStatus == 'AMOUNT_MISMATCH' && @.subjectId == '"
+                + tampered.networkRefundPublicId() + "')]").isNotEmpty());
+  }
+
+  @Test
   void unknownReportIs404AndInvertedWindowIs400() throws Exception {
     mockMvc.perform(get("/v1/conciliation/reports/" + UUID.randomUUID())
             .header("Authorization", operatorAuth()))
@@ -222,6 +410,22 @@ class ConciliationRestApiTest extends IntegrationTestBase {
       if (!networkCharges.isEmpty()) {
         st.executeUpdate("UPDATE psp_simulator.charge SET updated_at = now() - interval '2 hours'"
             + " WHERE public_id IN (" + quoted(networkCharges) + ")");
+      }
+      if (!settledPayouts.isEmpty()) {
+        st.executeUpdate("UPDATE payments.payout SET settled_at = now() - interval '2 hours'"
+            + " WHERE public_id IN (" + quoted(settledPayouts) + ")");
+      }
+      if (!paidTransfers.isEmpty()) {
+        st.executeUpdate("UPDATE psp_simulator.payout_transfer SET updated_at = now() - interval '2 hours'"
+            + " WHERE public_id IN (" + quoted(paidTransfers) + ")");
+      }
+      if (!settledRefunds.isEmpty()) {
+        st.executeUpdate("UPDATE payments.refund SET settled_at = now() - interval '2 hours'"
+            + " WHERE public_id IN (" + quoted(settledRefunds) + ")");
+      }
+      if (!paidNetworkRefunds.isEmpty()) {
+        st.executeUpdate("UPDATE psp_simulator.charge_refund SET updated_at = now() - interval '2 hours'"
+            + " WHERE public_id IN (" + quoted(paidNetworkRefunds) + ")");
       }
     }
   }

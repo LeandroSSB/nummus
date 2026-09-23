@@ -5,13 +5,14 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 public record ReportLineResponse(
-    String origin, UUID chargeId, BigDecimal reportedAmount,
-    UUID internalIntentId, BigDecimal internalAmount, String matchStatus) {
+    String origin, String subjectType, UUID subjectId, BigDecimal reportedAmount,
+    UUID internalId, BigDecimal internalAmount, String matchStatus) {
 
   public static ReportLineResponse from(MatchedLine line) {
-    return new ReportLineResponse(line.origin(), line.chargePublicId(),
+    return new ReportLineResponse(line.origin(), line.subjectType().name(),
+        line.subjectPublicId(),
         line.reportedAmount() == null ? null : line.reportedAmount().amount(),
-        line.internalIntentPublicId(),
+        line.internalPublicId(),
         line.internalAmount() == null ? null : line.internalAmount().amount(),
         line.matchStatus());
   }

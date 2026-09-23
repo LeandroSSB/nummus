@@ -146,6 +146,17 @@ public class RefundsServiceImpl implements RefundsService {
     };
   }
 
+  @Override
+  @Transactional
+  public List<MoneyOutSettlementView> listSettlements(Instant from, Instant to) {
+    Objects.requireNonNull(from, "from must not be null");
+    Objects.requireNonNull(to, "to must not be null");
+    return repository.findSettledBetween(from, to).stream()
+        .map(refund -> new MoneyOutSettlementView(refund.publicId(),
+            refund.networkRefundPublicId(), refund.amount(), refund.settledAt()))
+        .toList();
+  }
+
   /** Expires a REQUESTED refund: the hold timed out and comes home. Unlike
    *  intent expiry this MOVES MONEY: the return legs post first, then the
    *  guarded mark. A lost race throws so the transaction — posting included —
