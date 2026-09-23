@@ -2,6 +2,7 @@ package com.leandrossb.nummus.psp_simulator.interfaces;
 
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.psp_simulator.interfaces.dto.ChargeResponse;
+import com.leandrossb.nummus.psp_simulator.interfaces.dto.RefundResponse;
 import com.leandrossb.nummus.psp_simulator.interfaces.dto.TransferResponse;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -52,5 +53,20 @@ class SimulatorController {
   @PostMapping("/transfers/{id}/fail")
   TransferResponse failTransfer(@PathVariable UUID id) {
     return TransferResponse.from(simulator.failTransfer(id));
+  }
+
+  @GetMapping("/refunds/{id}")
+  RefundResponse getRefund(@PathVariable UUID id) {
+    return RefundResponse.from(simulator.getRefund(id));
+  }
+
+  @PostMapping("/refunds/{id}/pay")
+  RefundResponse payRefund(@PathVariable UUID id) {
+    return RefundResponse.from(simulator.payRefund(id));
+  }
+
+  @PostMapping("/refunds/{id}/fail")
+  RefundResponse failRefund(@PathVariable UUID id) {
+    return RefundResponse.from(simulator.failRefund(id));
   }
 }

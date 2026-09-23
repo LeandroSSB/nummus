@@ -2,6 +2,7 @@ package com.leandrossb.nummus.psp_simulator.infrastructure;
 
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.application.NetworkCharge;
+import com.leandrossb.nummus.payments.application.NetworkRefund;
 import com.leandrossb.nummus.payments.application.NetworkTransfer;
 import com.leandrossb.nummus.payments.application.PaymentNetwork;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
@@ -39,5 +40,15 @@ public class SimulatorPaymentNetwork implements PaymentNetwork {
   @Override
   public NetworkTransfer getPayoutTransfer(UUID transferPublicId) {
     return simulator.getTransfer(transferPublicId);
+  }
+
+  @Override
+  public NetworkRefund createChargeRefund(UUID chargePublicId, Money amount) {
+    return simulator.createRefund(chargePublicId, amount);
+  }
+
+  @Override
+  public NetworkRefund getChargeRefund(UUID refundPublicId) {
+    return simulator.getRefund(refundPublicId);
   }
 }

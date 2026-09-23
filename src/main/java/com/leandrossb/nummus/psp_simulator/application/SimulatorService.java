@@ -2,6 +2,7 @@ package com.leandrossb.nummus.psp_simulator.application;
 
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.application.NetworkCharge;
+import com.leandrossb.nummus.payments.application.NetworkRefund;
 import com.leandrossb.nummus.payments.application.NetworkTransfer;
 import java.time.Instant;
 import java.util.List;
@@ -33,4 +34,17 @@ public interface SimulatorService {
 
   /** The destination bank rejects the transfer: PENDING → FAILED (terminal). */
   NetworkTransfer failTransfer(UUID publicId);
+
+  /** Creates a refund instruction on a charge: starts PENDING. The network's
+   * own never-over-refund invariant guards the creation — the sum of every
+   * refund on the charge, PENDING ones included, may not exceed the charge amount. */
+  NetworkRefund createRefund(UUID chargePublicId, Money amount);
+
+  NetworkRefund getRefund(UUID publicId);
+
+  /** The network settles the refund: PENDING → SUCCEEDED (terminal). */
+  NetworkRefund payRefund(UUID publicId);
+
+  /** The network rejects the refund: PENDING → FAILED (terminal). */
+  NetworkRefund failRefund(UUID publicId);
 }

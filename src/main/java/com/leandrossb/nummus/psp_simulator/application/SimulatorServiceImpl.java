@@ -3,12 +3,17 @@ package com.leandrossb.nummus.psp_simulator.application;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.application.ChargeStatus;
 import com.leandrossb.nummus.payments.application.NetworkCharge;
+import com.leandrossb.nummus.payments.application.NetworkRefund;
 import com.leandrossb.nummus.payments.application.NetworkTransfer;
 import com.leandrossb.nummus.psp_simulator.domain.ChargeNotPendingException;
+import com.leandrossb.nummus.psp_simulator.domain.RefundExceedsChargeException;
+import com.leandrossb.nummus.psp_simulator.domain.RefundNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.SimulatedCharge;
+import com.leandrossb.nummus.psp_simulator.domain.SimulatedRefund;
 import com.leandrossb.nummus.psp_simulator.domain.SimulatedTransfer;
 import com.leandrossb.nummus.psp_simulator.domain.TransferNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownChargeException;
+import com.leandrossb.nummus.psp_simulator.domain.UnknownRefundException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownTransferException;
 import java.time.Instant;
 import java.util.Currency;
@@ -25,10 +30,13 @@ public class SimulatorServiceImpl implements SimulatorService {
 
   private final ChargeStore chargeStore;
   private final TransferStore transferStore;
+  private final RefundStore refundStore;
 
-  public SimulatorServiceImpl(ChargeStore chargeStore, TransferStore transferStore) {
+  public SimulatorServiceImpl(ChargeStore chargeStore, TransferStore transferStore,
+      RefundStore refundStore) {
     this.chargeStore = chargeStore;
     this.transferStore = transferStore;
+    this.refundStore = refundStore;
   }
 
   @Override
@@ -128,5 +136,56 @@ public class SimulatorServiceImpl implements SimulatorService {
   private static NetworkTransfer toNetworkTransfer(SimulatedTransfer transfer) {
     return new NetworkTransfer(transfer.publicId(), transfer.amount(),
         transfer.destinationBankKey(), transfer.status());
+  }
+
+  @Override
+  @Transactional
+  public NetworkRefund createRefund(UUID chargePublicId, Money amount) {
+    Objects.requireNonNull(chargePublicId, "chargePublicId must not be null");
+    Objects.requireNonNull(amount, "amount must not be null");
+    var charge = require(chargePublicId);
+    var remaining = charge.amount().subtract(refundStore.totalRefunded(chargePublicId));
+    if (amount.compareTo(remaining) > 0) {
+      throw new RefundExceedsChargeException(chargePublicId, remaining, amount);
+    }
+    var refund = refundStore.insert(new SimulatedRefund(UUID.randomUUID(), chargePublicId, amount,
+        ChargeStatus.PENDING, Instant.now(), Instant.now()));
+    return toNetworkRefund(refund);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public NetworkRefund getRefund(UUID publicId) {
+    return toNetworkRefund(requireRefund(publicId));
+  }
+
+  @Override
+  @Transactional
+  public NetworkRefund payRefund(UUID publicId) {
+    return transitionRefund(publicId, ChargeStatus.SUCCEEDED);
+  }
+
+  @Override
+  @Transactional
+  public NetworkRefund failRefund(UUID publicId) {
+    return transitionRefund(publicId, ChargeStatus.FAILED);
+  }
+
+  private NetworkRefund transitionRefund(UUID publicId, ChargeStatus target) {
+    requireRefund(publicId);
+    if (!refundStore.transition(publicId, target)) {
+      throw new RefundNotPendingException(publicId, requireRefund(publicId).status());
+    }
+    return toNetworkRefund(requireRefund(publicId));
+  }
+
+  private SimulatedRefund requireRefund(UUID publicId) {
+    return refundStore.findByPublicId(publicId)
+        .orElseThrow(() -> new UnknownRefundException(publicId));
+  }
+
+  private static NetworkRefund toNetworkRefund(SimulatedRefund refund) {
+    return new NetworkRefund(refund.publicId(), refund.chargePublicId(), refund.amount(),
+        refund.status());
   }
 }

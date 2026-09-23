@@ -33,8 +33,11 @@ import com.leandrossb.nummus.payments.domain.TransferAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
 import com.leandrossb.nummus.payments.domain.UnknownPayoutException;
 import com.leandrossb.nummus.psp_simulator.domain.ChargeNotPendingException;
+import com.leandrossb.nummus.psp_simulator.domain.RefundExceedsChargeException;
+import com.leandrossb.nummus.psp_simulator.domain.RefundNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.TransferNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownChargeException;
+import com.leandrossb.nummus.psp_simulator.domain.UnknownRefundException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownTransferException;
 import com.leandrossb.nummus.webhooks.application.UnsafeWebhookUrlException;
 import com.leandrossb.nummus.webhooks.domain.UnknownWebhookDeliveryException;
@@ -65,6 +68,7 @@ public class GlobalExceptionHandler {
       UnknownWebhookDeliveryException.class,
       UnknownConciliationReportException.class, UnknownMerchantException.class,
       UnknownApiKeyException.class, UnknownTransferException.class,
+      UnknownRefundException.class,
       UnknownPayoutException.class})
   public ProblemDetail notFound(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
@@ -98,6 +102,7 @@ public class GlobalExceptionHandler {
   @ExceptionHandler({PaymentAccountNotActiveException.class, AccountNotActiveException.class,
       PayoutsInFlightException.class, TransactionAlreadyReversedException.class,
       ChargeNotPendingException.class, TransferNotPendingException.class,
+      RefundNotPendingException.class,
       ConcurrentSettlementException.class, ConcurrentPayoutException.class})
   public ProblemDetail conflict(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
@@ -140,6 +145,11 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(InsufficientFundsException.class)
   ProblemDetail insufficientFunds(InsufficientFundsException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
+  }
+
+  @ExceptionHandler(RefundExceedsChargeException.class)
+  ProblemDetail refundExceedsCharge(RefundExceedsChargeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
   }
 

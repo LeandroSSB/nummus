@@ -17,4 +17,8 @@ public interface PaymentNetwork {
   NetworkTransfer createPayoutTransfer(Money amount, String destinationBankKey);
 
   NetworkTransfer getPayoutTransfer(UUID transferPublicId);
+
+  NetworkRefund createChargeRefund(UUID chargePublicId, Money amount);
+
+  NetworkRefund getChargeRefund(UUID refundPublicId);
 }
