@@ -1,6 +1,7 @@
 package com.leandrossb.nummus.payments;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -34,6 +35,11 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -271,6 +277,42 @@ class PayoutRequestTest extends IntegrationTestBase {
     assertThrows(UnknownPaymentAccountException.class, () -> payouts.create(
         SeedMerchant.PUBLIC_ID,
         new CreatePayoutCommand(UUID.randomUUID(), Money.ofBrl("5.0000"), "bank.ttl", null)));
+  }
+
+  /**
+   * The reservation fence itself: {@code create} must block on the merchant's
+   * ledger-account row lock. Deterministic — an admin connection holds the
+   * FOR UPDATE the request path waits on, so no sleep-based race: the request
+   * parks while the lock is held and completes the moment it is released.
+   */
+  @Test
+  void createWaitsOnTheLedgerAccountRowLock() throws Exception {
+    var account = fundedAccount("100.0000");
+    ExecutorService pool = Executors.newSingleThreadExecutor();
+    try (var c = adminConnection()) {
+      c.setAutoCommit(false);
+      try (var st = c.prepareStatement(
+          "select 1 from ledger.ledger_account where public_id = ? for update")) {
+        st.setObject(1, account.ledgerAccountPublicId());
+        try (var rs = st.executeQuery()) {
+          assertTrue(rs.next());
+        }
+        Future<Payout> future = pool.submit(() -> payouts.create(SeedMerchant.PUBLIC_ID,
+            new CreatePayoutCommand(account.publicId(), Money.ofBrl("10.0000"), "bank.lock-pin", null)));
+        assertThrows(TimeoutException.class, () -> future.get(2, TimeUnit.SECONDS),
+            "create must block while the ledger-account row lock is held");
+        assertFalse(future.isDone());
+        c.commit();
+        var payout = register(future.get(30, TimeUnit.SECONDS));
+        assertEquals(PayoutStatus.REQUESTED, payout.status());
+        assertEquals(PayoutStatus.REQUESTED,
+            payoutRows.findByPublicId(payout.publicId()).orElseThrow().status());
+        assertEquals(0, accountsService.balance(SeedMerchant.PUBLIC_ID, account.publicId())
+            .compareTo(Money.ofBrl("90.0000")));
+      }
+    } finally {
+      pool.shutdownNow();
+    }
   }
 
   private static void assertLeg(List<PostedPosting> postings, UUID accountPublicId,
