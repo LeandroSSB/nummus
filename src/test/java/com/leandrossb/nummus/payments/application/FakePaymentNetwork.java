@@ -63,16 +63,33 @@ public class FakePaymentNetwork implements PaymentNetwork {
     return transfers.get(transferPublicId);
   }
 
+  /** The transfer whose cancel races a parallel settlement and loses: the
+   * attempt observes the winner's terminal state instead of withdrawing. */
+  private volatile UUID cancelLostToSettlement;
+
   /** Withdraws a pending transfer; a terminal one is returned as observed —
    * no race emulation, the cancel-lost driver is configured per test. */
   @Override
   public NetworkTransfer cancelPayoutTransfer(UUID transferPublicId) {
+    transitionTransfer(transferPublicId,
+        transferPublicId.equals(cancelLostToSettlement)
+            ? ChargeStatus.SUCCEEDED
+            : ChargeStatus.CANCELLED);
+    return transfers.get(transferPublicId);
+  }
+
+  /** Test driver: arm the cancel-lost race — the cancel of this transfer
+   * arrives after a parallel pay already won the status-guarded row, so the
+   * attempt observes SUCCEEDED rather than withdrawing the instruction. */
+  public void loseCancelToSettlement(UUID transferPublicId) {
+    cancelLostToSettlement = transferPublicId;
+  }
+
+  private void transitionTransfer(UUID transferPublicId, ChargeStatus target) {
     transfers.computeIfPresent(transferPublicId, (id, transfer) ->
         transfer.status() == ChargeStatus.PENDING
-            ? new NetworkTransfer(id, transfer.amount(), transfer.destinationBankKey(),
-                ChargeStatus.CANCELLED)
+            ? new NetworkTransfer(id, transfer.amount(), transfer.destinationBankKey(), target)
             : transfer);
-    return transfers.get(transferPublicId);
   }
 
   @Override
