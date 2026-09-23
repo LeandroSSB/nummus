@@ -105,4 +105,23 @@ class RefundNetworkTest extends IntegrationTestBase {
     assertEquals(0, excess.remaining().compareTo(Money.ofBrl("40.0000")));
     assertEquals(0, excess.requested().compareTo(Money.ofBrl("50.0000")));
   }
+
+  @Test
+  void failedRefundReleasesTheNetworkRemainder() throws Exception {
+    var charge = simulator.create(Money.ofBrl("100.0000"));
+    var failed = paymentNetwork.createChargeRefund(charge.publicId(), Money.ofBrl("60.0000"));
+    simulator.failRefund(failed.publicId());
+
+    // FAILED released its hold — the same 60.00 is refundable again.
+    var retry = paymentNetwork.createChargeRefund(charge.publicId(), Money.ofBrl("60.0000"));
+    assertEquals(ChargeStatus.PENDING, retry.status());
+
+    // The retry now holds the remainder — the cap itself is still enforced.
+    var excess = assertThrows(RefundExceedsChargeException.class,
+        () -> paymentNetwork.createChargeRefund(charge.publicId(), Money.ofBrl("41.0000")));
+
+    assertEquals(charge.publicId(), excess.chargePublicId());
+    assertEquals(0, excess.remaining().compareTo(Money.ofBrl("40.0000")));
+    assertEquals(0, excess.requested().compareTo(Money.ofBrl("41.0000")));
+  }
 }
