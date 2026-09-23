@@ -12,7 +12,8 @@ import java.util.UUID;
  * {@code returnTransactionPublicId} releases the reserve back to the account on
  * expiry or failure. {@code feeAmount} is the settle-time fee fact — null until
  * settled, then the charged fee (a settled zero-fee payout carries {@code 0.00},
- * not null).
+ * not null). {@code bankAccountPublicId} is the registered account this
+ * payout paid into; null on pre-M20 rows.
  */
 public record Payout(
     UUID publicId,
@@ -20,6 +21,7 @@ public record Payout(
     Money amount,
     PayoutStatus status,
     String destinationBankKey,
+    UUID bankAccountPublicId,
     UUID transferPublicId,
     Instant expiresAt,
     Instant createdAt,

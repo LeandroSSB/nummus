@@ -30,15 +30,18 @@ public class JdbcClientPayoutsRepository implements PayoutsRepository {
   public Payout insert(Payout payout) {
     jdbc.sql("""
         insert into payments.payout
-          (public_id, account_public_id, amount, destination_bank_key, status,
+          (public_id, account_public_id, amount, destination_bank_key,
+           bank_account_public_id, status,
            transfer_public_id, expires_at, created_at, request_transaction_public_id)
-        values (:publicId, :accountPublicId, :amount, :destinationBankKey, :status,
+        values (:publicId, :accountPublicId, :amount, :destinationBankKey,
+                :bankAccountId, :status,
                 :transferPublicId, :expiresAt, :createdAt, :requestTransactionPublicId)
         """)
         .param("publicId", payout.publicId())
         .param("accountPublicId", payout.accountPublicId())
         .param("amount", payout.amount().amount())
         .param("destinationBankKey", payout.destinationBankKey())
+        .param("bankAccountId", payout.bankAccountPublicId())
         .param("status", payout.status().name())
         .param("transferPublicId", payout.transferPublicId())
         .param("expiresAt", toOffsetDateTime(payout.expiresAt()))
@@ -51,7 +54,8 @@ public class JdbcClientPayoutsRepository implements PayoutsRepository {
   @Override
   public Optional<Payout> findByPublicId(UUID publicId) {
     return jdbc.sql("""
-        select public_id, account_public_id, amount, destination_bank_key, status,
+        select public_id, account_public_id, amount, destination_bank_key,
+               bank_account_public_id, status,
                transfer_public_id, expires_at, created_at, settled_at, fee_amount,
                request_transaction_public_id, execute_transaction_public_id,
                return_transaction_public_id
@@ -65,7 +69,8 @@ public class JdbcClientPayoutsRepository implements PayoutsRepository {
   @Override
   public List<Payout> findSettledBetween(Instant from, Instant to) {
     return jdbc.sql("""
-        select public_id, account_public_id, amount, destination_bank_key, status,
+        select public_id, account_public_id, amount, destination_bank_key,
+               bank_account_public_id, status,
                transfer_public_id, expires_at, created_at, settled_at, fee_amount,
                request_transaction_public_id, execute_transaction_public_id,
                return_transaction_public_id
@@ -130,6 +135,7 @@ public class JdbcClientPayoutsRepository implements PayoutsRepository {
         Money.of(rs.getBigDecimal("amount"), Currency.getInstance("BRL")),
         PayoutStatus.valueOf(rs.getString("status")),
         rs.getString("destination_bank_key"),
+        rs.getObject("bank_account_public_id", UUID.class),
         rs.getObject("transfer_public_id", UUID.class),
         rs.getObject("expires_at", OffsetDateTime.class).toInstant(),
         rs.getObject("created_at", OffsetDateTime.class).toInstant(),

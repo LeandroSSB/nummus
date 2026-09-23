@@ -10,6 +10,7 @@ import com.leandrossb.nummus.ledger.domain.Direction;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.PostedTransaction;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
+import com.leandrossb.nummus.merchants.application.BankAccountsService;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.payments.domain.ConcurrentPayoutException;
@@ -41,15 +42,18 @@ public class PayoutsServiceImpl implements PayoutsService {
   private final PayoutsRepository repository;
   private final PayoutLifecycleEvents payoutEvents;
   private final MerchantsService merchants;
+  private final BankAccountsService bankAccounts;
 
   public PayoutsServiceImpl(Ledger ledger, AccountsService accounts, PaymentNetwork network,
-      PayoutsRepository repository, PayoutLifecycleEvents payoutEvents, MerchantsService merchants) {
+      PayoutsRepository repository, PayoutLifecycleEvents payoutEvents, MerchantsService merchants,
+      BankAccountsService bankAccounts) {
     this.ledger = ledger;
     this.accounts = accounts;
     this.network = network;
     this.repository = repository;
     this.payoutEvents = payoutEvents;
     this.merchants = merchants;
+    this.bankAccounts = bankAccounts;
   }
 
   @Override
@@ -61,6 +65,10 @@ public class PayoutsServiceImpl implements PayoutsService {
       throw new IllegalArgumentException(
           "ttl must be between 60 and 86400 seconds: " + ttl.toSeconds());
     }
+    // Reference data resolves before any money is held: an unknown or
+    // unverified destination must never take the ledger lock.
+    var destination =
+        bankAccounts.requireVerifiedDestination(merchantPublicId, cmd.bankAccountPublicId());
     var account = accounts.get(merchantPublicId, cmd.accountPublicId());
     if (account.status() != AccountStatus.ACTIVE) {
       throw new PaymentAccountNotActiveException(account.publicId(), account.status());
@@ -80,12 +88,13 @@ public class PayoutsServiceImpl implements PayoutsService {
       throw new InsufficientFundsException(account.publicId(), available, includingFee);
     }
     var payoutId = UUID.randomUUID();
-    var transfer = network.createPayoutTransfer(cmd.amount(), cmd.destinationBankKey());
+    var transfer = network.createPayoutTransfer(cmd.amount(), destination.wireKey());
     var reservation = ledger.post(new PostTransactionCommand("payout " + payoutId + " request",
         List.of(new PostingDraft(account.ledgerAccountPublicId(), Direction.DEBIT, cmd.amount()),
             new PostingDraft(PayoutReservedAccount.PUBLIC_ID, Direction.CREDIT, cmd.amount()))));
     return repository.insert(new Payout(payoutId, account.publicId(), cmd.amount(),
-        PayoutStatus.REQUESTED, cmd.destinationBankKey(), transfer.publicId(),
+        PayoutStatus.REQUESTED, destination.wireKey(), destination.bankAccountPublicId(),
+        transfer.publicId(),
         Instant.now().plus(ttl), Instant.now(), null, null, reservation.publicId(), null, null));
   }
 

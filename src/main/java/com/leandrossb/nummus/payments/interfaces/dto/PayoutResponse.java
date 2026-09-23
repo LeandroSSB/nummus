@@ -16,6 +16,7 @@ public record PayoutResponse(
     BigDecimal amount,
     String currency,
     String destinationBankKey,
+    UUID bankAccountId,
     String status,
     UUID transferId,
     Instant expiresAt,
@@ -27,7 +28,8 @@ public record PayoutResponse(
   public static PayoutResponse from(Payout payout) {
     return new PayoutResponse(payout.publicId(), payout.accountPublicId(),
         payout.amount().amount(), payout.amount().currency().getCurrencyCode(),
-        payout.destinationBankKey(), payout.status().name(), payout.transferPublicId(),
+        payout.destinationBankKey(), payout.bankAccountPublicId(), payout.status().name(),
+        payout.transferPublicId(),
         payout.expiresAt(), payout.createdAt(), payout.settledAt(),
         payout.feeAmount() == null ? null : payout.feeAmount().amount(),
         payout.requestTransactionPublicId());
