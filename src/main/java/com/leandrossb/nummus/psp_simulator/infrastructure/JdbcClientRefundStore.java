@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Currency;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -76,6 +77,20 @@ public class JdbcClientRefundStore implements RefundStore {
         .param("chargePublicId", chargePublicId)
         .query((rs, i) -> Money.of(rs.getBigDecimal(1), BRL))
         .single();
+  }
+
+  @Override
+  public List<SimulatedRefund> findSucceededBetween(Instant from, Instant to) {
+    return jdbc.sql("""
+        select public_id, charge_public_id, amount, status, created_at, updated_at
+        from psp_simulator.charge_refund
+        where status = 'SUCCEEDED' and updated_at >= :from and updated_at < :to
+        order by updated_at, id
+        """)
+        .param("from", toOffsetDateTime(from))
+        .param("to", toOffsetDateTime(to))
+        .query((rs, i) -> mapRefund(rs))
+        .list();
   }
 
   private SimulatedRefund mapRefund(ResultSet rs) throws SQLException {

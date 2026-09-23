@@ -28,13 +28,17 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+@TestMethodOrder(OrderAnnotation.class)
 @AutoConfigureMockMvc
 class ConciliationRestApiTest extends IntegrationTestBase {
 
@@ -171,7 +175,11 @@ class ConciliationRestApiTest extends IntegrationTestBase {
     return refund;
   }
 
+  /** Runs first so its window sees only its own fixtures — the CONCILED and
+   *  matched-count pins are global over the window, and the divergence tests
+   *  leave their in-window fixtures behind until the class sweep. */
   @Test
+  @Order(1)
   void settledIntentsConcileAndReplayIdempotently() throws Exception {
     // Scoped window: everything this test settles lands after `start`, and the
     // 30s back-margin absorbs DB-lag on the simulator's `updated_at` (DB clock)

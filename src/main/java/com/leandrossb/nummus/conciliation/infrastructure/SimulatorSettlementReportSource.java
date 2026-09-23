@@ -3,6 +3,7 @@ package com.leandrossb.nummus.conciliation.infrastructure;
 import com.leandrossb.nummus.conciliation.application.NetworkSettlement;
 import com.leandrossb.nummus.conciliation.application.SettlementReport;
 import com.leandrossb.nummus.conciliation.application.SettlementReportSource;
+import com.leandrossb.nummus.conciliation.application.SubjectType;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import java.time.Instant;
 import org.springframework.stereotype.Component;
@@ -20,8 +21,8 @@ public class SimulatorSettlementReportSource implements SettlementReportSource {
   @Override
   public SettlementReport fetch(Instant from, Instant to) {
     var lines = simulator.settlementReport(from, to).stream()
-        .map(settlement -> new NetworkSettlement(settlement.chargePublicId(),
-            settlement.amount(), settlement.settledAt()))
+        .map(settlement -> new NetworkSettlement(SubjectType.valueOf(settlement.kind()),
+            settlement.subjectPublicId(), settlement.amount(), settlement.settledAt()))
         .toList();
     return new SettlementReport(from, to, lines);
   }

@@ -21,7 +21,7 @@ public interface SimulatorService {
   /** Payer abandons/fails the charge: PENDING → FAILED (terminal). */
   NetworkCharge fail(UUID publicId);
 
-  /** The network's settlement report: SUCCEEDED charges in [from, to). */
+  /** The network's settlement report: SUCCEEDED charges, payout transfers, and charge refunds in [from, to), each line carrying its kind. */
   List<NetworkSettlement> settlementReport(Instant from, Instant to);
 
   /** Creates an outbound transfer to a destination bank: starts PENDING. */

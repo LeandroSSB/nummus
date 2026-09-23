@@ -2,7 +2,11 @@ package com.leandrossb.nummus.conciliation.application;
 
 import com.leandrossb.nummus.audit.application.OperatorAudit;
 import com.leandrossb.nummus.payments.application.PaymentsService;
+import com.leandrossb.nummus.payments.application.PayoutsService;
+import com.leandrossb.nummus.payments.application.RefundsService;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,16 +27,20 @@ public class ConciliationService {
 
   private final SettlementReportSource reportSource;
   private final PaymentsService payments;
+  private final PayoutsService payouts;
+  private final RefundsService refunds;
   private final ConciliationStore store;
   private final ConciliationAlerts alerts;
   private final ConciliationProperties properties;
   private final OperatorAudit audit;
 
   public ConciliationService(SettlementReportSource reportSource, PaymentsService payments,
-      ConciliationStore store, ConciliationAlerts alerts, ConciliationProperties properties,
-      OperatorAudit audit) {
+      PayoutsService payouts, RefundsService refunds, ConciliationStore store,
+      ConciliationAlerts alerts, ConciliationProperties properties, OperatorAudit audit) {
     this.reportSource = reportSource;
     this.payments = payments;
+    this.payouts = payouts;
+    this.refunds = refunds;
     this.store = store;
     this.alerts = alerts;
     this.properties = properties;
@@ -67,8 +75,17 @@ public class ConciliationService {
       throw new IllegalArgumentException("from must be before to");
     }
     var report = reportSource.fetch(from, to);
-    var internal = payments.listSettlements(from, to);
-    var outcome = ReportMatcher.match(report, internal);
+    var internal = new ArrayList<InternalSettlement>();
+    payments.listSettlements(from, to).forEach(v -> internal.add(
+        new InternalSettlement(SubjectType.CHARGE, v.intentPublicId(), v.chargePublicId(),
+            v.amount())));
+    payouts.listSettlements(from, to).forEach(v -> internal.add(
+        new InternalSettlement(SubjectType.PAYOUT_TRANSFER, v.internalPublicId(),
+            v.networkInstructionPublicId(), v.amount())));
+    refunds.listSettlements(from, to).forEach(v -> internal.add(
+        new InternalSettlement(SubjectType.CHARGE_REFUND, v.internalPublicId(),
+            v.networkInstructionPublicId(), v.amount())));
+    var outcome = ReportMatcher.match(report, List.copyOf(internal));
     boolean empty = report.lines().isEmpty() && internal.isEmpty();
     return new MatchedWindow(from, to, outcome, empty);
   }
