@@ -62,17 +62,6 @@ public class JdbcClientPayoutsRepository implements PayoutsRepository {
   }
 
   @Override
-  public boolean existsRequestedByAccount(UUID accountPublicId) {
-    return jdbc.sql("""
-        select exists(select 1 from payments.payout
-          where account_public_id = :accountPublicId and status = 'REQUESTED')
-        """)
-        .param("accountPublicId", accountPublicId)
-        .query(Boolean.class)
-        .single();
-  }
-
-  @Override
   public boolean markSettled(UUID publicId, UUID executeTransactionPublicId, Instant settledAt,
       Money feeAmount) {
     int updated = jdbc.sql("""

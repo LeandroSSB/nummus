@@ -18,6 +18,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class JdbcClientRefundsRepository implements RefundsRepository {
 
+  private static final Currency BRL = Currency.getInstance("BRL");
+
   private final JdbcClient jdbc;
 
   public JdbcClientRefundsRepository(JdbcClient jdbc) {
@@ -56,6 +58,18 @@ public class JdbcClientRefundsRepository implements RefundsRepository {
         .param("publicId", publicId)
         .query((rs, i) -> mapRefund(rs))
         .optional();
+  }
+
+  @Override
+  public Money refundedTotal(UUID intentPublicId) {
+    return jdbc.sql("""
+        select coalesce(sum(amount), 0) from payments.refund
+        where intent_public_id = :intentPublicId
+          and status in ('REQUESTED', 'SETTLED')
+        """)
+        .param("intentPublicId", intentPublicId)
+        .query((rs, i) -> Money.of(rs.getBigDecimal(1), BRL))
+        .single();
   }
 
   private Refund mapRefund(ResultSet rs) throws SQLException {

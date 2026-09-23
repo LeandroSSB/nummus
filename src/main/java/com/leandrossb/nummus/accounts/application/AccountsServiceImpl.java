@@ -28,13 +28,13 @@ public class AccountsServiceImpl implements AccountsService {
 
   private final Ledger ledger;
   private final AccountsRepository repository;
-  private final OutstandingPayouts outstandingPayouts;
+  private final OutstandingHolds outstandingHolds;
 
   public AccountsServiceImpl(Ledger ledger, AccountsRepository repository,
-      OutstandingPayouts outstandingPayouts) {
+      OutstandingHolds outstandingHolds) {
     this.ledger = ledger;
     this.repository = repository;
-    this.outstandingPayouts = outstandingPayouts;
+    this.outstandingHolds = outstandingHolds;
   }
 
   @Override
@@ -113,14 +113,14 @@ public class AccountsServiceImpl implements AccountsService {
     }
     ledgerTransition.accept(current.ledgerAccountPublicId());
     // Guard ordering: the ledger status UPDATE above row-locks the ledger
-    // account — the same row a payout request FOR UPDATEs before inserting —
-    // so a concurrent create either committed first (its REQUESTED row is
-    // visible here) or is still waiting on the lock and will fail its
-    // reservation posting against the non-ACTIVE account. Checking in-flight
-    // payouts only after the update therefore closes the check-then-act race;
+    // account — the same row a payout or refund request FOR UPDATEs before
+    // inserting — so a concurrent create either committed first (its REQUESTED
+    // row is visible here) or is still waiting on the lock and will fail its
+    // hold posting against the non-ACTIVE account. Checking in-flight holds
+    // only after the update therefore closes the check-then-act race;
     // throwing rolls the status change back with this transaction.
     // Unfreeze (target ACTIVE) is exempt: restoring recoverability is its job.
-    if (target != AccountStatus.ACTIVE && outstandingPayouts.anyRequested(publicId)) {
+    if (target != AccountStatus.ACTIVE && outstandingHolds.anyPending(publicId)) {
       throw new PayoutsInFlightException(publicId);
     }
     repository.updateStatus(merchantPublicId, publicId, target, closedAt);
