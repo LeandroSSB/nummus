@@ -1,7 +1,6 @@
 package com.leandrossb.nummus.webhooks.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.application.IntentLifecycleEvent;
 import com.leandrossb.nummus.payments.application.IntentLifecycleEvents;
 import com.leandrossb.nummus.webhooks.application.WebhookStore;
@@ -41,21 +40,8 @@ public class OutboxIntentLifecycleEvents implements IntentLifecycleEvents {
             event.amount().currency().getCurrencyCode(),
             event.status(), event.chargePublicId(),
             event.settledAt(), event.journalTransactionPublicId(),
-            toMoneyString(event.fee()), toMoneyString(event.netAmount()))));
+            MoneyStrings.toMoneyString(event.fee()), MoneyStrings.toMoneyString(event.netAmount()))));
     store.insertEvent(eventId, event.merchantPublicId(), event.type(), payload, Instant.now());
-  }
-
-  /**
-   * Settlement fee facts as merchant-facing strings: at least centavos, never
-   * spurious trailing zeros (a journal-scale {@code 98.6200} publishes as
-   * {@code 98.62}). Lossless — only exact trailing zeros are dropped.
-   */
-  private static String toMoneyString(Money money) {
-    if (money == null) {
-      return null;
-    }
-    var stripped = money.amount().stripTrailingZeros();
-    return stripped.setScale(Math.max(2, stripped.scale())).toPlainString();
   }
 
   record Envelope(UUID id, String type, Instant occurredAt, Data data) {

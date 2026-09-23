@@ -72,6 +72,46 @@ public class JdbcClientRefundsRepository implements RefundsRepository {
         .single();
   }
 
+  @Override
+  public boolean markSettled(UUID publicId, UUID executeTransactionPublicId, Instant settledAt) {
+    int updated = jdbc.sql("""
+        update payments.refund
+        set status = 'SETTLED', settled_at = :settledAt,
+            execute_transaction_public_id = :executeTx
+        where public_id = :publicId and status = 'REQUESTED'
+        """)
+        .param("settledAt", toOffsetDateTime(settledAt))
+        .param("executeTx", executeTransactionPublicId)
+        .param("publicId", publicId)
+        .update();
+    return updated == 1;
+  }
+
+  @Override
+  public boolean markFailed(UUID publicId, UUID returnTransactionPublicId) {
+    return markReturned(publicId, "FAILED", returnTransactionPublicId);
+  }
+
+  @Override
+  public boolean markExpired(UUID publicId, UUID returnTransactionPublicId) {
+    return markReturned(publicId, "EXPIRED", returnTransactionPublicId);
+  }
+
+  /** The two non-settling terminals share one guarded shape: stamp the return
+   *  link, win only while the row is still REQUESTED. */
+  private boolean markReturned(UUID publicId, String target, UUID returnTransactionPublicId) {
+    int updated = jdbc.sql("""
+        update payments.refund
+        set status = :status, return_transaction_public_id = :returnTx
+        where public_id = :publicId and status = 'REQUESTED'
+        """)
+        .param("status", target)
+        .param("returnTx", returnTransactionPublicId)
+        .param("publicId", publicId)
+        .update();
+    return updated == 1;
+  }
+
   private Refund mapRefund(ResultSet rs) throws SQLException {
     OffsetDateTime settledAt = rs.getObject("settled_at", OffsetDateTime.class);
     return new Refund(

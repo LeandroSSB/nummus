@@ -17,4 +17,9 @@ public interface RefundsService {
    *  both the intent's refundable remainder and the account's available
    *  balance. */
   Refund create(UUID merchantPublicId, UUID intentPublicId, CreateRefundCommand cmd);
+
+  /** Reads a refund, driving its lazy lifecycle: a REQUESTED refund whose
+   *  network side moved settles or returns its hold; expiry returns the hold
+   *  without consulting the network. Terminal rows are returned untouched. */
+  Refund get(UUID merchantPublicId, UUID publicId);
 }
