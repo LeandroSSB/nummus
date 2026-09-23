@@ -35,6 +35,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -310,6 +311,69 @@ class PayoutRequestTest extends IntegrationTestBase {
         assertEquals(0, accountsService.balance(SeedMerchant.PUBLIC_ID, account.publicId())
             .compareTo(Money.ofBrl("90.0000")));
       }
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
+  /**
+   * The concurrent invariant the reservation fence buys: N simultaneous requests
+   * against one funded account may interleave any way they like — exactly one
+   * reservation may come out of it. The winner takes 70.00 of the 100.00 and
+   * every other request must derive from that reservation, not the pre-race
+   * balance, and be rejected. No barriers or timing assertions: the outcome is
+   * deterministic while the fence holds, and without it several requests read
+   * the same pre-race balance and double-reserve into overdraft.
+   */
+  @Test
+  void concurrentRequestsSerializeTheirFundsChecks() throws Exception {
+    var account = fundedAccount("100.0000");
+    int requests = 3;
+    ExecutorService pool = Executors.newFixedThreadPool(requests);
+    try {
+      List<Future<Payout>> futures = new ArrayList<>();
+      for (int i = 0; i < requests; i++) {
+        String bankKey = "bank.concurrent-" + i;
+        futures.add(pool.submit(() -> payouts.create(SeedMerchant.PUBLIC_ID,
+            new CreatePayoutCommand(account.publicId(), Money.ofBrl("70.0000"), bankKey, null))));
+      }
+      List<Payout> winners = new ArrayList<>();
+      List<InsufficientFundsException> rejected = new ArrayList<>();
+      for (Future<Payout> future : futures) {
+        try {
+          winners.add(register(future.get(60, TimeUnit.SECONDS)));
+        } catch (ExecutionException e) {
+          if (e.getCause() instanceof InsufficientFundsException insufficient) {
+            rejected.add(insufficient);
+          } else {
+            throw e;
+          }
+        }
+      }
+      String outcome = "succeeded=" + winners.size() + " rejected=" + rejected.size();
+      assertEquals(1, winners.size(), outcome);
+      assertEquals(requests - 1, rejected.size(), outcome);
+      assertEquals(PayoutStatus.REQUESTED, winners.get(0).status());
+      for (InsufficientFundsException insufficient : rejected) {
+        assertEquals(0, insufficient.available().compareTo(Money.ofBrl("30.0000")),
+            insufficient.getMessage());
+        assertEquals(0, insufficient.requested().compareTo(Money.ofBrl("70.0000")),
+            insufficient.getMessage());
+      }
+      // The database agrees with the calls: exactly one REQUESTED payout row,
+      // whichever request won the fence.
+      try (var c = adminConnection(); var st = c.createStatement()) {
+        try (var rs = st.executeQuery("select count(*) from payments.payout"
+            + " where account_public_id = '" + account.publicId() + "'"
+            + " and status = 'REQUESTED'")) {
+          assertTrue(rs.next());
+          assertEquals(1, rs.getInt(1), outcome);
+        }
+      }
+      // And the balance the losers saw is the one that survives — 30.00 held
+      // back by the single reservation, never an overdraft of double reserves.
+      assertEquals(0, accountsService.balance(SeedMerchant.PUBLIC_ID, account.publicId())
+          .compareTo(Money.ofBrl("30.0000")), outcome);
     } finally {
       pool.shutdownNow();
     }
