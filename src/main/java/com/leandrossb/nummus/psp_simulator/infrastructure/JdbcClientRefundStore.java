@@ -71,6 +71,7 @@ public class JdbcClientRefundStore implements RefundStore {
     return jdbc.sql("""
         select coalesce(sum(amount), 0) from psp_simulator.charge_refund
         where charge_public_id = :chargePublicId
+          and status in ('PENDING', 'SUCCEEDED')
         """)
         .param("chargePublicId", chargePublicId)
         .query((rs, i) -> Money.of(rs.getBigDecimal(1), BRL))

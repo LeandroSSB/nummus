@@ -16,6 +16,7 @@ public interface RefundStore {
   /** @return false when the refund does not exist or is not PENDING. */
   boolean transition(UUID publicId, ChargeStatus target);
 
-  /** Sum of every refund amount on the charge — PENDING rows included; zero when none. */
+  /** Sum of refund amounts still holding or moving money on the charge — PENDING and
+   * SUCCEEDED rows; FAILED refunds are released and never counted. Zero when none. */
   Money totalRefunded(UUID chargePublicId);
 }

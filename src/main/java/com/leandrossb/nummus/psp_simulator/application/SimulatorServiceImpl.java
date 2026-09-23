@@ -144,6 +144,8 @@ public class SimulatorServiceImpl implements SimulatorService {
     Objects.requireNonNull(chargePublicId, "chargePublicId must not be null");
     Objects.requireNonNull(amount, "amount must not be null");
     var charge = require(chargePublicId);
+    // Mirrors the payments module's refundable definition: in-flight (PENDING) plus
+    // executed (SUCCEEDED); FAILED refunds release the remainder they held.
     var remaining = charge.amount().subtract(refundStore.totalRefunded(chargePublicId));
     if (amount.compareTo(remaining) > 0) {
       throw new RefundExceedsChargeException(chargePublicId, remaining, amount);
