@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.accounts;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -9,12 +10,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.leandrossb.nummus.accounts.application.AccountsService;
 import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
+import com.leandrossb.nummus.accounts.domain.PaymentAccount;
 import com.leandrossb.nummus.ledger.application.Ledger;
 import com.leandrossb.nummus.ledger.application.PostTransactionCommand;
 import com.leandrossb.nummus.ledger.domain.AccountType;
 import com.leandrossb.nummus.ledger.domain.Direction;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
+import com.leandrossb.nummus.payments.application.PayoutsService;
+import com.leandrossb.nummus.payments.domain.CreatePayoutCommand;
+import com.leandrossb.nummus.payments.domain.Payout;
+import com.leandrossb.nummus.payments.domain.PayoutStatus;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.List;
@@ -41,6 +47,9 @@ class AccountsRestApiTest extends IntegrationTestBase {
 
   @Autowired
   private OperatorKeysService operatorKeys;
+
+  @Autowired
+  private PayoutsService payouts;
 
   private String merchantKey;
   private UUID merchantId;
@@ -71,6 +80,24 @@ class AccountsRestApiTest extends IntegrationTestBase {
         .andExpect(status().isCreated())
         .andReturn();
     return result.getResponse().getHeader("Location");
+  }
+
+  /** A payment account funded by a direct journal posting — the funding shape
+   *  the balance/statement probes above use; payout requests derive from it. */
+  private PaymentAccount fundedAccount(String amount) {
+    var account = accountsService.open(merchantId, new OpenAccountCommand("Payout Guard Merchant"));
+    var house = ledger.openAccount(new com.leandrossb.nummus.ledger.application.OpenAccountCommand(
+        "payout guard house asset", AccountType.ASSET, java.util.Currency.getInstance("BRL")));
+    ledger.post(new PostTransactionCommand("payout guard funding", List.of(
+        new PostingDraft(house.publicId(), Direction.DEBIT, Money.ofBrl(amount)),
+        new PostingDraft(account.ledgerAccountPublicId(), Direction.CREDIT, Money.ofBrl(amount)))));
+    return account;
+  }
+
+  /** A REQUESTED payout on the fixture merchant's funded account. */
+  private Payout requestedPayout(PaymentAccount account, String amount, String bankKey) {
+    return payouts.create(merchantId, new CreatePayoutCommand(
+        account.publicId(), Money.ofBrl(amount), bankKey, null));
   }
 
   @Test
@@ -204,6 +231,84 @@ class AccountsRestApiTest extends IntegrationTestBase {
             .header("Idempotency-Key", UUID.randomUUID().toString()))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.detail").exists());
+  }
+
+  @Test
+  void freezeIsRejectedWhileAPayoutIsRequested() throws Exception {
+    var account = fundedAccount("50.0000");
+    var payout = requestedPayout(account, "20.0000", "bank.freeze-guard-01");
+    String location = "/v1/accounts/" + account.publicId();
+
+    // Freezing would strand the payout: its return and fee legs post against
+    // the merchant's ledger account, which the ledger rejects once non-ACTIVE.
+    mockMvc.perform(post(location + "/freeze")
+            .header("Authorization", "Bearer " + merchantKey)
+            .header("Idempotency-Key", UUID.randomUUID().toString()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.detail").exists());
+
+    // Nothing moved: the payment account and its backing ledger account stay
+    // ACTIVE, and the payout is still REQUESTED and readable.
+    mockMvc.perform(get(location).header("Authorization", "Bearer " + merchantKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("ACTIVE"));
+    assertEquals(com.leandrossb.nummus.ledger.domain.AccountStatus.ACTIVE,
+        ledger.getAccount(account.ledgerAccountPublicId()).status());
+    assertEquals(PayoutStatus.REQUESTED, payouts.get(merchantId, payout.publicId()).status());
+  }
+
+  @Test
+  void closeIsRejectedWhileAPayoutIsRequested() throws Exception {
+    var account = fundedAccount("50.0000");
+    var payout = requestedPayout(account, "20.0000", "bank.close-guard-01");
+
+    // Close is permanent — a REQUESTED payout on a CLOSED account could never
+    // post its terminal legs.
+    mockMvc.perform(post("/v1/accounts/" + account.publicId() + "/close")
+            .header("Authorization", "Bearer " + merchantKey)
+            .header("Idempotency-Key", UUID.randomUUID().toString()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.detail").exists());
+
+    mockMvc.perform(get("/v1/accounts/" + account.publicId())
+            .header("Authorization", "Bearer " + merchantKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("ACTIVE"));
+    assertEquals(com.leandrossb.nummus.ledger.domain.AccountStatus.ACTIVE,
+        ledger.getAccount(account.ledgerAccountPublicId()).status());
+    assertEquals(PayoutStatus.REQUESTED, payouts.get(merchantId, payout.publicId()).status());
+  }
+
+  @Test
+  void freezeSucceedsOnceThePayoutTerminates() throws Exception {
+    var account = fundedAccount("50.0000");
+    var payout = requestedPayout(account, "20.0000", "bank.freeze-after-01");
+    String location = "/v1/accounts/" + account.publicId();
+
+    mockMvc.perform(post(location + "/freeze")
+            .header("Authorization", "Bearer " + merchantKey)
+            .header("Idempotency-Key", UUID.randomUUID().toString()))
+        .andExpect(status().isConflict());
+
+    // Terminate the payout the lazy way — backdate its expiry, then read it.
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      st.executeUpdate("UPDATE payments.payout SET expires_at = now() - interval '1 second' "
+          + "WHERE public_id = '" + payout.publicId() + "'");
+    }
+    assertEquals(PayoutStatus.EXPIRED, payouts.get(merchantId, payout.publicId()).status());
+
+    // With no payout in flight the freeze goes through...
+    mockMvc.perform(post(location + "/freeze")
+            .header("Authorization", "Bearer " + merchantKey)
+            .header("Idempotency-Key", UUID.randomUUID().toString()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("FROZEN"));
+    // ...and unfreeze carries no in-flight guard: the account returns to ACTIVE.
+    mockMvc.perform(post(location + "/unfreeze")
+            .header("Authorization", "Bearer " + merchantKey)
+            .header("Idempotency-Key", UUID.randomUUID().toString()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("ACTIVE"));
   }
 
   @Test

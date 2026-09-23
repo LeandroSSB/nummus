@@ -14,6 +14,9 @@ import com.leandrossb.nummus.ledger.application.Ledger;
 import com.leandrossb.nummus.ledger.domain.Direction;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.PostedPosting;
+import com.leandrossb.nummus.merchants.application.FeeSchedule;
+import com.leandrossb.nummus.merchants.application.MerchantsService;
+import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.application.PayoutReservedAccount;
@@ -22,9 +25,11 @@ import com.leandrossb.nummus.payments.application.PayoutsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.payments.domain.CreatePayoutCommand;
 import com.leandrossb.nummus.payments.domain.InsufficientFundsException;
+import com.leandrossb.nummus.payments.domain.Payout;
 import com.leandrossb.nummus.payments.domain.PayoutStatus;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,10 +46,15 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 class PayoutRequestTest extends IntegrationTestBase {
 
-  /** Fixtures this class settles/charges — backdated in {@link #moveFixturesOutOfNowWindows()}. */
+  /** Fixtures this class settles/charges/transfers — backdated in
+   *  {@link #moveFixturesOutOfNowWindows()}. */
   private static final List<UUID> settledIntents = new ArrayList<>();
 
   private static final List<UUID> networkCharges = new ArrayList<>();
+
+  private static final List<UUID> payoutIds = new ArrayList<>();
+
+  private static final List<UUID> networkTransfers = new ArrayList<>();
 
   @Autowired
   private PayoutsService payouts;
@@ -58,20 +68,43 @@ class PayoutRequestTest extends IntegrationTestBase {
   private SimulatorService simulator;
   @Autowired
   private Ledger ledger;
+  @Autowired
+  private MerchantsService merchants;
+  @Autowired
+  private OperatorKeysService operatorKeys;
 
   /**
    * A payment account funded by one settled intent — the settle recipe the
    * conciliation suites use (create intent, pay the charge, first poll settles).
    */
   private PaymentAccount fundedAccount(String amount) {
-    var account = accountsService.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("Payout Merchant"));
-    var intent = payments.create(SeedMerchant.PUBLIC_ID,
+    return fundedAccount(SeedMerchant.PUBLIC_ID, amount);
+  }
+
+  private PaymentAccount fundedAccount(UUID merchantPublicId, String amount) {
+    var account = accountsService.open(merchantPublicId, new OpenAccountCommand("Payout Merchant"));
+    var intent = payments.create(merchantPublicId,
         new CreateIntentCommand(account.publicId(), Money.ofBrl(amount), null));
     settledIntents.add(intent.publicId());
     networkCharges.add(intent.chargePublicId());
     simulator.pay(intent.chargePublicId());
-    payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
+    payments.get(merchantPublicId, intent.publicId());
     return account;
+  }
+
+  /** A merchant whose schedule prices every payout at a fixed fee. */
+  private UUID payoutFeeMerchant(String payoutFixed) {
+    UUID actingKey = operatorKeys.create("payout-request-probe", null, null).key().publicId();
+    return merchants.create("Payout Request Fee " + UUID.randomUUID(),
+        new FeeSchedule(BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal(payoutFixed)), actingKey)
+        .publicId();
+  }
+
+  /** Registers the payout and its transfer for the class-end sweep. */
+  private Payout register(Payout payout) {
+    payoutIds.add(payout.publicId());
+    networkTransfers.add(payout.transferPublicId());
+    return payout;
   }
 
   @Test
@@ -158,6 +191,67 @@ class PayoutRequestTest extends IntegrationTestBase {
   }
 
   @Test
+  void requestReservesAmountPlusTheScheduleFee() throws Exception {
+    var merchant = payoutFeeMerchant("2.00");
+    var account = fundedAccount(merchant, "100.0000");
+    String bankKey = "bank.fee-reserve-" + UUID.randomUUID();
+    long journalBefore;
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      try (var rs = st.executeQuery("select count(*) from ledger.journal_transaction")) {
+        assertTrue(rs.next());
+        journalBefore = rs.getLong(1);
+      }
+    }
+
+    // A full-balance request must price in the execution fee: accepting it
+    // would land the merchant at exactly -fee once the fee leg posts.
+    var ex = assertThrows(InsufficientFundsException.class, () -> payouts.create(
+        merchant, new CreatePayoutCommand(
+            account.publicId(), Money.ofBrl("100.0000"), bankKey, null)));
+    assertEquals(account.publicId(), ex.accountPublicId());
+    assertEquals(0, ex.available().compareTo(Money.ofBrl("100.0000")));
+    assertEquals(0, ex.requested().compareTo(Money.ofBrl("102.0000")));
+    // The available balance is unchanged...
+    assertEquals(0, accountsService.balance(merchant, account.publicId())
+        .compareTo(Money.ofBrl("100.0000")));
+    // ...and nothing was written: no payout row, no outbound transfer, no journal.
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      try (var rs = st.executeQuery("select count(*) from payments.payout "
+          + "where account_public_id = '" + account.publicId() + "'")) {
+        assertTrue(rs.next());
+        assertEquals(0, rs.getInt(1));
+      }
+      try (var rs = st.executeQuery("select count(*) from psp_simulator.payout_transfer "
+          + "where destination_bank_key = '" + bankKey + "'")) {
+        assertTrue(rs.next());
+        assertEquals(0, rs.getInt(1));
+      }
+      try (var rs = st.executeQuery("select count(*) from ledger.journal_transaction")) {
+        assertTrue(rs.next());
+        assertEquals(journalBefore, rs.getLong(1));
+      }
+    }
+
+    // At 98.00 the request fits amount+fee exactly. The reservation still
+    // debits only the amount — the fee is an execution-time fact — so 2.00 of
+    // capacity remains, reserved for the fee leg that executing will post.
+    var payout = register(payouts.create(merchant, new CreatePayoutCommand(
+        account.publicId(), Money.ofBrl("98.0000"), bankKey, null)));
+    assertEquals(PayoutStatus.REQUESTED, payout.status());
+    assertEquals(0, accountsService.balance(merchant, account.publicId())
+        .compareTo(Money.ofBrl("2.0000")));
+
+    // Executing the full-capacity payout lands the merchant at exactly 0.00 —
+    // the overdraft the fee-blind reservation allowed is gone.
+    simulator.payTransfer(payout.transferPublicId());
+    var settled = payouts.get(merchant, payout.publicId());
+    assertEquals(PayoutStatus.SETTLED, settled.status());
+    assertEquals(0, settled.feeAmount().compareTo(Money.ofBrl("2.0000")));
+    assertEquals(0, accountsService.balance(merchant, account.publicId())
+        .compareTo(Money.ofBrl("0.0000")));
+  }
+
+  @Test
   void requestValidatesTtlShapeAndAccountState() {
     var account = fundedAccount("100.0000");
     assertThrows(IllegalArgumentException.class, () -> payouts.create(
@@ -190,9 +284,9 @@ class PayoutRequestTest extends IntegrationTestBase {
 
   /**
    * The container is shared across classes and the conciliation suites assert
-   * over now-relative windows. Push this class's settlements and network charges
-   * two hours back — the same DB-side rewrite the conciliation suites use —
-   * so they never fall inside another test's window.
+   * over now-relative windows. Push this class's settlements, network charges,
+   * and payout fixtures two hours back — the same DB-side rewrite the sibling
+   * suites use — so they never fall inside another test's window.
    */
   @AfterAll
   static void moveFixturesOutOfNowWindows() throws Exception {
@@ -204,6 +298,18 @@ class PayoutRequestTest extends IntegrationTestBase {
       if (!networkCharges.isEmpty()) {
         st.executeUpdate("UPDATE psp_simulator.charge SET updated_at = now() - interval '2 hours'"
           + " WHERE public_id IN (" + quoted(networkCharges) + ")");
+      }
+      if (!payoutIds.isEmpty()) {
+        st.executeUpdate("UPDATE payments.payout SET created_at = now() - interval '2 hours',"
+            + " expires_at = expires_at - interval '2 hours'"
+            + " WHERE public_id IN (" + quoted(payoutIds) + ")");
+        st.executeUpdate("UPDATE payments.payout SET settled_at = settled_at - interval '2 hours'"
+            + " WHERE settled_at IS NOT NULL AND public_id IN (" + quoted(payoutIds) + ")");
+      }
+      if (!networkTransfers.isEmpty()) {
+        st.executeUpdate("UPDATE psp_simulator.payout_transfer"
+            + " SET created_at = now() - interval '2 hours', updated_at = now() - interval '2 hours'"
+            + " WHERE public_id IN (" + quoted(networkTransfers) + ")");
       }
     }
   }
