@@ -143,7 +143,9 @@ public class SimulatorServiceImpl implements SimulatorService {
   public NetworkRefund createRefund(UUID chargePublicId, Money amount) {
     Objects.requireNonNull(chargePublicId, "chargePublicId must not be null");
     Objects.requireNonNull(amount, "amount must not be null");
-    var charge = require(chargePublicId);
+    // for update serializes the cap; the only lock order is ledger row -> charge row.
+    var charge = chargeStore.findLockedByPublicId(chargePublicId)
+        .orElseThrow(() -> new UnknownChargeException(chargePublicId));
     // Mirrors the payments module's refundable definition: in-flight (PENDING) plus
     // executed (SUCCEEDED); FAILED refunds release the remainder they held.
     var remaining = charge.amount().subtract(refundStore.totalRefunded(chargePublicId));

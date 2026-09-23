@@ -503,8 +503,14 @@ deliberate:
 - **Freeze and close reject any in-flight hold** — payouts and refunds
   share the `OutstandingHolds` guard; the M16 stranding lesson holds.
 - **`refundedTotal` counts REQUESTED and SETTLED refunds** — in-flight
-  refunds consume the refundable balance immediately; FAILED/EXPIRED
-  release it.
+  refunds consume the refundable balance immediately. Payments release
+  the hold on FAILED and EXPIRED; the network releases only on FAILED —
+  an EXPIRED refund's abandoned instruction stays PENDING forever (a
+  late `payRefund` would move money unaccounted) and keeps consuming
+  the Σ(PENDING+SUCCEEDED) ≤ charge.amount remainder, so an intent
+  whose full amount expired unread becomes un-refundable. Resolving
+  expiry through the network is deliberate future design work, and it
+  affects payouts identically.
 - **No listing beyond by-id** — the intent's `refundedTotal` and the
   derived statement are the history.
 
