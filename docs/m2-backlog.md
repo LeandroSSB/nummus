@@ -552,3 +552,27 @@ shapes generalized from the charge-shaped key. Known bounds, deliberate:
   window edges for the two new kinds; the 30s lag absorbs it, and a real
   PSP adapter still owes the settlement-timestamp contract.
 
+## From the M20 design
+
+M20 closed the M16 destination bound: payout destinations are registered,
+merchant-scoped, verified bank accounts — structured Brazilian fields with
+check-digit validation, a one-time-code verification cycle (shown once,
+hashed at rest), and registry-only payouts that derive the wire key from
+the registered fields. Known bounds, deliberate:
+
+- **No webhook events and no audit entries** for registration or
+  verification — the event catalog stays lifecycle-only and the audit log
+  stays operator-writes-only (the M15 stance).
+- **The listing is unpaginated** (50 most recent) — the standing backlog
+  thread.
+- **Check digits validate shape, not existence** — well-formed CPF/CNPJ
+  arithmetic and field shapes; no external verification exists in the
+  simulator era.
+- **No default destination** — payouts always name the account.
+- **Pre-M20 payouts keep raw keys** with a null bank-account reference;
+  revocation blocks new payouts only — in-flight payouts captured their
+  key at creation, so nothing strands.
+- **Same destination across merchants** derives the same wire key —
+  transfers do not scope by merchant; each registration carries its own
+  verification cycle.
+
