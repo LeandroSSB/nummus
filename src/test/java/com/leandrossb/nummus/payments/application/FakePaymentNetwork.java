@@ -105,14 +105,32 @@ public class FakePaymentNetwork implements PaymentNetwork {
     return refunds.get(refundPublicId);
   }
 
-  /** Withdraws a pending refund; a terminal one is returned as observed. */
+  /** The refund whose cancel races a parallel pay and loses: the attempt
+   * observes the winner's terminal state instead of withdrawing. */
+  private volatile UUID refundCancelLostToSettlement;
+
+  /** Withdraws a pending refund; a terminal one is returned as observed —
+   * no race emulation, the cancel-lost driver is configured per test. */
   @Override
   public NetworkRefund cancelChargeRefund(UUID refundPublicId) {
+    transitionRefund(refundPublicId,
+        refundPublicId.equals(refundCancelLostToSettlement)
+            ? ChargeStatus.SUCCEEDED
+            : ChargeStatus.CANCELLED);
+    return refunds.get(refundPublicId);
+  }
+
+  /** Test driver: arm the refund cancel-lost race — the cancel of this refund
+   * arrives after a parallel pay already won the status-guarded row, so the
+   * attempt observes SUCCEEDED rather than withdrawing the instruction. */
+  public void loseRefundCancelToSettlement(UUID refundPublicId) {
+    refundCancelLostToSettlement = refundPublicId;
+  }
+
+  private void transitionRefund(UUID refundPublicId, ChargeStatus target) {
     refunds.computeIfPresent(refundPublicId, (id, refund) ->
         refund.status() == ChargeStatus.PENDING
-            ? new NetworkRefund(id, refund.chargePublicId(), refund.amount(),
-                ChargeStatus.CANCELLED)
+            ? new NetworkRefund(id, refund.chargePublicId(), refund.amount(), target)
             : refund);
-    return refunds.get(refundPublicId);
   }
 }
