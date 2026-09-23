@@ -55,6 +55,11 @@ class SimulatorController {
     return TransferResponse.from(simulator.failTransfer(id));
   }
 
+  @PostMapping("/transfers/{id}/cancel")
+  TransferResponse cancelTransfer(@PathVariable UUID id) {
+    return TransferResponse.from(simulator.cancelTransfer(id));
+  }
+
   @GetMapping("/refunds/{id}")
   RefundResponse getRefund(@PathVariable UUID id) {
     return RefundResponse.from(simulator.getRefund(id));
@@ -68,5 +73,10 @@ class SimulatorController {
   @PostMapping("/refunds/{id}/fail")
   RefundResponse failRefund(@PathVariable UUID id) {
     return RefundResponse.from(simulator.failRefund(id));
+  }
+
+  @PostMapping("/refunds/{id}/cancel")
+  RefundResponse cancelRefund(@PathVariable UUID id) {
+    return RefundResponse.from(simulator.cancelRefund(id));
   }
 }

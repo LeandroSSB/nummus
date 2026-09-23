@@ -63,6 +63,18 @@ public class FakePaymentNetwork implements PaymentNetwork {
     return transfers.get(transferPublicId);
   }
 
+  /** Withdraws a pending transfer; a terminal one is returned as observed —
+   * no race emulation, the cancel-lost driver is configured per test. */
+  @Override
+  public NetworkTransfer cancelPayoutTransfer(UUID transferPublicId) {
+    transfers.computeIfPresent(transferPublicId, (id, transfer) ->
+        transfer.status() == ChargeStatus.PENDING
+            ? new NetworkTransfer(id, transfer.amount(), transfer.destinationBankKey(),
+                ChargeStatus.CANCELLED)
+            : transfer);
+    return transfers.get(transferPublicId);
+  }
+
   @Override
   public NetworkRefund createChargeRefund(UUID chargePublicId, Money amount) {
     var refund = new NetworkRefund(UUID.randomUUID(), chargePublicId, amount,
@@ -73,6 +85,17 @@ public class FakePaymentNetwork implements PaymentNetwork {
 
   @Override
   public NetworkRefund getChargeRefund(UUID refundPublicId) {
+    return refunds.get(refundPublicId);
+  }
+
+  /** Withdraws a pending refund; a terminal one is returned as observed. */
+  @Override
+  public NetworkRefund cancelChargeRefund(UUID refundPublicId) {
+    refunds.computeIfPresent(refundPublicId, (id, refund) ->
+        refund.status() == ChargeStatus.PENDING
+            ? new NetworkRefund(id, refund.chargePublicId(), refund.amount(),
+                ChargeStatus.CANCELLED)
+            : refund);
     return refunds.get(refundPublicId);
   }
 }

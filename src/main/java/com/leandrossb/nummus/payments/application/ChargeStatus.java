@@ -4,5 +4,9 @@ package com.leandrossb.nummus.payments.application;
 public enum ChargeStatus {
   PENDING,
   SUCCEEDED,
-  FAILED
+  FAILED,
+  /** Terminal withdrawal of an in-flight instruction before it executed —
+   * reached only by the expiry resolver or an operator cancel; charges never
+   * enter this state. */
+  CANCELLED
 }

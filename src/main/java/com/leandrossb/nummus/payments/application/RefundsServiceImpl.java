@@ -133,7 +133,7 @@ public class RefundsServiceImpl implements RefundsService {
     }
     return switch (networkRefund.status()) {
       case PENDING -> refund;
-      case FAILED -> {
+      case CANCELLED, FAILED -> {
         var posted = returnLegs(merchantPublicId, refund);
         if (!repository.markFailed(publicId, posted.publicId())) {
           throw new ConcurrentRefundException(publicId);

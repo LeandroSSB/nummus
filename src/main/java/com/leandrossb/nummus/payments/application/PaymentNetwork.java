@@ -18,7 +18,17 @@ public interface PaymentNetwork {
 
   NetworkTransfer getPayoutTransfer(UUID transferPublicId);
 
+  /** Withdraws a pending payout transfer. Returns the instruction's post-attempt
+   * state: CANCELLED when the cancel won, the winner's terminal state when a
+   * concurrent settlement won the status-guarded row, the observed state when
+   * already terminal. */
+  NetworkTransfer cancelPayoutTransfer(UUID transferPublicId);
+
   NetworkRefund createChargeRefund(UUID chargePublicId, Money amount);
 
   NetworkRefund getChargeRefund(UUID refundPublicId);
+
+  /** Withdraws a pending charge refund; post-attempt semantics as
+   * {@link #cancelPayoutTransfer(UUID)}. */
+  NetworkRefund cancelChargeRefund(UUID refundPublicId);
 }

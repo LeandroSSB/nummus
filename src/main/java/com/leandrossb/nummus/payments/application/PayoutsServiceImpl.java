@@ -123,7 +123,7 @@ public class PayoutsServiceImpl implements PayoutsService {
     }
     return switch (transfer.status()) {
       case PENDING -> payout;
-      case FAILED -> {
+      case CANCELLED, FAILED -> {
         var posted = returnLegs(merchantPublicId, payout);
         if (!repository.markFailed(publicId, posted.publicId())) {
           throw new ConcurrentPayoutException(publicId);
