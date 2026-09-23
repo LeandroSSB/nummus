@@ -55,8 +55,9 @@ class OperatorEventCatalogTest extends IntegrationTestBase {
             .content("{\"url\":\"" + ApiDrivers.loopbackUrl("catalog")
                 + "\",\"eventTypes\":[\"conciliation.report_open\"]}"))
         .andExpect(status().isBadRequest());
-    // The merchant catalog is the union of intent and payout types: a payout
-    // type registers exactly where the operator surface above rejects it.
+    // The merchant catalog is the union of intent, payout, and refund types:
+    // a payout or refund type registers exactly where the operator surface
+    // above rejects the payment type.
     mockMvc.perform(post("/v1/webhook-endpoints")
             .header("Authorization", "Bearer " + ApiDrivers.createMerchantAndGetKey(
                 mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Payout Catalog Merchant"))
@@ -64,6 +65,14 @@ class OperatorEventCatalogTest extends IntegrationTestBase {
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"url\":\"" + ApiDrivers.loopbackUrl("payout-catalog")
                 + "\",\"eventTypes\":[\"payout.settled\",\"payout.failed\",\"payout.expired\"]}"))
+        .andExpect(status().isCreated());
+    mockMvc.perform(post("/v1/webhook-endpoints")
+            .header("Authorization", "Bearer " + ApiDrivers.createMerchantAndGetKey(
+                mockMvc, ApiDrivers.operatorAuth(operatorKeys), "Refund Catalog Merchant"))
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"url\":\"" + ApiDrivers.loopbackUrl("refund-catalog")
+                + "\",\"eventTypes\":[\"refund.settled\",\"refund.failed\",\"refund.expired\"]}"))
         .andExpect(status().isCreated());
   }
 

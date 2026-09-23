@@ -14,6 +14,10 @@ public interface ChargeStore {
 
   Optional<SimulatedCharge> findByPublicId(UUID publicId);
 
+  /** Row-locked read (`for update`) — the over-refund guard's serialization
+   *  point, the LedgerRepository.lockAccount precedent returning the row. */
+  Optional<SimulatedCharge> findLockedByPublicId(UUID publicId);
+
   /** @return false when the charge does not exist or is not PENDING. */
   boolean transition(UUID publicId, ChargeStatus target);
 

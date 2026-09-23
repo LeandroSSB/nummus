@@ -1,10 +1,9 @@
 package com.leandrossb.nummus.payments.infrastructure;
 
 import com.leandrossb.nummus.ledger.domain.Money;
-import com.leandrossb.nummus.payments.application.PayoutsRepository;
-import com.leandrossb.nummus.payments.domain.Payout;
-import com.leandrossb.nummus.payments.domain.PayoutStatus;
-import java.math.BigDecimal;
+import com.leandrossb.nummus.payments.application.RefundsRepository;
+import com.leandrossb.nummus.payments.domain.Refund;
+import com.leandrossb.nummus.payments.domain.RefundStatus;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -17,61 +16,71 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public class JdbcClientPayoutsRepository implements PayoutsRepository {
+public class JdbcClientRefundsRepository implements RefundsRepository {
+
+  private static final Currency BRL = Currency.getInstance("BRL");
 
   private final JdbcClient jdbc;
 
-  public JdbcClientPayoutsRepository(JdbcClient jdbc) {
+  public JdbcClientRefundsRepository(JdbcClient jdbc) {
     this.jdbc = jdbc;
   }
 
   @Override
-  public Payout insert(Payout payout) {
+  public Refund insert(Refund refund) {
     jdbc.sql("""
-        insert into payments.payout
-          (public_id, account_public_id, amount, destination_bank_key, status,
-           transfer_public_id, expires_at, created_at, request_transaction_public_id)
-        values (:publicId, :accountPublicId, :amount, :destinationBankKey, :status,
-                :transferPublicId, :expiresAt, :createdAt, :requestTransactionPublicId)
+        insert into payments.refund
+          (public_id, intent_public_id, amount, status, network_refund_public_id,
+           expires_at, created_at, hold_transaction_public_id)
+        values (:publicId, :intentPublicId, :amount, :status, :networkRefundPublicId,
+                :expiresAt, :createdAt, :holdTransactionPublicId)
         """)
-        .param("publicId", payout.publicId())
-        .param("accountPublicId", payout.accountPublicId())
-        .param("amount", payout.amount().amount())
-        .param("destinationBankKey", payout.destinationBankKey())
-        .param("status", payout.status().name())
-        .param("transferPublicId", payout.transferPublicId())
-        .param("expiresAt", toOffsetDateTime(payout.expiresAt()))
-        .param("createdAt", toOffsetDateTime(payout.createdAt()))
-        .param("requestTransactionPublicId", payout.requestTransactionPublicId())
+        .param("publicId", refund.publicId())
+        .param("intentPublicId", refund.intentPublicId())
+        .param("amount", refund.amount().amount())
+        .param("status", refund.status().name())
+        .param("networkRefundPublicId", refund.networkRefundPublicId())
+        .param("expiresAt", toOffsetDateTime(refund.expiresAt()))
+        .param("createdAt", toOffsetDateTime(refund.createdAt()))
+        .param("holdTransactionPublicId", refund.holdTransactionPublicId())
         .update();
-    return payout;
+    return refund;
   }
 
   @Override
-  public Optional<Payout> findByPublicId(UUID publicId) {
+  public Optional<Refund> findByPublicId(UUID publicId) {
     return jdbc.sql("""
-        select public_id, account_public_id, amount, destination_bank_key, status,
-               transfer_public_id, expires_at, created_at, settled_at, fee_amount,
-               request_transaction_public_id, execute_transaction_public_id,
-               return_transaction_public_id
-        from payments.payout where public_id = :publicId
+        select public_id, intent_public_id, amount, status, network_refund_public_id,
+               expires_at, created_at, settled_at, hold_transaction_public_id,
+               execute_transaction_public_id, return_transaction_public_id
+        from payments.refund where public_id = :publicId
         """)
         .param("publicId", publicId)
-        .query((rs, i) -> mapPayout(rs))
+        .query((rs, i) -> mapRefund(rs))
         .optional();
   }
 
   @Override
-  public boolean markSettled(UUID publicId, UUID executeTransactionPublicId, Instant settledAt,
-      Money feeAmount) {
+  public Money refundedTotal(UUID intentPublicId) {
+    return jdbc.sql("""
+        select coalesce(sum(amount), 0) from payments.refund
+        where intent_public_id = :intentPublicId
+          and status in ('REQUESTED', 'SETTLED')
+        """)
+        .param("intentPublicId", intentPublicId)
+        .query((rs, i) -> Money.of(rs.getBigDecimal(1), BRL))
+        .single();
+  }
+
+  @Override
+  public boolean markSettled(UUID publicId, UUID executeTransactionPublicId, Instant settledAt) {
     int updated = jdbc.sql("""
-        update payments.payout
-        set status = 'SETTLED', settled_at = :settledAt, fee_amount = :fee,
+        update payments.refund
+        set status = 'SETTLED', settled_at = :settledAt,
             execute_transaction_public_id = :executeTx
         where public_id = :publicId and status = 'REQUESTED'
         """)
         .param("settledAt", toOffsetDateTime(settledAt))
-        .param("fee", feeAmount == null ? null : feeAmount.amount())
         .param("executeTx", executeTransactionPublicId)
         .param("publicId", publicId)
         .update();
@@ -92,7 +101,7 @@ public class JdbcClientPayoutsRepository implements PayoutsRepository {
    *  link, win only while the row is still REQUESTED. */
   private boolean markReturned(UUID publicId, String target, UUID returnTransactionPublicId) {
     int updated = jdbc.sql("""
-        update payments.payout
+        update payments.refund
         set status = :status, return_transaction_public_id = :returnTx
         where public_id = :publicId and status = 'REQUESTED'
         """)
@@ -103,21 +112,18 @@ public class JdbcClientPayoutsRepository implements PayoutsRepository {
     return updated == 1;
   }
 
-  private Payout mapPayout(ResultSet rs) throws SQLException {
+  private Refund mapRefund(ResultSet rs) throws SQLException {
     OffsetDateTime settledAt = rs.getObject("settled_at", OffsetDateTime.class);
-    BigDecimal feeAmount = rs.getBigDecimal("fee_amount");
-    return new Payout(
+    return new Refund(
         rs.getObject("public_id", UUID.class),
-        rs.getObject("account_public_id", UUID.class),
+        rs.getObject("intent_public_id", UUID.class),
         Money.of(rs.getBigDecimal("amount"), Currency.getInstance("BRL")),
-        PayoutStatus.valueOf(rs.getString("status")),
-        rs.getString("destination_bank_key"),
-        rs.getObject("transfer_public_id", UUID.class),
+        RefundStatus.valueOf(rs.getString("status")),
+        rs.getObject("network_refund_public_id", UUID.class),
         rs.getObject("expires_at", OffsetDateTime.class).toInstant(),
         rs.getObject("created_at", OffsetDateTime.class).toInstant(),
         settledAt == null ? null : settledAt.toInstant(),
-        feeAmount == null ? null : Money.of(feeAmount, Currency.getInstance("BRL")),
-        rs.getObject("request_transaction_public_id", UUID.class),
+        rs.getObject("hold_transaction_public_id", UUID.class),
         rs.getObject("execute_transaction_public_id", UUID.class),
         rs.getObject("return_transaction_public_id", UUID.class));
   }

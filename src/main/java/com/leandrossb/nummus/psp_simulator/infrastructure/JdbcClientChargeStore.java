@@ -52,6 +52,17 @@ public class JdbcClientChargeStore implements ChargeStore {
   }
 
   @Override
+  public Optional<SimulatedCharge> findLockedByPublicId(UUID publicId) {
+    return jdbc.sql("""
+        select public_id, amount, status, created_at, updated_at
+        from psp_simulator.charge where public_id = :publicId for update
+        """)
+        .param("publicId", publicId)
+        .query((rs, i) -> mapCharge(rs))
+        .optional();
+  }
+
+  @Override
   public boolean transition(UUID publicId, ChargeStatus target) {
     int updated = jdbc.sql("""
         update psp_simulator.charge set status = :status, updated_at = now()

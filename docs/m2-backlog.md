@@ -486,3 +486,31 @@ Known bounds, deliberate:
   request time; an operator changing the fee between request and execution
   is attributed in the M14 history.
 
+## From the M17 design
+
+M17 closed the payment cycle: settled intents refund fully or partially,
+never beyond the gross, with the settlement fee retained. Refunds hold
+merchant funds in the journal under the same ledger-account row lock payouts
+take — one serialization point for every hold on an account. Known bounds,
+deliberate:
+
+- **Fees are never refunded** — the payer receives the refund's full value
+  and the merchant is debited the same; revenue never moves.
+- **Refunds are absent from conciliation** — as with payouts; external
+  statements cover charges only.
+- **No refund time window** — a settled, not-fully-refunded intent stays
+  refundable indefinitely.
+- **Freeze and close reject any in-flight hold** — payouts and refunds
+  share the `OutstandingHolds` guard; the M16 stranding lesson holds.
+- **`refundedTotal` counts REQUESTED and SETTLED refunds** — in-flight
+  refunds consume the refundable balance immediately. Payments release
+  the hold on FAILED and EXPIRED; the network releases only on FAILED —
+  an EXPIRED refund's abandoned instruction stays PENDING forever (a
+  late `payRefund` would move money unaccounted) and keeps consuming
+  the Σ(PENDING+SUCCEEDED) ≤ charge.amount remainder, so an intent
+  whose full amount expired unread becomes un-refundable. Resolving
+  expiry through the network is deliberate future design work, and it
+  affects payouts identically.
+- **No listing beyond by-id** — the intent's `refundedTotal` and the
+  derived statement are the history.
+

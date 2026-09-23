@@ -13,10 +13,6 @@ public interface PayoutsRepository {
 
   Optional<Payout> findByPublicId(UUID publicId);
 
-  /** True while any payout of the account is still REQUESTED — the in-flight
-   *  signal account lifecycle transitions guard on. */
-  boolean existsRequestedByAccount(UUID accountPublicId);
-
   /** Settles a REQUESTED payout, stamping the execution link, the settled-at
    *  instant, and the fee fact. False when the row is no longer REQUESTED —
    *  the caller lost the race. */

@@ -27,14 +27,21 @@ import com.leandrossb.nummus.ledger.domain.UnknownAccountException;
 import com.leandrossb.nummus.ledger.domain.UnknownTransactionException;
 import com.leandrossb.nummus.payments.domain.ChargeAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.ConcurrentPayoutException;
+import com.leandrossb.nummus.payments.domain.ConcurrentRefundException;
 import com.leandrossb.nummus.payments.domain.ConcurrentSettlementException;
 import com.leandrossb.nummus.payments.domain.InsufficientFundsException;
+import com.leandrossb.nummus.payments.domain.IntentNotRefundableException;
+import com.leandrossb.nummus.payments.domain.RefundAmountMismatchException;
+import com.leandrossb.nummus.payments.domain.RefundExceedsRemainingException;
 import com.leandrossb.nummus.payments.domain.TransferAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
 import com.leandrossb.nummus.payments.domain.UnknownPayoutException;
 import com.leandrossb.nummus.psp_simulator.domain.ChargeNotPendingException;
+import com.leandrossb.nummus.psp_simulator.domain.RefundExceedsChargeException;
+import com.leandrossb.nummus.psp_simulator.domain.RefundNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.TransferNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownChargeException;
+import com.leandrossb.nummus.psp_simulator.domain.UnknownRefundException;
 import com.leandrossb.nummus.psp_simulator.domain.UnknownTransferException;
 import com.leandrossb.nummus.webhooks.application.UnsafeWebhookUrlException;
 import com.leandrossb.nummus.webhooks.domain.UnknownWebhookDeliveryException;
@@ -65,6 +72,9 @@ public class GlobalExceptionHandler {
       UnknownWebhookDeliveryException.class,
       UnknownConciliationReportException.class, UnknownMerchantException.class,
       UnknownApiKeyException.class, UnknownTransferException.class,
+      UnknownRefundException.class,
+      // The payments-side twin shares the simulator's name, not its package.
+      com.leandrossb.nummus.payments.domain.UnknownRefundException.class,
       UnknownPayoutException.class})
   public ProblemDetail notFound(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
@@ -98,7 +108,9 @@ public class GlobalExceptionHandler {
   @ExceptionHandler({PaymentAccountNotActiveException.class, AccountNotActiveException.class,
       PayoutsInFlightException.class, TransactionAlreadyReversedException.class,
       ChargeNotPendingException.class, TransferNotPendingException.class,
-      ConcurrentSettlementException.class, ConcurrentPayoutException.class})
+      RefundNotPendingException.class, IntentNotRefundableException.class,
+      ConcurrentSettlementException.class, ConcurrentPayoutException.class,
+      ConcurrentRefundException.class})
   public ProblemDetail conflict(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }
@@ -143,7 +155,18 @@ public class GlobalExceptionHandler {
     return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
   }
 
-  @ExceptionHandler({ChargeAmountMismatchException.class, TransferAmountMismatchException.class})
+  @ExceptionHandler(RefundExceedsChargeException.class)
+  ProblemDetail refundExceedsCharge(RefundExceedsChargeException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
+  }
+
+  @ExceptionHandler(RefundExceedsRemainingException.class)
+  ProblemDetail refundExceedsRemaining(RefundExceedsRemainingException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
+  }
+
+  @ExceptionHandler({ChargeAmountMismatchException.class, TransferAmountMismatchException.class,
+      RefundAmountMismatchException.class})
   ProblemDetail invariantBreach(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
   }
