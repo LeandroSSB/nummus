@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.payments.application;
 
+import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.domain.CreateRefundCommand;
 import com.leandrossb.nummus.payments.domain.Refund;
 import java.util.UUID;
@@ -22,4 +23,10 @@ public interface RefundsService {
    *  network side moved settles or returns its hold; expiry returns the hold
    *  without consulting the network. Terminal rows are returned untouched. */
   Refund get(UUID merchantPublicId, UUID publicId);
+
+  /** Sum of the intent's holding (REQUESTED) and executed (SETTLED) refunds —
+   *  the term every further refund request is capped against. FAILED and
+   *  EXPIRED refunds released their share and drop out; an intent without
+   *  refunds sums to zero. */
+  Money refundedTotal(UUID intentPublicId);
 }

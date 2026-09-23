@@ -191,7 +191,8 @@ public class RefundsServiceImpl implements RefundsService {
   /** Sum of the holding (REQUESTED) and executed (SETTLED) refunds of the
    *  intent — the payments-side mirror of the network's own never-over-refund
    *  cap; FAILED and EXPIRED refunds release the remainder they held. */
-  private Money refundedTotal(UUID intentPublicId) {
+  @Override
+  public Money refundedTotal(UUID intentPublicId) {
     return repository.refundedTotal(intentPublicId);
   }
 }
