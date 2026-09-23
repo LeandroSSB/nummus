@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.leandrossb.nummus.accounts.application.AccountsService;
 import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
 import com.leandrossb.nummus.ledger.domain.Money;
+import com.leandrossb.nummus.merchants.application.BankAccountsService;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.application.PaymentsService;
@@ -78,6 +79,9 @@ class ConciliationRestApiTest extends IntegrationTestBase {
   @Autowired
   private OperatorKeysService operatorKeys;
 
+  @Autowired
+  private BankAccountsService bankAccounts;
+
   private String operatorAuth;
 
   /** One operator key per test — conciliation is operator-gated. */
@@ -110,8 +114,10 @@ class ConciliationRestApiTest extends IntegrationTestBase {
     networkCharges.add(intent.chargePublicId());
     simulator.pay(intent.chargePublicId());
     payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
     var payout = payouts.create(SeedMerchant.PUBLIC_ID,
-        new CreatePayoutCommand(account.publicId(), Money.ofBrl(amount), "bank-key-1", null));
+        new CreatePayoutCommand(account.publicId(), Money.ofBrl(amount),
+            bankAccount.publicId(), null));
     simulator.payTransfer(payout.transferPublicId());
     paidTransfers.add(payout.transferPublicId());
     var settled = payouts.get(SeedMerchant.PUBLIC_ID, payout.publicId());
@@ -130,8 +136,10 @@ class ConciliationRestApiTest extends IntegrationTestBase {
     networkCharges.add(intent.chargePublicId());
     simulator.pay(intent.chargePublicId());
     payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
     var payout = payouts.create(SeedMerchant.PUBLIC_ID,
-        new CreatePayoutCommand(account.publicId(), Money.ofBrl(amount), "bank-key-1", null));
+        new CreatePayoutCommand(account.publicId(), Money.ofBrl(amount),
+            bankAccount.publicId(), null));
     simulator.payTransfer(payout.transferPublicId());
     paidTransfers.add(payout.transferPublicId());
     return payout;

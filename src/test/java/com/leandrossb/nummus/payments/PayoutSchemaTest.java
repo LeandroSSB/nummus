@@ -35,12 +35,15 @@ class PayoutSchemaTest extends IntegrationTestBase {
           + UUID.randomUUID() + "', 10.0000, 'probe-bank', '" + UUID.randomUUID()
           + "', now() + interval '30 minutes', '" + UUID.randomUUID() + "')"));
       try (ResultSet rs = st.executeQuery("select status, fee_amount, settled_at, "
-          + "created_at is not null as stamped from payments.payout "
+          + "bank_account_public_id, created_at is not null as stamped from payments.payout "
           + "where public_id = '" + payoutId + "'")) {
         assertTrue(rs.next());
         assertEquals("REQUESTED", rs.getString("status"));
         assertNull(rs.getBigDecimal("fee_amount"));
         assertNull(rs.getObject("settled_at"));
+        // The registry reference is nullable by design: pre-M20 rows and raw
+        // probes keep a null reference.
+        assertNull(rs.getObject("bank_account_public_id"));
         assertTrue(rs.getBoolean("stamped"));
       }
       assertEquals(1, st.executeUpdate("update payments.payout set status = 'SETTLED', "

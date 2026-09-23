@@ -15,6 +15,7 @@ import com.leandrossb.nummus.ledger.domain.AccountStatus;
 import com.leandrossb.nummus.ledger.domain.AccountType;
 import com.leandrossb.nummus.ledger.domain.LedgerAccount;
 import com.leandrossb.nummus.ledger.domain.Money;
+import com.leandrossb.nummus.merchants.application.FakeBankAccountsService;
 import com.leandrossb.nummus.merchants.application.FakeMerchantsService;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.merchants.application.SeedMerchant;
@@ -23,6 +24,7 @@ import com.leandrossb.nummus.payments.domain.CreatePayoutCommand;
 import com.leandrossb.nummus.payments.domain.PayoutStatus;
 import java.time.Instant;
 import java.util.Currency;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -41,12 +43,14 @@ class PayoutsServiceImplTest {
   private final FakePaymentNetwork network = new FakePaymentNetwork();
   private final InMemoryPaymentsRepository intentRepo = new InMemoryPaymentsRepository();
   private final MerchantsService merchants = new FakeMerchantsService();
+  private final FakeBankAccountsService bankAccounts = new FakeBankAccountsService();
   private final PaymentsService payments =
       new PaymentsServiceImpl(ledger, accounts, network, intentRepo, event -> { }, merchants);
   private final InMemoryPayoutsRepository payoutRepo = new InMemoryPayoutsRepository();
   // Outbox publishing is covered by the integration suites; unit scope ignores events.
   private final PayoutsService payouts =
-      new PayoutsServiceImpl(ledger, accounts, network, payoutRepo, event -> { }, merchants);
+      new PayoutsServiceImpl(ledger, accounts, network, payoutRepo, event -> { }, merchants,
+          bankAccounts);
 
   PayoutsServiceImplTest() {
     // Test-scope composition layer: mirror the V5/V18 seeds so the pooled
@@ -67,8 +71,10 @@ class PayoutsServiceImplTest {
         new CreateIntentCommand(account.publicId(), Money.ofBrl("100.0000"), null));
     network.succeed(intent.chargePublicId());
     payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
+    var bankAccount = UUID.randomUUID();
+    bankAccounts.armVerified(bankAccount, "bank.cancel-lost-01");
     var payout = payouts.create(SeedMerchant.PUBLIC_ID, new CreatePayoutCommand(
-        account.publicId(), Money.ofBrl("30.0000"), "bank.cancel-lost-01", null));
+        account.publicId(), Money.ofBrl("30.0000"), bankAccount, null));
 
     // The read is past expiry while the instruction still polls PENDING; the
     // armed fake has the cancel land after a parallel pay already won the

@@ -15,6 +15,7 @@ import com.leandrossb.nummus.ledger.application.Ledger;
 import com.leandrossb.nummus.ledger.domain.Direction;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.PostedPosting;
+import com.leandrossb.nummus.merchants.application.BankAccountsService;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
@@ -38,6 +39,7 @@ import com.leandrossb.nummus.payments.domain.RefundExceedsRemainingException;
 import com.leandrossb.nummus.payments.domain.RefundStatus;
 import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -83,6 +85,8 @@ class RefundRequestTest extends IntegrationTestBase {
   private PaymentsService payments;
   @Autowired
   private PayoutsService payouts;
+  @Autowired
+  private BankAccountsService bankAccounts;
   @Autowired
   private AccountsService accountsService;
   @Autowired
@@ -201,9 +205,10 @@ class RefundRequestTest extends IntegrationTestBase {
   void insufficientFundsIsRejectedBeforeAnyPosting() throws Exception {
     var intent = settledIntent("100.0000");
     var account = accountsService.get(SeedMerchant.PUBLIC_ID, intent.accountPublicId());
-    String bankKey = "bank.refund-funds-" + UUID.randomUUID();
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts,
+        SeedMerchant.PUBLIC_ID);
     register(payouts.create(SeedMerchant.PUBLIC_ID, new CreatePayoutCommand(
-        account.publicId(), Money.ofBrl("70.0000"), bankKey, null)));
+        account.publicId(), Money.ofBrl("70.0000"), bankAccount.publicId(), null)));
     long journalBefore = count("select count(*) from ledger.journal_transaction");
 
     // The shared lock's other tenant: the payout reservation already drew the
@@ -334,7 +339,8 @@ class RefundRequestTest extends IntegrationTestBase {
   void mixedPayoutsAndRefundsLandExactlyOneHold() throws Exception {
     var intent = settledIntent("100.0000");
     var account = accountsService.get(SeedMerchant.PUBLIC_ID, intent.accountPublicId());
-    String bankKey = "bank.refund-mixed-" + UUID.randomUUID();
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts,
+        SeedMerchant.PUBLIC_ID);
     int requests = 4;
     ExecutorService pool = Executors.newFixedThreadPool(requests);
     try {
@@ -344,7 +350,7 @@ class RefundRequestTest extends IntegrationTestBase {
         futures.add(pool.submit(() -> {
           if (payout) {
             return (Object) payouts.create(SeedMerchant.PUBLIC_ID, new CreatePayoutCommand(
-                account.publicId(), Money.ofBrl("70.0000"), bankKey, null));
+                account.publicId(), Money.ofBrl("70.0000"), bankAccount.publicId(), null));
           }
           return (Object) refunds.create(SeedMerchant.PUBLIC_ID, intent.publicId(),
               new CreateRefundCommand(Money.ofBrl("70.0000"), null));

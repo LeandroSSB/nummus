@@ -60,7 +60,8 @@ public class InMemoryPayoutsRepository implements PayoutsRepository {
       return false;
     }
     payouts.put(publicId, new Payout(current.publicId(), current.accountPublicId(),
-        current.amount(), target, current.destinationBankKey(), current.transferPublicId(),
+        current.amount(), target, current.destinationBankKey(), current.bankAccountPublicId(),
+        current.transferPublicId(),
         current.expiresAt(), current.createdAt(), settledAt,
         target == PayoutStatus.SETTLED ? feeAmount : null, current.requestTransactionPublicId(),
         executeTx, returnTx));
@@ -71,7 +72,8 @@ public class InMemoryPayoutsRepository implements PayoutsRepository {
   public void agePastExpiry(UUID publicId) {
     payouts.computeIfPresent(publicId, (id, payout) -> new Payout(payout.publicId(),
         payout.accountPublicId(), payout.amount(), payout.status(), payout.destinationBankKey(),
-        payout.transferPublicId(), Instant.now().minusSeconds(1), payout.createdAt(),
+        payout.bankAccountPublicId(), payout.transferPublicId(),
+        Instant.now().minusSeconds(1), payout.createdAt(),
         payout.settledAt(), payout.feeAmount(), payout.requestTransactionPublicId(),
         payout.executeTransactionPublicId(), payout.returnTransactionPublicId()));
   }
