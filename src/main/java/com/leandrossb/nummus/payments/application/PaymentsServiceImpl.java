@@ -103,7 +103,7 @@ public class PaymentsServiceImpl implements PaymentsService {
     }
     return switch (charge.status()) {
       case PENDING -> intent;
-      case FAILED -> {
+      case CANCELLED, FAILED -> {
         // Publish only on a won transition; a racing winner already published
         // its event for the terminal state — the loser returns it silently.
         if (repository.transitionToFailed(publicId)) {

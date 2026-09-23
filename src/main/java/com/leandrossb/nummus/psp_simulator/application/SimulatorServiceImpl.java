@@ -120,6 +120,12 @@ public class SimulatorServiceImpl implements SimulatorService {
     return transitionTransfer(publicId, ChargeStatus.FAILED);
   }
 
+  @Override
+  @Transactional
+  public NetworkTransfer cancelTransfer(UUID publicId) {
+    return transitionTransfer(publicId, ChargeStatus.CANCELLED);
+  }
+
   private NetworkTransfer transitionTransfer(UUID publicId, ChargeStatus target) {
     requireTransfer(publicId);
     if (!transferStore.transition(publicId, target)) {
@@ -173,6 +179,12 @@ public class SimulatorServiceImpl implements SimulatorService {
   @Transactional
   public NetworkRefund failRefund(UUID publicId) {
     return transitionRefund(publicId, ChargeStatus.FAILED);
+  }
+
+  @Override
+  @Transactional
+  public NetworkRefund cancelRefund(UUID publicId) {
+    return transitionRefund(publicId, ChargeStatus.CANCELLED);
   }
 
   private NetworkRefund transitionRefund(UUID publicId, ChargeStatus target) {

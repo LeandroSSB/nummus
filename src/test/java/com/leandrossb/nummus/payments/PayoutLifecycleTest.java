@@ -29,6 +29,7 @@ import com.leandrossb.nummus.payments.domain.Payout;
 import com.leandrossb.nummus.payments.domain.PayoutStatus;
 import com.leandrossb.nummus.payments.domain.UnknownPayoutException;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
+import com.leandrossb.nummus.psp_simulator.domain.TransferNotPendingException;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
@@ -230,13 +231,124 @@ class PayoutLifecycleTest extends IntegrationTestBase {
       assertTrue(eventPayload(st, "payout.expired", payout.publicId()).contains("\"status\":\"EXPIRED\""));
     }
 
-    // A transfer that succeeds only after expiry changes nothing: expiry is
-    // terminal and the early return never polls the network again.
-    simulator.payTransfer(payout.transferPublicId());
+    // The resolver cancelled the instruction, so a late pay is impossible: the
+    // network's status guard rejects it — no unaccounted money can move after
+    // expiry resolution. The terminal row itself is immune to re-reads.
+    assertThrows(TransferNotPendingException.class,
+        () -> simulator.payTransfer(payout.transferPublicId()));
     var still = payouts.get(SeedMerchant.PUBLIC_ID, payout.publicId());
     assertEquals(PayoutStatus.EXPIRED, still.status());
     assertNull(still.executeTransactionPublicId());
     assertEquals(expired.returnTransactionPublicId(), still.returnTransactionPublicId());
+  }
+
+  @Test
+  void expiredPayoutWithPendingTransferCancelsAndReturns() throws Exception {
+    var account = fundedAccount(SeedMerchant.PUBLIC_ID, "100.0000");
+    var reserveBefore = ledger.balance(PayoutReservedAccount.PUBLIC_ID);
+    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000", "bank.expire-02");
+
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      st.executeUpdate("UPDATE payments.payout SET expires_at = now() - interval '1 second' "
+          + "WHERE public_id = '" + payout.publicId() + "'");
+    }
+    var expired = payouts.get(SeedMerchant.PUBLIC_ID, payout.publicId());
+
+    assertEquals(PayoutStatus.EXPIRED, expired.status());
+    // The hold comes home whole and the pooled reserve reads its pre-request
+    // balance (delta counting — the container is shared).
+    assertEquals(0, accountsService.balance(SeedMerchant.PUBLIC_ID, account.publicId())
+        .compareTo(Money.ofBrl("100.0000")));
+    assertEquals(0, ledger.balance(PayoutReservedAccount.PUBLIC_ID).compareTo(reserveBefore));
+    assertNotNull(expired.returnTransactionPublicId());
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      assertTrue(eventPayload(st, "payout.expired", payout.publicId())
+          .contains("\"status\":\"EXPIRED\""));
+      // The resolver did not abandon the instruction: it withdrew it, and the
+      // network row is terminal-cancelled.
+      try (ResultSet rs = st.executeQuery("select status from psp_simulator.payout_transfer"
+          + " where public_id = '" + payout.transferPublicId() + "'")) {
+        assertTrue(rs.next());
+        assertEquals("CANCELLED", rs.getString(1));
+      }
+    }
+
+    // The reservation lifecycle is fully reusable: the returned funds back a
+    // fresh payout of the same amount end-to-end.
+    var fresh = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000",
+        "bank.expire-02.fresh");
+    simulator.payTransfer(fresh.transferPublicId());
+    var settled = payouts.get(SeedMerchant.PUBLIC_ID, fresh.publicId());
+    assertEquals(PayoutStatus.SETTLED, settled.status());
+    assertNotNull(settled.executeTransactionPublicId());
+    assertEquals(0, accountsService.balance(SeedMerchant.PUBLIC_ID, account.publicId())
+        .compareTo(Money.ofBrl("70.0000")));
+  }
+
+  @Test
+  void expiredPayoutWithExecutedTransferSettles() throws Exception {
+    var account = fundedAccount(SeedMerchant.PUBLIC_ID, "100.0000");
+    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000", "bank.expire-03");
+
+    // Deterministic SUCCEEDED-at-expiry: the pay lands first, THEN the row is
+    // backdated — the resolution poll observes an executed instruction.
+    simulator.payTransfer(payout.transferPublicId());
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      st.executeUpdate("UPDATE payments.payout SET expires_at = now() - interval '1 second' "
+          + "WHERE public_id = '" + payout.publicId() + "'");
+    }
+    var settled = payouts.get(SeedMerchant.PUBLIC_ID, payout.publicId());
+
+    // The money physically left: the payout settles even past expiry.
+    assertEquals(PayoutStatus.SETTLED, settled.status());
+    assertNotNull(settled.executeTransactionPublicId());
+    assertNull(settled.returnTransactionPublicId());
+    // settledAt is the resolution instant, stamped after the backdated expiry —
+    // the settle was decided by the poll, not by the request clock.
+    assertNotNull(settled.settledAt());
+    assertTrue(settled.settledAt().isAfter(settled.expiresAt()), settled.settledAt().toString());
+    var execution = ledger.getTransaction(settled.executeTransactionPublicId());
+    assertEquals("payout " + payout.publicId() + " execute", execution.memo());
+    assertEquals(2, execution.postings().size(), execution.postings().toString());
+    assertLeg(execution.postings(), PayoutReservedAccount.PUBLIC_ID, Direction.DEBIT, "30.0000");
+    assertLeg(execution.postings(), PaymentClearingAccount.PUBLIC_ID, Direction.CREDIT, "30.0000");
+    assertEquals(0, accountsService.balance(SeedMerchant.PUBLIC_ID, account.publicId())
+        .compareTo(Money.ofBrl("70.0000")));
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      assertTrue(eventPayload(st, "payout.settled", payout.publicId())
+          .contains("\"status\":\"SETTLED\""));
+    }
+  }
+
+  @Test
+  void expiredPayoutWithFailedTransferStillFails() throws Exception {
+    var account = fundedAccount(SeedMerchant.PUBLIC_ID, "100.0000");
+    var reserveBefore = ledger.balance(PayoutReservedAccount.PUBLIC_ID);
+    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000", "bank.expire-04");
+
+    simulator.failTransfer(payout.transferPublicId());
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      st.executeUpdate("UPDATE payments.payout SET expires_at = now() - interval '1 second' "
+          + "WHERE public_id = '" + payout.publicId() + "'");
+    }
+    var failed = payouts.get(SeedMerchant.PUBLIC_ID, payout.publicId());
+
+    // The network's verdict outranks the hold's timeout: a FAILED instruction
+    // fails the payout, the expiry clock notwithstanding.
+    assertEquals(PayoutStatus.FAILED, failed.status());
+    assertEquals(0, accountsService.balance(SeedMerchant.PUBLIC_ID, account.publicId())
+        .compareTo(Money.ofBrl("100.0000")));
+    assertEquals(0, ledger.balance(PayoutReservedAccount.PUBLIC_ID).compareTo(reserveBefore));
+    assertNotNull(failed.returnTransactionPublicId());
+    assertNull(failed.executeTransactionPublicId());
+    var returned = ledger.getTransaction(failed.returnTransactionPublicId());
+    assertEquals(2, returned.postings().size(), returned.postings().toString());
+    assertLeg(returned.postings(), PayoutReservedAccount.PUBLIC_ID, Direction.DEBIT, "30.0000");
+    assertLeg(returned.postings(), account.ledgerAccountPublicId(), Direction.CREDIT, "30.0000");
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      assertTrue(eventPayload(st, "payout.failed", payout.publicId())
+          .contains("\"status\":\"FAILED\""));
+    }
   }
 
   @Test

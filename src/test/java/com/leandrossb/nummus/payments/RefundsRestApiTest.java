@@ -310,17 +310,20 @@ class RefundsRestApiTest extends IntegrationTestBase {
   }
 
   /**
-   * Pins the DOCUMENTED backlog bound ("refundedTotal counts REQUESTED and
-   * SETTLED refunds"), not desired behavior: payments releases an EXPIRED
-   * refund's hold, the network does not. After a full-amount refund expires
-   * unread, the merchant is whole and the intent's sum is zero again, so
-   * every payments-side guard would let a fresh full refund through — the
-   * network's own cap is what rejects it, because the abandoned instruction
-   * is still PENDING and keeps holding the charge's remainder. Also the
-   * only HTTP exercise of the network-side 422 (RefundExceedsCharge).
+   * The M17 strand, inverted by M18's expiry resolution: the expired read no
+   * longer abandons the network instruction — the resolver withdraws it, so
+   * the network releases its remainder alongside the payments-side hold.
+   * Through M17 this test pinned the documented backlog bound with a 422 (the
+   * abandoned instruction stayed PENDING and kept holding the charge's
+   * remainder); with CANCELLED terminal and off the network cap that bound is
+   * dead — a fresh full refund now succeeds and settles end-to-end. The
+   * network-side 422 mapping loses its only HTTP exercise with it: the
+   * payments/network divergence it needed is no longer constructible through
+   * the merchant surface, and the cap itself stays pinned at the port
+   * (RefundNetworkTest.networkRejectsOverRefund).
    */
   @Test
-  void expiredRefundStillHoldsTheNetworkRemainder() throws Exception {
+  void fullRefundExpiredThenCancelledReleasesBothSides() throws Exception {
     var intent = settledIntent("100.0000");
     String location = createRefund(intent.publicId(), "100.0000");
     String requested = mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
@@ -346,15 +349,23 @@ class RefundsRestApiTest extends IntegrationTestBase {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.refundedTotal").value(0));
 
-    // The documented strand: the network instruction stayed PENDING, so the
-    // retry of the full amount dies on the network's cap — 422, not 201.
-    mockMvc.perform(post("/v1/payment-intents/{intentId}/refunds", intent.publicId())
-            .header("Authorization", "Bearer " + seedMerchantKey)
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(refundBody("100.0000")))
-        .andExpect(status().isUnprocessableEntity())
-        .andExpect(jsonPath("$.detail", containsString("refund exceeds charge")));
+    // The network side cleared too — the resolver cancelled the stranded
+    // instruction, so the full amount is refundable again: 201, not the 422
+    // this pin asserted through M17.
+    String freshLocation = createRefund(intent.publicId(), "100.0000");
+    String fresh = mockMvc.perform(get(freshLocation)
+            .header("Authorization", "Bearer " + seedMerchantKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("REQUESTED"))
+        .andReturn().getResponse().getContentAsString();
+    simulator.payRefund(UUID.fromString(JsonPath.read(fresh, "$.networkRefundId")));
+    mockMvc.perform(get(freshLocation).header("Authorization", "Bearer " + seedMerchantKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SETTLED"));
+    mockMvc.perform(get("/v1/payment-intents/{id}", intent.publicId())
+            .header("Authorization", "Bearer " + seedMerchantKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.refundedTotal").value(100.0000));
   }
 
   /**

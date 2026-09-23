@@ -114,36 +114,64 @@ public class RefundsServiceImpl implements RefundsService {
     if (refund.status() != RefundStatus.REQUESTED) {
       return refund;
     }
-    // The payout-expiry shape exactly: refund expiry MOVES MONEY, so post the
-    // return legs first, then the guarded mark. A lost race throws so the
-    // transaction — posting included — rolls back.
-    if (Instant.now().isAfter(refund.expiresAt())) {
-      var posted = returnLegs(merchantPublicId, refund);
-      if (!repository.markExpired(publicId, posted.publicId())) {
-        throw new ConcurrentRefundException(publicId);
-      }
-      var expired = repository.findByPublicId(publicId).orElseThrow();
-      refundEvents.publish(toEvent(merchantPublicId, RefundEventTypes.EXPIRED, expired));
-      return expired;
-    }
     var networkRefund = network.getChargeRefund(refund.networkRefundPublicId());
     if (networkRefund.amount().compareTo(refund.amount()) != 0) {
       throw new RefundAmountMismatchException(networkRefund.publicId(), refund.amount(),
           networkRefund.amount());
     }
+    // Poll-then-decide: an executed instruction settles even past expiry —
+    // the money moved; a pending one is cancelled, then the hold returns.
+    // A cancel that loses to a parallel pay re-reads SUCCEEDED and settles.
+    if (Instant.now().isAfter(refund.expiresAt())) {
+      return switch (networkRefund.status()) {
+        case SUCCEEDED -> execute(refund, merchantPublicId);
+        case PENDING -> {
+          var after = network.cancelChargeRefund(refund.networkRefundPublicId());
+          yield switch (after.status()) {
+            case SUCCEEDED -> execute(refund, merchantPublicId);
+            case FAILED -> toFailed(refund, merchantPublicId);
+            default -> toExpired(refund, merchantPublicId);
+          };
+        }
+        // The network's verdict outranks the timeout: a failed instruction
+        // fails the refund wherever the expiry clock stands.
+        case FAILED -> toFailed(refund, merchantPublicId);
+        default -> toExpired(refund, merchantPublicId);
+      };
+    }
     return switch (networkRefund.status()) {
       case PENDING -> refund;
-      case FAILED -> {
-        var posted = returnLegs(merchantPublicId, refund);
-        if (!repository.markFailed(publicId, posted.publicId())) {
-          throw new ConcurrentRefundException(publicId);
-        }
-        var failed = repository.findByPublicId(publicId).orElseThrow();
-        refundEvents.publish(toEvent(merchantPublicId, RefundEventTypes.FAILED, failed));
-        yield failed;
-      }
+      case CANCELLED, FAILED -> toFailed(refund, merchantPublicId);
       case SUCCEEDED -> execute(refund, merchantPublicId);
     };
+  }
+
+  /** Expires a REQUESTED refund: the hold timed out and comes home. Unlike
+   *  intent expiry this MOVES MONEY: the return legs post first, then the
+   *  guarded mark. A lost race throws so the transaction — posting included —
+   *  rolls back (the ConcurrentSettlement precedent). */
+  private Refund toExpired(Refund refund, UUID merchantPublicId) {
+    var posted = returnLegs(merchantPublicId, refund);
+    if (!repository.markExpired(refund.publicId(), posted.publicId())) {
+      throw new ConcurrentRefundException(refund.publicId());
+    }
+    var expired = repository.findByPublicId(refund.publicId()).orElseThrow();
+    refundEvents.publish(toEvent(merchantPublicId, RefundEventTypes.EXPIRED, expired));
+    return expired;
+  }
+
+  /** Fails a REQUESTED refund — the network's verdict on the instruction,
+   *  wherever the expiry clock stands (a pre-expiry read observing a CANCELLED
+   *  rides along: the hold must still come home). Same race shape as
+   *  {@link #toExpired}: post, guard, throw on loss. */
+  private Refund toFailed(Refund refund, UUID merchantPublicId) {
+    var posted = returnLegs(merchantPublicId, refund);
+    if (!repository.markFailed(refund.publicId(), posted.publicId())) {
+      throw new ConcurrentRefundException(refund.publicId());
+    }
+    var failed = repository.findByPublicId(refund.publicId()).orElseThrow();
+    refundEvents.publish(toEvent(merchantPublicId, RefundEventTypes.FAILED, failed));
+    return failed;
   }
 
   /** Releases the hold: the reserve debits what the request credited, the

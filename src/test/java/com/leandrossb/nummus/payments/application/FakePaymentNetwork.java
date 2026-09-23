@@ -63,6 +63,35 @@ public class FakePaymentNetwork implements PaymentNetwork {
     return transfers.get(transferPublicId);
   }
 
+  /** The transfer whose cancel races a parallel settlement and loses: the
+   * attempt observes the winner's terminal state instead of withdrawing. */
+  private volatile UUID cancelLostToSettlement;
+
+  /** Withdraws a pending transfer; a terminal one is returned as observed —
+   * no race emulation, the cancel-lost driver is configured per test. */
+  @Override
+  public NetworkTransfer cancelPayoutTransfer(UUID transferPublicId) {
+    transitionTransfer(transferPublicId,
+        transferPublicId.equals(cancelLostToSettlement)
+            ? ChargeStatus.SUCCEEDED
+            : ChargeStatus.CANCELLED);
+    return transfers.get(transferPublicId);
+  }
+
+  /** Test driver: arm the cancel-lost race — the cancel of this transfer
+   * arrives after a parallel pay already won the status-guarded row, so the
+   * attempt observes SUCCEEDED rather than withdrawing the instruction. */
+  public void loseCancelToSettlement(UUID transferPublicId) {
+    cancelLostToSettlement = transferPublicId;
+  }
+
+  private void transitionTransfer(UUID transferPublicId, ChargeStatus target) {
+    transfers.computeIfPresent(transferPublicId, (id, transfer) ->
+        transfer.status() == ChargeStatus.PENDING
+            ? new NetworkTransfer(id, transfer.amount(), transfer.destinationBankKey(), target)
+            : transfer);
+  }
+
   @Override
   public NetworkRefund createChargeRefund(UUID chargePublicId, Money amount) {
     var refund = new NetworkRefund(UUID.randomUUID(), chargePublicId, amount,
@@ -74,5 +103,34 @@ public class FakePaymentNetwork implements PaymentNetwork {
   @Override
   public NetworkRefund getChargeRefund(UUID refundPublicId) {
     return refunds.get(refundPublicId);
+  }
+
+  /** The refund whose cancel races a parallel pay and loses: the attempt
+   * observes the winner's terminal state instead of withdrawing. */
+  private volatile UUID refundCancelLostToSettlement;
+
+  /** Withdraws a pending refund; a terminal one is returned as observed —
+   * no race emulation, the cancel-lost driver is configured per test. */
+  @Override
+  public NetworkRefund cancelChargeRefund(UUID refundPublicId) {
+    transitionRefund(refundPublicId,
+        refundPublicId.equals(refundCancelLostToSettlement)
+            ? ChargeStatus.SUCCEEDED
+            : ChargeStatus.CANCELLED);
+    return refunds.get(refundPublicId);
+  }
+
+  /** Test driver: arm the refund cancel-lost race — the cancel of this refund
+   * arrives after a parallel pay already won the status-guarded row, so the
+   * attempt observes SUCCEEDED rather than withdrawing the instruction. */
+  public void loseRefundCancelToSettlement(UUID refundPublicId) {
+    refundCancelLostToSettlement = refundPublicId;
+  }
+
+  private void transitionRefund(UUID refundPublicId, ChargeStatus target) {
+    refunds.computeIfPresent(refundPublicId, (id, refund) ->
+        refund.status() == ChargeStatus.PENDING
+            ? new NetworkRefund(id, refund.chargePublicId(), refund.amount(), target)
+            : refund);
   }
 }

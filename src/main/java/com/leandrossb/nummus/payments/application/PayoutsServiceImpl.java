@@ -105,35 +105,63 @@ public class PayoutsServiceImpl implements PayoutsService {
     if (payout.status() != PayoutStatus.REQUESTED) {
       return payout;
     }
-    // Unlike intent expiry, payout expiry MOVES MONEY: post the return legs
-    // first, then the guarded mark. A lost race throws so the transaction —
-    // posting included — rolls back (the ConcurrentSettlement precedent).
-    if (Instant.now().isAfter(payout.expiresAt())) {
-      var posted = returnLegs(merchantPublicId, payout);
-      if (!repository.markExpired(publicId, posted.publicId())) {
-        throw new ConcurrentPayoutException(publicId);
-      }
-      var expired = repository.findByPublicId(publicId).orElseThrow();
-      payoutEvents.publish(toEvent(merchantPublicId, PayoutEventTypes.EXPIRED, expired, null, null));
-      return expired;
-    }
     var transfer = network.getPayoutTransfer(payout.transferPublicId());
     if (transfer.amount().compareTo(payout.amount()) != 0) {
       throw new TransferAmountMismatchException(transfer.publicId(), payout.amount(), transfer.amount());
     }
+    // Poll-then-decide: an executed instruction settles even past expiry —
+    // the money moved; a pending one is cancelled, then the hold returns.
+    // A cancel that loses to a parallel pay re-reads SUCCEEDED and settles.
+    if (Instant.now().isAfter(payout.expiresAt())) {
+      return switch (transfer.status()) {
+        case SUCCEEDED -> execute(payout, merchantPublicId);
+        case PENDING -> {
+          var after = network.cancelPayoutTransfer(payout.transferPublicId());
+          yield switch (after.status()) {
+            case SUCCEEDED -> execute(payout, merchantPublicId);
+            case FAILED -> toFailed(payout, merchantPublicId);
+            default -> toExpired(payout, merchantPublicId);
+          };
+        }
+        // The network's verdict outranks the timeout: a failed instruction
+        // fails the payout wherever the expiry clock stands.
+        case FAILED -> toFailed(payout, merchantPublicId);
+        default -> toExpired(payout, merchantPublicId);
+      };
+    }
     return switch (transfer.status()) {
       case PENDING -> payout;
-      case FAILED -> {
-        var posted = returnLegs(merchantPublicId, payout);
-        if (!repository.markFailed(publicId, posted.publicId())) {
-          throw new ConcurrentPayoutException(publicId);
-        }
-        var failed = repository.findByPublicId(publicId).orElseThrow();
-        payoutEvents.publish(toEvent(merchantPublicId, PayoutEventTypes.FAILED, failed, null, null));
-        yield failed;
-      }
+      case CANCELLED, FAILED -> toFailed(payout, merchantPublicId);
       case SUCCEEDED -> execute(payout, merchantPublicId);
     };
+  }
+
+  /** Expires a REQUESTED payout: the hold timed out and comes home. Unlike
+   *  intent expiry this MOVES MONEY: the return legs post first, then the
+   *  guarded mark. A lost race throws so the transaction — posting included —
+   *  rolls back (the ConcurrentSettlement precedent). */
+  private Payout toExpired(Payout payout, UUID merchantPublicId) {
+    var posted = returnLegs(merchantPublicId, payout);
+    if (!repository.markExpired(payout.publicId(), posted.publicId())) {
+      throw new ConcurrentPayoutException(payout.publicId());
+    }
+    var expired = repository.findByPublicId(payout.publicId()).orElseThrow();
+    payoutEvents.publish(toEvent(merchantPublicId, PayoutEventTypes.EXPIRED, expired, null, null));
+    return expired;
+  }
+
+  /** Fails a REQUESTED payout — the network's verdict on the instruction,
+   *  wherever the expiry clock stands (a pre-expiry read observing a CANCELLED
+   *  rides along: the hold must still come home). Same race shape as
+   *  {@link #toExpired}: post, guard, throw on loss. */
+  private Payout toFailed(Payout payout, UUID merchantPublicId) {
+    var posted = returnLegs(merchantPublicId, payout);
+    if (!repository.markFailed(payout.publicId(), posted.publicId())) {
+      throw new ConcurrentPayoutException(payout.publicId());
+    }
+    var failed = repository.findByPublicId(payout.publicId()).orElseThrow();
+    payoutEvents.publish(toEvent(merchantPublicId, PayoutEventTypes.FAILED, failed, null, null));
+    return failed;
   }
 
   /** Releases the reservation: the reserve debits what the request credited,

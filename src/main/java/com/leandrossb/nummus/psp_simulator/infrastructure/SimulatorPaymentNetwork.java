@@ -6,6 +6,8 @@ import com.leandrossb.nummus.payments.application.NetworkRefund;
 import com.leandrossb.nummus.payments.application.NetworkTransfer;
 import com.leandrossb.nummus.payments.application.PaymentNetwork;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
+import com.leandrossb.nummus.psp_simulator.domain.RefundNotPendingException;
+import com.leandrossb.nummus.psp_simulator.domain.TransferNotPendingException;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
@@ -43,6 +45,19 @@ public class SimulatorPaymentNetwork implements PaymentNetwork {
   }
 
   @Override
+  public NetworkTransfer cancelPayoutTransfer(UUID transferPublicId) {
+    try {
+      return simulator.cancelTransfer(transferPublicId);
+    } catch (TransferNotPendingException e) {
+      // The cancel lost the status-guarded row to a concurrent settlement, or
+      // the instruction was already terminal: this port's contract is the
+      // post-attempt state, and the expiry resolution branches on it rather
+      // than catching.
+      return simulator.getTransfer(transferPublicId);
+    }
+  }
+
+  @Override
   public NetworkRefund createChargeRefund(UUID chargePublicId, Money amount) {
     return simulator.createRefund(chargePublicId, amount);
   }
@@ -50,5 +65,16 @@ public class SimulatorPaymentNetwork implements PaymentNetwork {
   @Override
   public NetworkRefund getChargeRefund(UUID refundPublicId) {
     return simulator.getRefund(refundPublicId);
+  }
+
+  @Override
+  public NetworkRefund cancelChargeRefund(UUID refundPublicId) {
+    try {
+      return simulator.cancelRefund(refundPublicId);
+    } catch (RefundNotPendingException e) {
+      // Post-attempt semantics as cancelPayoutTransfer — the observed state
+      // when the cancel did not win.
+      return simulator.getRefund(refundPublicId);
+    }
   }
 }

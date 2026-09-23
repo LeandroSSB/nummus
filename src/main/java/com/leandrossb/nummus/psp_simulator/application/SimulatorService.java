@@ -35,6 +35,9 @@ public interface SimulatorService {
   /** The destination bank rejects the transfer: PENDING → FAILED (terminal). */
   NetworkTransfer failTransfer(UUID publicId);
 
+  /** The instruction is withdrawn before executing: PENDING → CANCELLED (terminal). */
+  NetworkTransfer cancelTransfer(UUID publicId);
+
   /** Creates a refund instruction on a charge: starts PENDING. The network's
    * own never-over-refund invariant guards the creation — the sum of every
    * refund on the charge, PENDING ones included, may not exceed the charge amount. */
@@ -47,4 +50,7 @@ public interface SimulatorService {
 
   /** The network rejects the refund: PENDING → FAILED (terminal). */
   NetworkRefund failRefund(UUID publicId);
+
+  /** The instruction is withdrawn before executing: PENDING → CANCELLED (terminal). */
+  NetworkRefund cancelRefund(UUID publicId);
 }
