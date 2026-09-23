@@ -32,6 +32,7 @@ import com.leandrossb.nummus.payments.domain.IntentNotRefundableException;
 import com.leandrossb.nummus.payments.domain.IntentStatus;
 import com.leandrossb.nummus.payments.domain.PaymentIntent;
 import com.leandrossb.nummus.payments.domain.Payout;
+import com.leandrossb.nummus.payments.domain.PayoutStatus;
 import com.leandrossb.nummus.payments.domain.Refund;
 import com.leandrossb.nummus.payments.domain.RefundExceedsRemainingException;
 import com.leandrossb.nummus.payments.domain.RefundStatus;
@@ -311,6 +312,82 @@ class RefundRequestTest extends IntegrationTestBase {
       // Funds never bound: 200.00 funded, one 70.00 hold — 130.00 remains.
       assertEquals(0, accountsService.balance(SeedMerchant.PUBLIC_ID, account.publicId())
           .compareTo(Money.ofBrl("130.0000")), outcome);
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
+  /**
+   * The single-lock discipline across BOTH hold families, mixed: refunds and
+   * payouts serialize on the same ledger-account row, so a mixed burst
+   * against one account lands exactly one hold regardless of interleaving.
+   * The account is funded to exactly 100.00 by one settle (refundable 100
+   * AND available 100); two payouts.create of 70.00 and two refunds.create
+   * of 70.00 race, and whichever request wins the fence leaves 30.00 — the
+   * other three are rejected by their family's guard (InsufficientFunds, or
+   * RefundExceedsRemaining when a refund won). Counterfactual the pin
+   * guards: without the shared fence the two families would interleave
+   * their reads independently and land two holds — 140.00 against 100.00,
+   * an overdraft. No barriers: outcome assertions only.
+   */
+  @Test
+  void mixedPayoutsAndRefundsLandExactlyOneHold() throws Exception {
+    var intent = settledIntent("100.0000");
+    var account = accountsService.get(SeedMerchant.PUBLIC_ID, intent.accountPublicId());
+    String bankKey = "bank.refund-mixed-" + UUID.randomUUID();
+    int requests = 4;
+    ExecutorService pool = Executors.newFixedThreadPool(requests);
+    try {
+      List<Future<Object>> futures = new ArrayList<>();
+      for (int i = 0; i < requests; i++) {
+        boolean payout = i % 2 == 0;
+        futures.add(pool.submit(() -> {
+          if (payout) {
+            return (Object) payouts.create(SeedMerchant.PUBLIC_ID, new CreatePayoutCommand(
+                account.publicId(), Money.ofBrl("70.0000"), bankKey, null));
+          }
+          return (Object) refunds.create(SeedMerchant.PUBLIC_ID, intent.publicId(),
+              new CreateRefundCommand(Money.ofBrl("70.0000"), null));
+        }));
+      }
+      int landed = 0;
+      Object hold = null;
+      List<Throwable> rejected = new ArrayList<>();
+      for (Future<Object> future : futures) {
+        try {
+          hold = future.get(60, TimeUnit.SECONDS);
+          landed++;
+        } catch (ExecutionException e) {
+          if (e.getCause() instanceof InsufficientFundsException
+              || e.getCause() instanceof RefundExceedsRemainingException) {
+            rejected.add(e.getCause());
+          } else {
+            throw e;
+          }
+        }
+      }
+      String outcome = "landed=" + landed + " rejected=" + rejected.size();
+      assertEquals(1, landed, outcome);
+      assertEquals(requests - 1, rejected.size(), outcome);
+      if (hold instanceof Payout payout) {
+        register(payout);
+        assertEquals(PayoutStatus.REQUESTED, payout.status(), outcome);
+      } else {
+        var refund = (Refund) hold;
+        register(refund);
+        assertEquals(RefundStatus.REQUESTED, refund.status(), outcome);
+      }
+      // The database agrees whichever family won: exactly one REQUESTED hold
+      // row across payments.payout and payments.refund for this account.
+      assertEquals(1, count("select (select count(*) from payments.payout"
+          + " where account_public_id = '" + account.publicId() + "' and status = 'REQUESTED')"
+          + " + (select count(*) from payments.refund r join payments.payment_intent i"
+          + " on r.intent_public_id = i.public_id"
+          + " where i.account_public_id = '" + account.publicId() + "'"
+          + " and r.status = 'REQUESTED')"), outcome);
+      // And no overdraft: 100.00 funded, one 70.00 hold — exactly 30.00 left.
+      assertEquals(0, accountsService.balance(SeedMerchant.PUBLIC_ID, account.publicId())
+          .compareTo(Money.ofBrl("30.0000")), outcome);
     } finally {
       pool.shutdownNow();
     }

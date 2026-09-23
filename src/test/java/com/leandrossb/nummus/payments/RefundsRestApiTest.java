@@ -310,6 +310,54 @@ class RefundsRestApiTest extends IntegrationTestBase {
   }
 
   /**
+   * Pins the DOCUMENTED backlog bound ("refundedTotal counts REQUESTED and
+   * SETTLED refunds"), not desired behavior: payments releases an EXPIRED
+   * refund's hold, the network does not. After a full-amount refund expires
+   * unread, the merchant is whole and the intent's sum is zero again, so
+   * every payments-side guard would let a fresh full refund through — the
+   * network's own cap is what rejects it, because the abandoned instruction
+   * is still PENDING and keeps holding the charge's remainder. Also the
+   * only HTTP exercise of the network-side 422 (RefundExceedsCharge).
+   */
+  @Test
+  void expiredRefundStillHoldsTheNetworkRemainder() throws Exception {
+    var intent = settledIntent("100.0000");
+    String location = createRefund(intent.publicId(), "100.0000");
+    String requested = mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
+        .andExpect(status().isOk())
+        .andReturn().getResponse().getContentAsString();
+    UUID refundId = UUID.fromString(JsonPath.read(requested, "$.publicId"));
+
+    // The only way a refund ages past its expiry in-test: backdate the row.
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      st.executeUpdate("UPDATE payments.refund SET expires_at = now() - interval '1 second'"
+          + " WHERE public_id = '" + refundId + "'");
+    }
+    mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("EXPIRED"));
+    // The hold returned and the sum dropped: payments-side, all clear again.
+    mockMvc.perform(get("/v1/accounts/{id}/balance", intent.accountPublicId())
+            .header("Authorization", "Bearer " + seedMerchantKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.amount").value(100.0000));
+    mockMvc.perform(get("/v1/payment-intents/{id}", intent.publicId())
+            .header("Authorization", "Bearer " + seedMerchantKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.refundedTotal").value(0));
+
+    // The documented strand: the network instruction stayed PENDING, so the
+    // retry of the full amount dies on the network's cap — 422, not 201.
+    mockMvc.perform(post("/v1/payment-intents/{intentId}/refunds", intent.publicId())
+            .header("Authorization", "Bearer " + seedMerchantKey)
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(refundBody("100.0000")))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(jsonPath("$.detail", containsString("refund exceeds charge")));
+  }
+
+  /**
    * The container is shared across classes and the conciliation suites assert
    * over now-relative windows. Push this class's settlements, network rows, and
    * refund fixtures two hours back — the same DB-side rewrite the sibling
