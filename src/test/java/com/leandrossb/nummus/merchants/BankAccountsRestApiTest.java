@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.merchants;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -65,6 +66,7 @@ class BankAccountsRestApiTest extends IntegrationTestBase {
     var created = register("77101-2");
     String account = JsonPath.read(created.getResponse().getContentAsString(), "$.bankAccountId");
     String code = JsonPath.read(created.getResponse().getContentAsString(), "$.verificationCode");
+    assertTrue(code.startsWith("nummus_bac_"));
 
     mockMvc.perform(get("/v1/bank-accounts/" + account).header("Authorization", merchantAuth()))
         .andExpect(status().isOk())
