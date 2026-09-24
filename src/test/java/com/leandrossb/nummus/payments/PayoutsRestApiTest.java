@@ -15,8 +15,11 @@ import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
 import com.leandrossb.nummus.accounts.domain.PaymentAccount;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.merchants.application.ApiKeysService;
+import com.leandrossb.nummus.merchants.application.BankAccountsService;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.merchants.application.SeedMerchant;
+import com.leandrossb.nummus.merchants.domain.BankAccount;
+import com.leandrossb.nummus.merchants.domain.RegisterBankAccountCommand;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
@@ -73,6 +76,9 @@ class PayoutsRestApiTest extends IntegrationTestBase {
   @Autowired
   private OperatorKeysService operatorKeys;
 
+  @Autowired
+  private BankAccountsService bankAccounts;
+
   private String seedMerchantKey;
 
   private String operatorAuth;
@@ -105,19 +111,26 @@ class PayoutsRestApiTest extends IntegrationTestBase {
     return account;
   }
 
-  private static String payoutBody(String accountId, String amount, String bankKey) {
+  /** The wire key the registry derives from a stored destination's structured
+   *  fields — the value every payout echo and transfer carries. */
+  private static String wireKeyOf(BankAccount bankAccount) {
+    return bankAccount.bankCode() + "-" + bankAccount.branch() + "-" + bankAccount.accountNumber();
+  }
+
+  private static String payoutBody(String accountId, String amount, String bankAccountId) {
     return "{\"accountId\":\"" + accountId + "\",\"amount\":" + amount
-        + ",\"destinationBankKey\":\"" + bankKey + "\"}";
+        + ",\"bankAccountId\":\"" + bankAccountId + "\"}";
   }
 
   /** POSTs a payout under the seed merchant, expects 201, registers the rows for
    *  the sweep, and returns the Location header. */
-  private String createPayout(String accountId, String amount, String bankKey) throws Exception {
+  private String createPayout(String accountId, String amount, String bankAccountId)
+      throws Exception {
     var result = mockMvc.perform(post("/v1/payouts")
             .header("Authorization", "Bearer " + seedMerchantKey)
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content(payoutBody(accountId, amount, bankKey)))
+            .content(payoutBody(accountId, amount, bankAccountId)))
         .andExpect(status().isCreated())
         .andReturn();
     return register(result);
@@ -133,7 +146,9 @@ class PayoutsRestApiTest extends IntegrationTestBase {
   @Test
   void createReservesAndResponds201() throws Exception {
     var account = fundedAccount("100.0000");
-    String location = createPayout(account.publicId().toString(), "30.0000", "bank.main-01");
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
+    String location = createPayout(account.publicId().toString(), "30.0000",
+        bankAccount.publicId().toString());
 
     assertTrue(location.endsWith("/v1/payouts/" + payoutIds.get(payoutIds.size() - 1)));
     mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
@@ -142,7 +157,8 @@ class PayoutsRestApiTest extends IntegrationTestBase {
         .andExpect(jsonPath("$.amount").value(30.0000))
         .andExpect(jsonPath("$.currency").value("BRL"))
         .andExpect(jsonPath("$.status").value("REQUESTED"))
-        .andExpect(jsonPath("$.destinationBankKey").value("bank.main-01"))
+        .andExpect(jsonPath("$.destinationBankKey").value(wireKeyOf(bankAccount)))
+        .andExpect(jsonPath("$.bankAccountId").value(bankAccount.publicId().toString()))
         .andExpect(jsonPath("$.transferId").exists())
         .andExpect(jsonPath("$.expiresAt").exists())
         .andExpect(jsonPath("$.createdAt").exists())
@@ -161,7 +177,9 @@ class PayoutsRestApiTest extends IntegrationTestBase {
   @Test
   void createIsIdempotent() throws Exception {
     var account = fundedAccount("50.0000");
-    String body = payoutBody(account.publicId().toString(), "20.0000", "bank.replay-01");
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
+    String body = payoutBody(account.publicId().toString(), "20.0000",
+        bankAccount.publicId().toString());
     String key = UUID.randomUUID().toString();
 
     var first = mockMvc.perform(post("/v1/payouts")
@@ -193,11 +211,13 @@ class PayoutsRestApiTest extends IntegrationTestBase {
   @Test
   void insufficientFundsMapsTo422() throws Exception {
     var account = fundedAccount("5.0000");
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
     mockMvc.perform(post("/v1/payouts")
             .header("Authorization", "Bearer " + seedMerchantKey)
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content(payoutBody(account.publicId().toString(), "30.0000", "bank.reject-01")))
+            .content(payoutBody(account.publicId().toString(), "30.0000",
+                bankAccount.publicId().toString())))
         .andExpect(status().isUnprocessableEntity())
         .andExpect(jsonPath("$.detail", containsString("insufficient funds")));
   }
@@ -209,33 +229,30 @@ class PayoutsRestApiTest extends IntegrationTestBase {
             .header("Authorization", "Bearer " + seedMerchantKey)
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content(payoutBody(anyAccount, "5.0000", "   ")))
-        .andExpect(status().isBadRequest());
-    mockMvc.perform(post("/v1/payouts")
-            .header("Authorization", "Bearer " + seedMerchantKey)
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(payoutBody(anyAccount, "5.0000", "bank key!")))
-        .andExpect(status().isBadRequest());
-    mockMvc.perform(post("/v1/payouts")
-            .header("Authorization", "Bearer " + seedMerchantKey)
-            .header(KEY, UUID.randomUUID().toString())
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(payoutBody(anyAccount, "0.0000", "bank.zero-01")))
+            .content(payoutBody(anyAccount, "0.0000", UUID.randomUUID().toString())))
         .andExpect(status().isBadRequest());
     mockMvc.perform(post("/v1/payouts")
             .header("Authorization", "Bearer " + seedMerchantKey)
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"accountId\":\"" + anyAccount + "\",\"amount\":5.0000,"
-                + "\"destinationBankKey\":\"bank.ttl-01\",\"expiresInSeconds\":59}"))
+                + "\"bankAccountId\":\"" + UUID.randomUUID() + "\",\"expiresInSeconds\":59}"))
+        .andExpect(status().isBadRequest());
+    // The registry reference is mandatory: a body without it never validates.
+    mockMvc.perform(post("/v1/payouts")
+            .header("Authorization", "Bearer " + seedMerchantKey)
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"accountId\":\"" + anyAccount + "\",\"amount\":5.0000}"))
         .andExpect(status().isBadRequest());
   }
 
   @Test
   void getDrivesTheLifecycleLazily() throws Exception {
     var account = fundedAccount("100.0000");
-    String location = createPayout(account.publicId().toString(), "30.0000", "bank.execute-01");
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
+    String location = createPayout(account.publicId().toString(), "30.0000",
+        bankAccount.publicId().toString());
     String requested = mockMvc.perform(get(location).header("Authorization", "Bearer " + seedMerchantKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("REQUESTED"))
@@ -267,10 +284,80 @@ class PayoutsRestApiTest extends IntegrationTestBase {
     // Neither an API key nor an Idempotency-Key: 401 (auth), not 400 (idempotency).
     mockMvc.perform(post("/v1/payouts")
             .contentType(MediaType.APPLICATION_JSON)
-            .content(payoutBody(UUID.randomUUID().toString(), "5.0000", "bank.anon-01")))
+            .content(payoutBody(UUID.randomUUID().toString(), "5.0000",
+                UUID.randomUUID().toString())))
         .andExpect(status().isUnauthorized());
     mockMvc.perform(get("/v1/payouts/{id}", UUID.randomUUID()))
         .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void payoutRequiresAVerifiedBankAccount() throws Exception {
+    var account = fundedAccount("100.0000");
+    var issued = bankAccounts.register(SeedMerchant.PUBLIC_ID,
+        new RegisterBankAccountCommand("123", "4567", "55101-2", "11144477735"));
+
+    // PENDING_VERIFICATION → 422
+    mockMvc.perform(post("/v1/payouts")
+            .header("Authorization", "Bearer " + seedMerchantKey)
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"accountId\":\"" + account.publicId() + "\",\"amount\":\"10.0000\","
+                + "\"bankAccountId\":\"" + issued.account().publicId() + "\"}"))
+        .andExpect(status().isUnprocessableEntity());
+
+    // Verified → the derived key travels
+    bankAccounts.verify(SeedMerchant.PUBLIC_ID, issued.account().publicId(),
+        issued.verificationCode());
+    var created = mockMvc.perform(post("/v1/payouts")
+            .header("Authorization", "Bearer " + seedMerchantKey)
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"accountId\":\"" + account.publicId() + "\",\"amount\":\"10.0000\","
+                + "\"bankAccountId\":\"" + issued.account().publicId() + "\"}"))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.destinationBankKey").value("123-4567-55101-2"))
+        .andExpect(jsonPath("$.bankAccountId").value(issued.account().publicId().toString()))
+        .andReturn();
+    register(created);
+
+    // Foreign merchant's account → indistinguishable from unknown
+    String other = ApiDrivers.createMerchantAndGetKey(mockMvc, operatorAuth(),
+        "Foreign Registry Merchant");
+    mockMvc.perform(post("/v1/payouts")
+            .header("Authorization", "Bearer " + other)
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"accountId\":\"" + account.publicId() + "\",\"amount\":\"10.0000\","
+                + "\"bankAccountId\":\"" + issued.account().publicId() + "\"}"))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void revokedBankAccountBlocksNewPayoutsOnly() throws Exception {
+    var account = fundedAccount("100.0000");
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
+    bankAccounts.revoke(SeedMerchant.PUBLIC_ID, bankAccount.publicId());
+
+    mockMvc.perform(post("/v1/payouts")
+            .header("Authorization", "Bearer " + seedMerchantKey)
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"accountId\":\"" + account.publicId() + "\",\"amount\":\"10.0000\","
+                + "\"bankAccountId\":\"" + bankAccount.publicId() + "\"}"))
+        .andExpect(status().isUnprocessableEntity());
+  }
+
+  @Test
+  void rawDestinationKeyIsGone() throws Exception {
+    var account = fundedAccount("100.0000");
+    mockMvc.perform(post("/v1/payouts")
+            .header("Authorization", "Bearer " + seedMerchantKey)
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"accountId\":\"" + account.publicId() + "\",\"amount\":\"10.0000\","
+                + "\"destinationBankKey\":\"bank.raw\"}"))
+        .andExpect(status().isBadRequest());
   }
 
   /**

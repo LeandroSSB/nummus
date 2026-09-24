@@ -36,8 +36,8 @@ public class MerchantAuthFilter extends OncePerRequestFilter {
 
   /** Routes that require an authenticated merchant (headerless → 401, not a later 400). */
   private static final List<String> MERCHANT_ROUTES =
-      List.of("/v1/me", "/v1/accounts", "/v1/payment-intents", "/v1/payouts", "/v1/refunds",
-          "/v1/webhook-endpoints", "/v1/webhook-deliveries");
+      List.of("/v1/me", "/v1/accounts", "/v1/bank-accounts", "/v1/payment-intents",
+          "/v1/payouts", "/v1/refunds", "/v1/webhook-endpoints", "/v1/webhook-deliveries");
 
   /** Routes that require an authenticated operator (headerless → 401, not a later 400). */
   private static final List<String> OPERATOR_ROUTES =

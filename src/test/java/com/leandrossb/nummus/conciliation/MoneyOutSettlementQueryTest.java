@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.leandrossb.nummus.accounts.application.AccountsService;
 import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
 import com.leandrossb.nummus.ledger.domain.Money;
+import com.leandrossb.nummus.merchants.application.BankAccountsService;
 import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.application.PayoutsService;
@@ -16,6 +17,7 @@ import com.leandrossb.nummus.payments.domain.CreateRefundCommand;
 import com.leandrossb.nummus.payments.domain.Payout;
 import com.leandrossb.nummus.payments.domain.Refund;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -52,6 +54,9 @@ class MoneyOutSettlementQueryTest extends IntegrationTestBase {
   @Autowired
   private SimulatorService simulator;
 
+  @Autowired
+  private BankAccountsService bankAccounts;
+
   /** Funds a fresh account with a settled 1000 charge, then pays `amount` out. */
   private Payout settlePayout(String amount) {
     var account = accountsService.open(SeedMerchant.PUBLIC_ID,
@@ -62,8 +67,10 @@ class MoneyOutSettlementQueryTest extends IntegrationTestBase {
     networkCharges.add(intent.chargePublicId());
     simulator.pay(intent.chargePublicId());
     payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
     var payout = payouts.create(SeedMerchant.PUBLIC_ID,
-        new CreatePayoutCommand(account.publicId(), Money.ofBrl(amount), "bank-key-1", null));
+        new CreatePayoutCommand(account.publicId(), Money.ofBrl(amount),
+            bankAccount.publicId(), null));
     simulator.payTransfer(payout.transferPublicId());
     paidTransfers.add(payout.transferPublicId());
     var settled = payouts.get(SeedMerchant.PUBLIC_ID, payout.publicId());

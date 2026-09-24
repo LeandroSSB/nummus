@@ -15,10 +15,12 @@ import com.leandrossb.nummus.ledger.application.Ledger;
 import com.leandrossb.nummus.ledger.domain.Direction;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.PostedPosting;
+import com.leandrossb.nummus.merchants.application.BankAccountsService;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.merchants.application.SeedMerchant;
+import com.leandrossb.nummus.merchants.domain.BankAccount;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.application.PayoutReservedAccount;
 import com.leandrossb.nummus.payments.application.PayoutsRepository;
@@ -29,6 +31,7 @@ import com.leandrossb.nummus.payments.domain.InsufficientFundsException;
 import com.leandrossb.nummus.payments.domain.Payout;
 import com.leandrossb.nummus.payments.domain.PayoutStatus;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -79,6 +82,14 @@ class PayoutRequestTest extends IntegrationTestBase {
   private MerchantsService merchants;
   @Autowired
   private OperatorKeysService operatorKeys;
+  @Autowired
+  private BankAccountsService bankAccounts;
+
+  /** The wire key the registry derives from a stored destination's structured
+   *  fields — the value the outbound transfer would carry. */
+  private static String wireKeyOf(BankAccount bankAccount) {
+    return bankAccount.bankCode() + "-" + bankAccount.branch() + "-" + bankAccount.accountNumber();
+  }
 
   /**
    * A payment account funded by one settled intent — the settle recipe the
@@ -117,10 +128,11 @@ class PayoutRequestTest extends IntegrationTestBase {
   @Test
   void requestReservesTheExactAmount() {
     var account = fundedAccount("100.0000");
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
     var reserveBefore = ledger.balance(PayoutReservedAccount.PUBLIC_ID);
 
     var payout = payouts.create(SeedMerchant.PUBLIC_ID, new CreatePayoutCommand(
-        account.publicId(), Money.ofBrl("30.0000"), "bank.main-01", null));
+        account.publicId(), Money.ofBrl("30.0000"), bankAccount.publicId(), null));
 
     assertEquals(PayoutStatus.REQUESTED, payout.status());
     assertEquals(account.publicId(), payout.accountPublicId());
@@ -147,11 +159,13 @@ class PayoutRequestTest extends IntegrationTestBase {
   @Test
   void insufficientFundsIsRejectedBeforeAnyPosting() throws Exception {
     var account = fundedAccount("10.0000");
-    String bankKey = "bank.reject-" + UUID.randomUUID();
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
+    String wireKey = wireKeyOf(bankAccount);
 
     var ex = assertThrows(InsufficientFundsException.class, () -> payouts.create(
         SeedMerchant.PUBLIC_ID,
-        new CreatePayoutCommand(account.publicId(), Money.ofBrl("30.0000"), bankKey, null)));
+        new CreatePayoutCommand(account.publicId(), Money.ofBrl("30.0000"),
+            bankAccount.publicId(), null)));
 
     assertEquals(account.publicId(), ex.accountPublicId());
     assertEquals(0, ex.available().compareTo(Money.ofBrl("10.0000")));
@@ -167,7 +181,7 @@ class PayoutRequestTest extends IntegrationTestBase {
         assertEquals(0, rs.getInt(1));
       }
       try (var rs = st.executeQuery("select count(*) from psp_simulator.payout_transfer "
-          + "where destination_bank_key = '" + bankKey + "'")) {
+          + "where destination_bank_key = '" + wireKey + "'")) {
         assertTrue(rs.next());
         assertEquals(0, rs.getInt(1));
       }
@@ -177,16 +191,18 @@ class PayoutRequestTest extends IntegrationTestBase {
   @Test
   void secondRequestSeesTheReducedBalance() {
     var account = fundedAccount("100.0000");
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
 
     var first = payouts.create(SeedMerchant.PUBLIC_ID, new CreatePayoutCommand(
-        account.publicId(), Money.ofBrl("70.0000"), "bank.first", null));
+        account.publicId(), Money.ofBrl("70.0000"), bankAccount.publicId(), null));
     assertEquals(PayoutStatus.REQUESTED, first.status());
 
     // The observable outcome of the race the row lock serializes: the second
     // request derives from the first's reservation, not the original balance.
     var ex = assertThrows(InsufficientFundsException.class, () -> payouts.create(
         SeedMerchant.PUBLIC_ID,
-        new CreatePayoutCommand(account.publicId(), Money.ofBrl("70.0000"), "bank.second", null)));
+        new CreatePayoutCommand(account.publicId(), Money.ofBrl("70.0000"),
+            bankAccount.publicId(), null)));
     assertEquals(0, ex.available().compareTo(Money.ofBrl("30.0000")));
     assertEquals(0, ex.requested().compareTo(Money.ofBrl("70.0000")));
 
@@ -201,7 +217,8 @@ class PayoutRequestTest extends IntegrationTestBase {
   void requestReservesAmountPlusTheScheduleFee() throws Exception {
     var merchant = payoutFeeMerchant("2.00");
     var account = fundedAccount(merchant, "100.0000");
-    String bankKey = "bank.fee-reserve-" + UUID.randomUUID();
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, merchant);
+    String wireKey = wireKeyOf(bankAccount);
     long journalBefore;
     try (var c = adminConnection(); var st = c.createStatement()) {
       try (var rs = st.executeQuery("select count(*) from ledger.journal_transaction")) {
@@ -214,7 +231,7 @@ class PayoutRequestTest extends IntegrationTestBase {
     // would land the merchant at exactly -fee once the fee leg posts.
     var ex = assertThrows(InsufficientFundsException.class, () -> payouts.create(
         merchant, new CreatePayoutCommand(
-            account.publicId(), Money.ofBrl("100.0000"), bankKey, null)));
+            account.publicId(), Money.ofBrl("100.0000"), bankAccount.publicId(), null)));
     assertEquals(account.publicId(), ex.accountPublicId());
     assertEquals(0, ex.available().compareTo(Money.ofBrl("100.0000")));
     assertEquals(0, ex.requested().compareTo(Money.ofBrl("102.0000")));
@@ -229,7 +246,7 @@ class PayoutRequestTest extends IntegrationTestBase {
         assertEquals(0, rs.getInt(1));
       }
       try (var rs = st.executeQuery("select count(*) from psp_simulator.payout_transfer "
-          + "where destination_bank_key = '" + bankKey + "'")) {
+          + "where destination_bank_key = '" + wireKey + "'")) {
         assertTrue(rs.next());
         assertEquals(0, rs.getInt(1));
       }
@@ -243,7 +260,7 @@ class PayoutRequestTest extends IntegrationTestBase {
     // debits only the amount — the fee is an execution-time fact — so 2.00 of
     // capacity remains, reserved for the fee leg that executing will post.
     var payout = register(payouts.create(merchant, new CreatePayoutCommand(
-        account.publicId(), Money.ofBrl("98.0000"), bankKey, null)));
+        account.publicId(), Money.ofBrl("98.0000"), bankAccount.publicId(), null)));
     assertEquals(PayoutStatus.REQUESTED, payout.status());
     assertEquals(0, accountsService.balance(merchant, account.publicId())
         .compareTo(Money.ofBrl("2.0000")));
@@ -261,23 +278,26 @@ class PayoutRequestTest extends IntegrationTestBase {
   @Test
   void requestValidatesTtlShapeAndAccountState() {
     var account = fundedAccount("100.0000");
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
     assertThrows(IllegalArgumentException.class, () -> payouts.create(
         SeedMerchant.PUBLIC_ID,
-        new CreatePayoutCommand(account.publicId(), Money.ofBrl("5.0000"), "bank.ttl",
-            Duration.ofSeconds(59))));
+        new CreatePayoutCommand(account.publicId(), Money.ofBrl("5.0000"),
+            bankAccount.publicId(), Duration.ofSeconds(59))));
     assertThrows(IllegalArgumentException.class, () -> payouts.create(
         SeedMerchant.PUBLIC_ID,
-        new CreatePayoutCommand(account.publicId(), Money.ofBrl("5.0000"), "bank.ttl",
-            Duration.ofSeconds(86401))));
+        new CreatePayoutCommand(account.publicId(), Money.ofBrl("5.0000"),
+            bankAccount.publicId(), Duration.ofSeconds(86401))));
 
     accountsService.freeze(SeedMerchant.PUBLIC_ID, account.publicId());
     assertThrows(PaymentAccountNotActiveException.class, () -> payouts.create(
         SeedMerchant.PUBLIC_ID,
-        new CreatePayoutCommand(account.publicId(), Money.ofBrl("5.0000"), "bank.ttl", null)));
+        new CreatePayoutCommand(account.publicId(), Money.ofBrl("5.0000"),
+            bankAccount.publicId(), null)));
 
     assertThrows(UnknownPaymentAccountException.class, () -> payouts.create(
         SeedMerchant.PUBLIC_ID,
-        new CreatePayoutCommand(UUID.randomUUID(), Money.ofBrl("5.0000"), "bank.ttl", null)));
+        new CreatePayoutCommand(UUID.randomUUID(), Money.ofBrl("5.0000"),
+            bankAccount.publicId(), null)));
   }
 
   /**
@@ -289,6 +309,7 @@ class PayoutRequestTest extends IntegrationTestBase {
   @Test
   void createWaitsOnTheLedgerAccountRowLock() throws Exception {
     var account = fundedAccount("100.0000");
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
     ExecutorService pool = Executors.newSingleThreadExecutor();
     try (var c = adminConnection()) {
       c.setAutoCommit(false);
@@ -299,7 +320,8 @@ class PayoutRequestTest extends IntegrationTestBase {
           assertTrue(rs.next());
         }
         Future<Payout> future = pool.submit(() -> payouts.create(SeedMerchant.PUBLIC_ID,
-            new CreatePayoutCommand(account.publicId(), Money.ofBrl("10.0000"), "bank.lock-pin", null)));
+            new CreatePayoutCommand(account.publicId(), Money.ofBrl("10.0000"),
+                bankAccount.publicId(), null)));
         assertThrows(TimeoutException.class, () -> future.get(2, TimeUnit.SECONDS),
             "create must block while the ledger-account row lock is held");
         assertFalse(future.isDone());
@@ -328,14 +350,15 @@ class PayoutRequestTest extends IntegrationTestBase {
   @Test
   void concurrentRequestsSerializeTheirFundsChecks() throws Exception {
     var account = fundedAccount("100.0000");
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, SeedMerchant.PUBLIC_ID);
     int requests = 3;
     ExecutorService pool = Executors.newFixedThreadPool(requests);
     try {
       List<Future<Payout>> futures = new ArrayList<>();
       for (int i = 0; i < requests; i++) {
-        String bankKey = "bank.concurrent-" + i;
         futures.add(pool.submit(() -> payouts.create(SeedMerchant.PUBLIC_ID,
-            new CreatePayoutCommand(account.publicId(), Money.ofBrl("70.0000"), bankKey, null))));
+            new CreatePayoutCommand(account.publicId(), Money.ofBrl("70.0000"),
+                bankAccount.publicId(), null))));
       }
       List<Payout> winners = new ArrayList<>();
       List<InsufficientFundsException> rejected = new ArrayList<>();

@@ -11,13 +11,18 @@ import com.leandrossb.nummus.interfaces.auth.OperatorKeyRequiredException;
 import com.leandrossb.nummus.interfaces.auth.OperatorUnauthorizedException;
 import com.leandrossb.nummus.interfaces.idempotency.IdempotencyKeyReuseException;
 import com.leandrossb.nummus.interfaces.idempotency.MissingIdempotencyKeyException;
+import com.leandrossb.nummus.merchants.application.BankAccountNotVerifiableException;
+import com.leandrossb.nummus.merchants.application.BankAccountNotVerifiedException;
 import com.leandrossb.nummus.merchants.application.BootstrapAlreadyUsedException;
 import com.leandrossb.nummus.merchants.application.BootstrapUnavailableException;
+import com.leandrossb.nummus.merchants.application.DuplicateBankAccountException;
 import com.leandrossb.nummus.merchants.application.InvalidBootstrapTokenException;
 import com.leandrossb.nummus.merchants.application.InvalidFeeScheduleException;
 import com.leandrossb.nummus.merchants.application.InvalidKeyExpiryException;
 import com.leandrossb.nummus.merchants.application.InvalidOperatorLabelException;
+import com.leandrossb.nummus.merchants.application.InvalidVerificationCodeException;
 import com.leandrossb.nummus.merchants.application.UnknownApiKeyException;
+import com.leandrossb.nummus.merchants.application.UnknownBankAccountException;
 import com.leandrossb.nummus.merchants.application.UnknownMerchantException;
 import com.leandrossb.nummus.ledger.domain.AccountNotActiveException;
 import com.leandrossb.nummus.ledger.domain.CurrencyMismatchException;
@@ -71,7 +76,8 @@ public class GlobalExceptionHandler {
       UnknownPaymentIntentException.class, UnknownWebhookEndpointException.class,
       UnknownWebhookDeliveryException.class,
       UnknownConciliationReportException.class, UnknownMerchantException.class,
-      UnknownApiKeyException.class, UnknownTransferException.class,
+      UnknownApiKeyException.class, UnknownBankAccountException.class,
+      UnknownTransferException.class,
       UnknownRefundException.class,
       // The payments-side twin shares the simulator's name, not its package.
       com.leandrossb.nummus.payments.domain.UnknownRefundException.class,
@@ -80,7 +86,8 @@ public class GlobalExceptionHandler {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
   }
 
-  @ExceptionHandler({MerchantUnauthorizedException.class, OperatorUnauthorizedException.class})
+  @ExceptionHandler({InvalidVerificationCodeException.class, MerchantUnauthorizedException.class,
+      OperatorUnauthorizedException.class})
   ProblemDetail unauthorized(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
   }
@@ -105,8 +112,10 @@ public class GlobalExceptionHandler {
     return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
   }
 
-  @ExceptionHandler({PaymentAccountNotActiveException.class, AccountNotActiveException.class,
-      PayoutsInFlightException.class, TransactionAlreadyReversedException.class,
+  @ExceptionHandler({PaymentAccountNotActiveException.class, BankAccountNotVerifiableException.class,
+      DuplicateBankAccountException.class,
+      AccountNotActiveException.class, PayoutsInFlightException.class,
+      TransactionAlreadyReversedException.class,
       ChargeNotPendingException.class, TransferNotPendingException.class,
       RefundNotPendingException.class, IntentNotRefundableException.class,
       ConcurrentSettlementException.class, ConcurrentPayoutException.class,
@@ -152,6 +161,11 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(InsufficientFundsException.class)
   ProblemDetail insufficientFunds(InsufficientFundsException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
+  }
+
+  @ExceptionHandler(BankAccountNotVerifiedException.class)
+  ProblemDetail bankAccountNotVerified(BankAccountNotVerifiedException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
   }
 

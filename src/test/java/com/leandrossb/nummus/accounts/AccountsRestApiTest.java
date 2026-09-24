@@ -17,11 +17,13 @@ import com.leandrossb.nummus.ledger.domain.AccountType;
 import com.leandrossb.nummus.ledger.domain.Direction;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
+import com.leandrossb.nummus.merchants.application.BankAccountsService;
 import com.leandrossb.nummus.payments.application.PayoutsService;
 import com.leandrossb.nummus.payments.domain.CreatePayoutCommand;
 import com.leandrossb.nummus.payments.domain.Payout;
 import com.leandrossb.nummus.payments.domain.PayoutStatus;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.util.List;
 import java.util.UUID;
@@ -50,6 +52,9 @@ class AccountsRestApiTest extends IntegrationTestBase {
 
   @Autowired
   private PayoutsService payouts;
+
+  @Autowired
+  private BankAccountsService bankAccounts;
 
   private String merchantKey;
   private UUID merchantId;
@@ -94,10 +99,12 @@ class AccountsRestApiTest extends IntegrationTestBase {
     return account;
   }
 
-  /** A REQUESTED payout on the fixture merchant's funded account. */
-  private Payout requestedPayout(PaymentAccount account, String amount, String bankKey) {
+  /** A REQUESTED payout on the fixture merchant's funded account, bound to a
+   *  freshly registered verified destination. */
+  private Payout requestedPayout(PaymentAccount account, String amount) {
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, merchantId);
     return payouts.create(merchantId, new CreatePayoutCommand(
-        account.publicId(), Money.ofBrl(amount), bankKey, null));
+        account.publicId(), Money.ofBrl(amount), bankAccount.publicId(), null));
   }
 
   @Test
@@ -236,7 +243,7 @@ class AccountsRestApiTest extends IntegrationTestBase {
   @Test
   void freezeIsRejectedWhileAPayoutIsRequested() throws Exception {
     var account = fundedAccount("50.0000");
-    var payout = requestedPayout(account, "20.0000", "bank.freeze-guard-01");
+    var payout = requestedPayout(account, "20.0000");
     String location = "/v1/accounts/" + account.publicId();
 
     // Freezing would strand the payout: its return and fee legs post against
@@ -260,7 +267,7 @@ class AccountsRestApiTest extends IntegrationTestBase {
   @Test
   void closeIsRejectedWhileAPayoutIsRequested() throws Exception {
     var account = fundedAccount("50.0000");
-    var payout = requestedPayout(account, "20.0000", "bank.close-guard-01");
+    var payout = requestedPayout(account, "20.0000");
 
     // Close is permanent — a REQUESTED payout on a CLOSED account could never
     // post its terminal legs.
@@ -282,7 +289,7 @@ class AccountsRestApiTest extends IntegrationTestBase {
   @Test
   void freezeSucceedsOnceThePayoutTerminates() throws Exception {
     var account = fundedAccount("50.0000");
-    var payout = requestedPayout(account, "20.0000", "bank.freeze-after-01");
+    var payout = requestedPayout(account, "20.0000");
     String location = "/v1/accounts/" + account.publicId();
 
     mockMvc.perform(post(location + "/freeze")

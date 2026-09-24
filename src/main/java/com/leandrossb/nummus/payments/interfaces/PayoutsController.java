@@ -39,7 +39,7 @@ class PayoutsController {
     var payout = payouts.create(merchant.merchantPublicId(), new CreatePayoutCommand(
         request.accountId(),
         Money.of(request.amount(), BRL),
-        request.destinationBankKey(),
+        request.bankAccountId(),
         request.expiresInSeconds() == null ? null : Duration.ofSeconds(request.expiresInSeconds())));
     return ResponseEntity
         .created(URI.create("/v1/payouts/" + payout.publicId()))

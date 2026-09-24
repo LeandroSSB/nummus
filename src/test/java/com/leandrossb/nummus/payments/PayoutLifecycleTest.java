@@ -14,6 +14,7 @@ import com.leandrossb.nummus.ledger.application.Ledger;
 import com.leandrossb.nummus.ledger.domain.Direction;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.PostedPosting;
+import com.leandrossb.nummus.merchants.application.BankAccountsService;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
@@ -30,6 +31,7 @@ import com.leandrossb.nummus.payments.domain.PayoutStatus;
 import com.leandrossb.nummus.payments.domain.UnknownPayoutException;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.psp_simulator.domain.TransferNotPendingException;
+import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
@@ -73,6 +75,8 @@ class PayoutLifecycleTest extends IntegrationTestBase {
   private MerchantsService merchants;
   @Autowired
   private OperatorKeysService operatorKeys;
+  @Autowired
+  private BankAccountsService bankAccounts;
 
   /** A payment account funded by one settled intent — the settle recipe the
    *  payout request suite uses (create intent, pay the charge, first poll settles). */
@@ -95,9 +99,12 @@ class PayoutLifecycleTest extends IntegrationTestBase {
         .publicId();
   }
 
-  private Payout payoutOf(UUID merchantPublicId, UUID accountPublicId, String amount, String bankKey) {
+  /** Creates the payout against a freshly registered, verified destination —
+   *  the registry reference the wire key derives from. */
+  private Payout payoutOf(UUID merchantPublicId, UUID accountPublicId, String amount) {
+    var bankAccount = ApiDrivers.registerVerifiedBankAccount(bankAccounts, merchantPublicId);
     var payout = payouts.create(merchantPublicId, new CreatePayoutCommand(
-        accountPublicId, Money.ofBrl(amount), bankKey, null));
+        accountPublicId, Money.ofBrl(amount), bankAccount.publicId(), null));
     payoutIds.add(payout.publicId());
     networkTransfers.add(payout.transferPublicId());
     return payout;
@@ -107,7 +114,7 @@ class PayoutLifecycleTest extends IntegrationTestBase {
   void executedTransferSettlesThePayout() throws Exception {
     var account = fundedAccount(SeedMerchant.PUBLIC_ID, "100.0000");
     var clearingBefore = ledger.balance(PaymentClearingAccount.PUBLIC_ID);
-    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000", "bank.execute-01");
+    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000");
 
     simulator.payTransfer(payout.transferPublicId());
     var settled = payouts.get(SeedMerchant.PUBLIC_ID, payout.publicId());
@@ -137,7 +144,8 @@ class PayoutLifecycleTest extends IntegrationTestBase {
     try (var c = adminConnection(); var st = c.createStatement()) {
       String payload = eventPayload(st, "payout.settled", payout.publicId());
       assertTrue(payload.contains("\"transferId\":\"" + payout.transferPublicId() + "\""), payload);
-      assertTrue(payload.contains("\"destinationBankKey\":\"bank.execute-01\""), payload);
+      assertTrue(payload.contains("\"destinationBankKey\":\"" + payout.destinationBankKey()
+          + "\""), payload);
       assertTrue(payload.contains("\"fee\":\"0.00\""), payload);
       assertTrue(payload.contains("\"netAmount\":\"30.00\""), payload);
     }
@@ -148,7 +156,7 @@ class PayoutLifecycleTest extends IntegrationTestBase {
     var merchant = payoutFeeMerchant("2.00");
     var account = fundedAccount(merchant, "100.0000");
     var feeRevenueBefore = ledger.balance(FeeRevenueAccount.PUBLIC_ID);
-    var payout = payoutOf(merchant, account.publicId(), "30.0000", "bank.fee-01");
+    var payout = payoutOf(merchant, account.publicId(), "30.0000");
 
     simulator.payTransfer(payout.transferPublicId());
     var settled = payouts.get(merchant, payout.publicId());
@@ -178,7 +186,7 @@ class PayoutLifecycleTest extends IntegrationTestBase {
   void failedTransferReturnsTheReservation() throws Exception {
     var account = fundedAccount(SeedMerchant.PUBLIC_ID, "100.0000");
     var reserveBefore = ledger.balance(PayoutReservedAccount.PUBLIC_ID);
-    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000", "bank.return-01");
+    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000");
 
     simulator.failTransfer(payout.transferPublicId());
     var failed = payouts.get(SeedMerchant.PUBLIC_ID, payout.publicId());
@@ -209,7 +217,7 @@ class PayoutLifecycleTest extends IntegrationTestBase {
   void expiryReturnsTheReservation() throws Exception {
     var account = fundedAccount(SeedMerchant.PUBLIC_ID, "100.0000");
     var reserveBefore = ledger.balance(PayoutReservedAccount.PUBLIC_ID);
-    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000", "bank.expire-01");
+    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000");
 
     // The only way a payout ages past its expiry in-test: backdate the row.
     try (var c = adminConnection(); var st = c.createStatement()) {
@@ -246,7 +254,7 @@ class PayoutLifecycleTest extends IntegrationTestBase {
   void expiredPayoutWithPendingTransferCancelsAndReturns() throws Exception {
     var account = fundedAccount(SeedMerchant.PUBLIC_ID, "100.0000");
     var reserveBefore = ledger.balance(PayoutReservedAccount.PUBLIC_ID);
-    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000", "bank.expire-02");
+    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000");
 
     try (var c = adminConnection(); var st = c.createStatement()) {
       st.executeUpdate("UPDATE payments.payout SET expires_at = now() - interval '1 second' "
@@ -275,8 +283,7 @@ class PayoutLifecycleTest extends IntegrationTestBase {
 
     // The reservation lifecycle is fully reusable: the returned funds back a
     // fresh payout of the same amount end-to-end.
-    var fresh = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000",
-        "bank.expire-02.fresh");
+    var fresh = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000");
     simulator.payTransfer(fresh.transferPublicId());
     var settled = payouts.get(SeedMerchant.PUBLIC_ID, fresh.publicId());
     assertEquals(PayoutStatus.SETTLED, settled.status());
@@ -288,7 +295,7 @@ class PayoutLifecycleTest extends IntegrationTestBase {
   @Test
   void expiredPayoutWithExecutedTransferSettles() throws Exception {
     var account = fundedAccount(SeedMerchant.PUBLIC_ID, "100.0000");
-    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000", "bank.expire-03");
+    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000");
 
     // Deterministic SUCCEEDED-at-expiry: the pay lands first, THEN the row is
     // backdated — the resolution poll observes an executed instruction.
@@ -324,7 +331,7 @@ class PayoutLifecycleTest extends IntegrationTestBase {
   void expiredPayoutWithFailedTransferStillFails() throws Exception {
     var account = fundedAccount(SeedMerchant.PUBLIC_ID, "100.0000");
     var reserveBefore = ledger.balance(PayoutReservedAccount.PUBLIC_ID);
-    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000", "bank.expire-04");
+    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000");
 
     simulator.failTransfer(payout.transferPublicId());
     try (var c = adminConnection(); var st = c.createStatement()) {
@@ -354,7 +361,7 @@ class PayoutLifecycleTest extends IntegrationTestBase {
   @Test
   void terminalStatesAreStableAndOwnershipScopes() throws Exception {
     var account = fundedAccount(SeedMerchant.PUBLIC_ID, "100.0000");
-    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000", "bank.stable-01");
+    var payout = payoutOf(SeedMerchant.PUBLIC_ID, account.publicId(), "30.0000");
     simulator.payTransfer(payout.transferPublicId());
     var first = payouts.get(SeedMerchant.PUBLIC_ID, payout.publicId());
     assertEquals(PayoutStatus.SETTLED, first.status());
