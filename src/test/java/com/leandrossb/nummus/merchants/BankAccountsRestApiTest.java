@@ -82,6 +82,17 @@ class BankAccountsRestApiTest extends IntegrationTestBase {
     String account = JsonPath.read(created.getResponse().getContentAsString(), "$.bankAccountId");
     String code = JsonPath.read(created.getResponse().getContentAsString(), "$.verificationCode");
 
+    // Wrong code: 401, no mutation — the row stays PENDING_VERIFICATION.
+    mockMvc.perform(post("/v1/bank-accounts/" + account + "/verify")
+            .header("Authorization", merchantAuth())
+            .header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"code\":\"nummus_bac_garbage\"}"))
+        .andExpect(status().isUnauthorized());
+    mockMvc.perform(get("/v1/bank-accounts/" + account).header("Authorization", merchantAuth()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("PENDING_VERIFICATION"));
+
     mockMvc.perform(post("/v1/bank-accounts/" + account + "/verify")
             .header("Authorization", merchantAuth())
             .header(KEY, UUID.randomUUID().toString())
@@ -118,6 +129,19 @@ class BankAccountsRestApiTest extends IntegrationTestBase {
             .contentType(MediaType.APPLICATION_JSON)
             .content(body("123", "4567", "89101-2", "11144477736")))
         .andExpect(status().isBadRequest()); // check digits — service-level 400
+  }
+
+  @Test
+  void duplicateActiveRegistrationIs409() throws Exception {
+    String body = body("123", "4567", "88101-9", "11144477735");
+    mockMvc.perform(post("/v1/bank-accounts")
+            .header("Authorization", merchantAuth()).header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isCreated());
+    mockMvc.perform(post("/v1/bank-accounts")
+            .header("Authorization", merchantAuth()).header(KEY, UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isConflict());
   }
 
   @Test

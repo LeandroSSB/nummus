@@ -15,6 +15,7 @@ import com.leandrossb.nummus.merchants.application.BankAccountNotVerifiableExcep
 import com.leandrossb.nummus.merchants.application.BankAccountNotVerifiedException;
 import com.leandrossb.nummus.merchants.application.BootstrapAlreadyUsedException;
 import com.leandrossb.nummus.merchants.application.BootstrapUnavailableException;
+import com.leandrossb.nummus.merchants.application.DuplicateBankAccountException;
 import com.leandrossb.nummus.merchants.application.InvalidBootstrapTokenException;
 import com.leandrossb.nummus.merchants.application.InvalidFeeScheduleException;
 import com.leandrossb.nummus.merchants.application.InvalidKeyExpiryException;
@@ -112,6 +113,7 @@ public class GlobalExceptionHandler {
   }
 
   @ExceptionHandler({PaymentAccountNotActiveException.class, BankAccountNotVerifiableException.class,
+      DuplicateBankAccountException.class,
       AccountNotActiveException.class, PayoutsInFlightException.class,
       TransactionAlreadyReversedException.class,
       ChargeNotPendingException.class, TransferNotPendingException.class,

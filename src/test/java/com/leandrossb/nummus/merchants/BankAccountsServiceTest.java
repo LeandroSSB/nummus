@@ -8,8 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.leandrossb.nummus.merchants.application.BankAccountNotVerifiableException;
 import com.leandrossb.nummus.merchants.application.BankAccountNotVerifiedException;
 import com.leandrossb.nummus.merchants.application.BankAccountsService;
+import com.leandrossb.nummus.merchants.application.DuplicateBankAccountException;
 import com.leandrossb.nummus.merchants.application.InvalidVerificationCodeException;
-import com.leandrossb.nummus.merchants.application.IssuedBankAccount;
 import com.leandrossb.nummus.merchants.application.UnknownBankAccountException;
 import com.leandrossb.nummus.merchants.domain.RegisterBankAccountCommand;
 import com.leandrossb.nummus.merchants.application.SeedMerchant;
@@ -64,7 +64,7 @@ class BankAccountsServiceTest extends IntegrationTestBase {
   @Test
   void duplicateActiveRegistrationIsRejectedAndRevocationFreesTheKey() {
     var issued = bankAccounts.register(SeedMerchant.PUBLIC_ID, command("89104-5"));
-    assertThrows(Exception.class,
+    assertThrows(DuplicateBankAccountException.class,
         () -> bankAccounts.register(SeedMerchant.PUBLIC_ID, command("89104-5")));
 
     bankAccounts.revoke(SeedMerchant.PUBLIC_ID, issued.account().publicId());

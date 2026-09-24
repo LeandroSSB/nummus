@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,7 +39,13 @@ public class BankAccountsServiceImpl implements BankAccountsService {
     var account = new BankAccount(UUID.randomUUID(), merchantPublicId, cmd.bankCode(),
         cmd.branch(), cmd.accountNumber(), cmd.holderTaxId(), "PENDING_VERIFICATION",
         Instant.now(), null);
-    store.insert(account, MerchantsServiceImpl.sha256Hex(rawCode));
+    try {
+      store.insert(account, MerchantsServiceImpl.sha256Hex(rawCode));
+    } catch (DuplicateKeyException e) {
+      // The deterministic checks above make this the mid-flight race backstop —
+      // the natural-key unique is the authority (the M2 commit-time 409 pattern).
+      throw new DuplicateBankAccountException(cmd.bankCode(), cmd.branch(), cmd.accountNumber());
+    }
     // Read back what persistence decided (defaults, truncations never — but
     // the returned row is what every later read will match on).
     var stored = store.findByPublicIdAndMerchant(merchantPublicId, account.publicId())
