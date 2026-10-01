@@ -76,8 +76,8 @@ class BalanceCompositionRestApiTest extends IntegrationTestBase {
             .header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"name\":\"Composition Lifecycle Merchant\","
-                + "\"fee\":{\"rate\":\"0\",\"fixedAmount\":\"0\","
-                + "\"payoutFixedAmount\":\"1.5000\"}}"))
+                + "\"fee\":{\"rate\":0.0,\"fixedAmount\":0.0,"
+                + "\"payoutFixedAmount\":1.5}}"))
         .andExpect(status().isCreated()).andReturn();
     String body = created.getResponse().getContentAsString();
     merchantKey = com.jayway.jsonpath.JsonPath.read(body, "$.apiKey.secret");
