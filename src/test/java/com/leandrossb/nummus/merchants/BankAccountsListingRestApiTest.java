@@ -68,7 +68,7 @@ class BankAccountsListingRestApiTest extends IntegrationTestBase {
       MvcResult result = mockMvc.perform(get("/v1/bank-accounts" + query)
               .header("Authorization", "Bearer " + merchantKey))
           .andExpect(status().isOk()).andReturn();
-      ids.addAll(JsonPath.<List<String>>read(result.getResponse().getContentAsString(), "$[*].publicId"));
+      ids.addAll(JsonPath.<List<String>>read(result.getResponse().getContentAsString(), "$[*].bankAccountId"));
       String cursor = result.getResponse().getHeader("Next-Cursor");
       pages++;
       query = cursor == null ? null : "?limit=" + limit + "&after=" + cursor;
