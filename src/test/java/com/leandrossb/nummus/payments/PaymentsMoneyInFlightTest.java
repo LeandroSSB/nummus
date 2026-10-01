@@ -99,8 +99,8 @@ class PaymentsMoneyInFlightTest extends IntegrationTestBase {
   @Test
   void sumsAreZeroOnAFreshAccount() {
     var sums = moneyInFlight.sums(account.publicId());
-    assertEquals(Money.ofBrl("0.0000"), sums.pendingIncoming());
-    assertEquals(Money.ofBrl("0.0000"), sums.reservedOutgoing());
+    assertEquals(0, sums.pendingIncoming().compareTo(Money.ofBrl("0.0000")));
+    assertEquals(0, sums.reservedOutgoing().compareTo(Money.ofBrl("0.0000")));
   }
 
   @Test
@@ -119,8 +119,8 @@ class PaymentsMoneyInFlightTest extends IntegrationTestBase {
         new CreateRefundCommand(Money.ofBrl("5.0000"), Duration.ofMinutes(10)));
 
     var sums = moneyInFlight.sums(account.publicId());
-    assertEquals(Money.ofBrl("40.0000"), sums.pendingIncoming());
-    assertEquals(Money.ofBrl("30.0000"), sums.reservedOutgoing());
+    assertEquals(0, sums.pendingIncoming().compareTo(Money.ofBrl("40.0000")));
+    assertEquals(0, sums.reservedOutgoing().compareTo(Money.ofBrl("30.0000")));
   }
 
   private PaymentIntent createAndSettleIntent(String amount) {
