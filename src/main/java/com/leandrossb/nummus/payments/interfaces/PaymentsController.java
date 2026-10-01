@@ -60,6 +60,12 @@ class PaymentsController {
     return toResponse(merchant, intent);
   }
 
+  @Idempotent
+  @PostMapping("/{id}/void")
+  IntentResponse voidIntent(AuthenticatedMerchant merchant, @PathVariable UUID id) {
+    return toResponse(merchant, payments.voidIntent(merchant.merchantPublicId(), id));
+  }
+
   @GetMapping
   ResponseEntity<List<IntentResponse>> list(AuthenticatedMerchant merchant,
       @RequestParam(required = false) String status,
