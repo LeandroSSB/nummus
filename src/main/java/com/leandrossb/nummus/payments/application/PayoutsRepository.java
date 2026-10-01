@@ -30,4 +30,7 @@ public interface PayoutsRepository {
 
   /** SETTLED rows with settled_at in [from, to), ordered by settled_at then id. */
   List<Payout> findSettledBetween(Instant from, Instant to);
+
+  List<Payout> listByAccounts(List<UUID> accountPublicIds, String status,
+      UUID account, UUID after, int limit);
 }

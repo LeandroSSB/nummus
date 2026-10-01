@@ -21,6 +21,9 @@ public interface PayoutsService {
    *  states are returned as-is without polling the network. */
   Payout get(UUID merchantPublicId, UUID publicId);
 
+  /** The merchant's payouts, newest first, keyset-paginated. */
+  List<Payout> list(UUID merchantPublicId, String status, UUID account, UUID after, int limit);
+
   /** Settled payouts in [from, to) — conciliation's view of internal money-out
    *  settlements, keyed by the network transfer each payout executed. */
   List<MoneyOutSettlementView> listSettlements(Instant from, Instant to);

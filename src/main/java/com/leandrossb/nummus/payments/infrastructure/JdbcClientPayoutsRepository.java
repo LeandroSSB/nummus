@@ -85,6 +85,33 @@ public class JdbcClientPayoutsRepository implements PayoutsRepository {
   }
 
   @Override
+  public List<Payout> listByAccounts(List<UUID> accountPublicIds, String status,
+      UUID account, UUID after, int limit) {
+    return jdbc.sql("""
+        select public_id, account_public_id, amount, destination_bank_key,
+               bank_account_public_id, status,
+               transfer_public_id, expires_at, created_at, settled_at, fee_amount,
+               request_transaction_public_id, execute_transaction_public_id,
+               return_transaction_public_id
+        from payments.payout
+        where account_public_id in (:accountPublicIds)
+          and (:status::text is null or status = :status)
+          and (:account::uuid is null or account_public_id = :account)
+          and (:after::uuid is null
+               or id < (select p2.id from payments.payout p2 where p2.public_id = :after))
+        order by id desc
+        limit :limit
+        """)
+        .param("accountPublicIds", accountPublicIds)
+        .param("status", status)
+        .param("account", account)
+        .param("after", after)
+        .param("limit", limit)
+        .query((rs, i) -> mapPayout(rs))
+        .list();
+  }
+
+  @Override
   public boolean markSettled(UUID publicId, UUID executeTransactionPublicId, Instant settledAt,
       Money feeAmount) {
     int updated = jdbc.sql("""

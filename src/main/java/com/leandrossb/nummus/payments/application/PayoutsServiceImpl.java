@@ -146,6 +146,16 @@ public class PayoutsServiceImpl implements PayoutsService {
   }
 
   @Override
+  @Transactional(readOnly = true)
+  public List<Payout> list(UUID merchantPublicId, String status, UUID account, UUID after, int limit) {
+    var accountIds = accounts.listPublicIds(merchantPublicId);
+    if (accountIds.isEmpty()) {
+      return List.of();
+    }
+    return repository.listByAccounts(accountIds, status, account, after, limit);
+  }
+
+  @Override
   @Transactional
   public List<MoneyOutSettlementView> listSettlements(Instant from, Instant to) {
     Objects.requireNonNull(from, "from must not be null");
