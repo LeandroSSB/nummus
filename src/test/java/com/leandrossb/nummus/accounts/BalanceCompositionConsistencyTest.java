@@ -101,7 +101,8 @@ class BalanceCompositionConsistencyTest extends IntegrationTestBase {
   @Test
   void requestedReservationsMatchTheReservedLedgerAccounts() {
     var reservedPostings = ledger.balance(PayoutReservedAccount.PUBLIC_ID).amount()
-        .add(ledger.balance(RefundReservedAccount.PUBLIC_ID).amount());
+        .add(ledger.balance(RefundReservedAccount.PUBLIC_ID).amount())
+        .negate();
     var domainSums = moneyInFlight.sums(account.publicId()).reservedOutgoing().amount();
     assertEquals(0, reservedPostings.compareTo(domainSums),
         () -> "reserved ledger accounts hold " + reservedPostings
