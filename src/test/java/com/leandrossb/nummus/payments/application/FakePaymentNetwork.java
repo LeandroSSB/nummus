@@ -127,6 +127,12 @@ public class FakePaymentNetwork implements PaymentNetwork {
     refundCancelLostToSettlement = refundPublicId;
   }
 
+  /** Test driver: the refund instruction fails on the network — the verdict
+   *  the service must turn into a FAILED refund wherever the clock stands. */
+  public void failRefund(UUID refundPublicId) {
+    transitionRefund(refundPublicId, ChargeStatus.FAILED);
+  }
+
   private void transitionRefund(UUID refundPublicId, ChargeStatus target) {
     refunds.computeIfPresent(refundPublicId, (id, refund) ->
         refund.status() == ChargeStatus.PENDING

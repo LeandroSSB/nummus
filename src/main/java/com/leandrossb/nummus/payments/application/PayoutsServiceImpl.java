@@ -22,6 +22,7 @@ import com.leandrossb.nummus.payments.domain.Payout;
 import com.leandrossb.nummus.payments.domain.PayoutStatus;
 import com.leandrossb.nummus.payments.domain.TransferAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.UnknownPayoutException;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -45,10 +46,11 @@ public class PayoutsServiceImpl implements PayoutsService {
   private final PayoutLifecycleEvents payoutEvents;
   private final MerchantsService merchants;
   private final BankAccountsService bankAccounts;
+  private final MeterRegistry registry;
 
   public PayoutsServiceImpl(Ledger ledger, AccountsService accounts, PaymentNetwork network,
       PayoutsRepository repository, PayoutLifecycleEvents payoutEvents, MerchantsService merchants,
-      BankAccountsService bankAccounts) {
+      BankAccountsService bankAccounts, MeterRegistry registry) {
     this.ledger = ledger;
     this.accounts = accounts;
     this.network = network;
@@ -56,6 +58,7 @@ public class PayoutsServiceImpl implements PayoutsService {
     this.payoutEvents = payoutEvents;
     this.merchants = merchants;
     this.bankAccounts = bankAccounts;
+    this.registry = registry;
   }
 
   @Override
@@ -103,10 +106,12 @@ public class PayoutsServiceImpl implements PayoutsService {
     var reservation = ledger.post(new PostTransactionCommand("payout " + payoutId + " request",
         List.of(new PostingDraft(account.ledgerAccountPublicId(), Direction.DEBIT, cmd.amount()),
             new PostingDraft(PayoutReservedAccount.PUBLIC_ID, Direction.CREDIT, cmd.amount()))));
-    return repository.insert(new Payout(payoutId, account.publicId(), cmd.amount(),
+    var payout = repository.insert(new Payout(payoutId, account.publicId(), cmd.amount(),
         PayoutStatus.REQUESTED, destination.wireKey(), destination.bankAccountPublicId(),
         transfer.publicId(),
         Instant.now().plus(ttl), Instant.now(), null, null, reservation.publicId(), null, null));
+    count("nummus.payouts", "requested");
+    return payout;
   }
 
   @Override
@@ -188,6 +193,7 @@ public class PayoutsServiceImpl implements PayoutsService {
     }
     var expired = repository.findByPublicId(payout.publicId()).orElseThrow();
     payoutEvents.publish(toEvent(merchantPublicId, PayoutEventTypes.EXPIRED, expired, null, null));
+    count("nummus.payouts", "expired");
     return expired;
   }
 
@@ -202,6 +208,7 @@ public class PayoutsServiceImpl implements PayoutsService {
     }
     var failed = repository.findByPublicId(payout.publicId()).orElseThrow();
     payoutEvents.publish(toEvent(merchantPublicId, PayoutEventTypes.FAILED, failed, null, null));
+    count("nummus.payouts", "failed");
     return failed;
   }
 
@@ -237,7 +244,14 @@ public class PayoutsServiceImpl implements PayoutsService {
     var settled = repository.findByPublicId(payout.publicId()).orElseThrow();
     payoutEvents.publish(toEvent(merchantPublicId, PayoutEventTypes.SETTLED, settled, fee,
         payout.amount().subtract(fee)));
+    count("nummus.payouts", "executed");
     return settled;
+  }
+
+  /** One line per won transition: the counter names carry the lifecycle,
+   *  Prometheus renders them as nummus_payouts_total{outcome=...}. */
+  private void count(String name, String outcome) {
+    registry.counter(name, "outcome", outcome).increment();
   }
 
   private static PayoutLifecycleEvent toEvent(UUID merchantPublicId, String type, Payout payout,

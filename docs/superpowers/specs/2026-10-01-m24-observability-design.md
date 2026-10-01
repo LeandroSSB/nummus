@@ -20,7 +20,7 @@ nothing to point at.
   (tags carry outcomes, never merchant or account ids):
   - `nummus.intents` — `created`, `settled`, `failed`, `expired`
   - `nummus.payouts` — `requested`, `executed`, `failed`, `expired`
-  - `nummus.refunds` — `requested`, `settled`
+  - `nummus.refunds` — `requested`, `settled`, `failed`, `expired`
   - `nummus.webhook_deliveries` — `attempted`, `succeeded`, `failed`
   Incremented at the same service methods that publish lifecycle events and
   drive the outbox — one line per transition, no new transactionality.

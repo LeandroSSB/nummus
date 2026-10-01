@@ -9,3 +9,15 @@ spring:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:nummus}
     user: ${FLYWAY_USER:nummus_owner}
     password: ${FLYWAY_PASSWORD:nummus_owner}
+
+management:
+  server:
+    port: 9090
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

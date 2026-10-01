@@ -19,6 +19,7 @@ import com.leandrossb.nummus.payments.domain.IntentStatus;
 import com.leandrossb.nummus.payments.domain.PaymentIntent;
 import com.leandrossb.nummus.payments.domain.PaymentLimitExceededException;
 import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -41,16 +42,18 @@ public class PaymentsServiceImpl implements PaymentsService {
   private final PaymentsRepository repository;
   private final IntentLifecycleEvents intentEvents;
   private final MerchantsService merchants;
+  private final MeterRegistry registry;
 
   public PaymentsServiceImpl(Ledger ledger, AccountsService accounts, PaymentNetwork network,
       PaymentsRepository repository, IntentLifecycleEvents intentEvents,
-      MerchantsService merchants) {
+      MerchantsService merchants, MeterRegistry registry) {
     this.ledger = ledger;
     this.accounts = accounts;
     this.network = network;
     this.repository = repository;
     this.intentEvents = intentEvents;
     this.merchants = merchants;
+    this.registry = registry;
   }
 
   @Override
@@ -76,9 +79,11 @@ public class PaymentsServiceImpl implements PaymentsService {
           Money.of(limits.maxIntentAmount(), cmd.amount().currency()));
     }
     var charge = network.createCharge(cmd.amount());
-    return repository.insert(new PaymentIntent(UUID.randomUUID(), account.publicId(),
+    var intent = repository.insert(new PaymentIntent(UUID.randomUUID(), account.publicId(),
         cmd.amount(), IntentStatus.CREATED, charge.publicId(), Instant.now().plus(ttl),
         Instant.now(), null, null, null));
+    count("nummus.intents", "created");
+    return intent;
   }
 
   @Override
@@ -104,6 +109,7 @@ public class PaymentsServiceImpl implements PaymentsService {
       if (repository.transitionToExpired(publicId)) {
         var expired = repository.findByPublicId(publicId).orElseThrow();
         intentEvents.publish(toEvent(merchantPublicId, IntentEventTypes.EXPIRED, expired, null, null));
+        count("nummus.intents", "expired");
         return expired;
       }
       return repository.findByPublicId(publicId).orElseThrow();
@@ -120,6 +126,7 @@ public class PaymentsServiceImpl implements PaymentsService {
         if (repository.transitionToFailed(publicId)) {
           var failed = repository.findByPublicId(publicId).orElseThrow();
           intentEvents.publish(toEvent(merchantPublicId, IntentEventTypes.FAILED, failed, null, null));
+          count("nummus.intents", "failed");
           yield failed;
         }
         yield repository.findByPublicId(publicId).orElseThrow();
@@ -179,7 +186,14 @@ public class PaymentsServiceImpl implements PaymentsService {
     var settled = repository.findByPublicId(intent.publicId()).orElseThrow();
     intentEvents.publish(toEvent(merchantPublicId, IntentEventTypes.SETTLED, settled,
         breakdown.fee(), breakdown.net()));
+    count("nummus.intents", "settled");
     return settled;
+  }
+
+  /** One line per won transition: the counter names carry the lifecycle,
+   *  Prometheus renders them as nummus_intents_total{outcome=...}. */
+  private void count(String name, String outcome) {
+    registry.counter(name, "outcome", outcome).increment();
   }
 
   private static IntentLifecycleEvent toEvent(UUID merchantPublicId, String type, PaymentIntent intent,

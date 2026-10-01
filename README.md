@@ -17,6 +17,7 @@ Payment providers hold funds on behalf of merchants and must answer, at any mome
 | **Idempotency** | Merchant-facing writes are safe to retry — `Idempotency-Key` handling with stored responses |
 | **Webhooks** | At-least-once event delivery to merchants via transactional outbox, with retries and backoff; registration and delivery reject SSRF targets (two-layer), merchants redrive failed deliveries, succeeded deliveries age out under retention, listings paginate; a second namespace serves operator endpoints (conciliation alerts) |
 | **Conciliation** | Matching of external settlement reports against internal ledger entries, with divergence tracking; re-ingest is scheduled over tumbling self-healing windows and every OPEN report pushes a digest to operator webhooks; reports cover every executed instruction — charges, payout transfers, and charge refunds |
+| **Observability** | Liveness/readiness probes and a Prometheus scrape on a dedicated management port; lifecycle counters for intents, payouts, refunds, and webhook deliveries |
 | **Bank accounts** | Merchant-scoped registry of payout destinations: structured Brazilian bank accounts with check-digit validation, one-time-code verification, and registry-only payouts that derive the wire key, listed with keyset pagination |
 | **PSP simulator** | A first-class simulator plays the external payment network — the same contract a real PSP integration would implement |
 
@@ -71,3 +72,4 @@ In active development. Current milestones:
 - [x] M21 — Balance composition (pending/reserved views)
 - [x] M22 — Merchant listings (keyset pagination)
 - [x] M23 — Payment limits (per-merchant caps)
+- [x] M24 — Observability (health probes, Prometheus metrics)

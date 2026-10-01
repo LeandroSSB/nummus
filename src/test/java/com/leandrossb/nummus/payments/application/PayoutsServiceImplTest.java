@@ -23,6 +23,7 @@ import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.payments.domain.CreatePayoutCommand;
 import com.leandrossb.nummus.payments.domain.PayoutStatus;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Instant;
 import java.util.Currency;
 import java.util.UUID;
@@ -47,12 +48,13 @@ class PayoutsServiceImplTest {
   private final MerchantsService merchants = new FakeMerchantsService();
   private final FakeBankAccountsService bankAccounts = new FakeBankAccountsService();
   private final PaymentsService payments =
-      new PaymentsServiceImpl(ledger, accounts, network, intentRepo, event -> { }, merchants);
+      new PaymentsServiceImpl(ledger, accounts, network, intentRepo, event -> { }, merchants,
+          new SimpleMeterRegistry());
   private final InMemoryPayoutsRepository payoutRepo = new InMemoryPayoutsRepository();
   // Outbox publishing is covered by the integration suites; unit scope ignores events.
   private final PayoutsService payouts =
       new PayoutsServiceImpl(ledger, accounts, network, payoutRepo, event -> { }, merchants,
-          bankAccounts);
+          bankAccounts, new SimpleMeterRegistry());
 
   PayoutsServiceImplTest() {
     // Test-scope composition layer: mirror the V5/V18 seeds so the pooled

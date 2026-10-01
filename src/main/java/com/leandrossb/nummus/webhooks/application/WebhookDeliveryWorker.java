@@ -1,6 +1,7 @@
 package com.leandrossb.nummus.webhooks.application;
 
 import com.leandrossb.nummus.webhooks.domain.EndpointStatus;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,12 +19,14 @@ public class WebhookDeliveryWorker {
   private final WebhookStore store;
   private final EventDeliveryClient client;
   private final WebhookProperties properties;
+  private final MeterRegistry registry;
 
   public WebhookDeliveryWorker(WebhookStore store, EventDeliveryClient client,
-      WebhookProperties properties) {
+      WebhookProperties properties, MeterRegistry registry) {
     this.store = store;
     this.client = client;
     this.properties = properties;
+    this.registry = registry;
   }
 
   @Scheduled(fixedDelayString = "${nummus.webhooks.poll-delay-ms:1000}",
@@ -48,10 +51,13 @@ public class WebhookDeliveryWorker {
         continue;
       }
       var result = client.deliver(due.url(), due.secret(), due.eventType(), due.payload());
+      count("nummus.webhook_deliveries", "attempted");
       if (result.delivered()) {
         store.recordDeliverySuccess(due.id(), result.httpStatus());
+        count("nummus.webhook_deliveries", "succeeded");
       } else if (due.attempts() + 1 >= properties.maxAttempts()) {
         store.recordDeliveryFailure(due.id(), result.httpStatus());
+        count("nummus.webhook_deliveries", "failed");
       } else {
         store.recordDeliveryRetry(due.id(), result.httpStatus(),
             Instant.now().plus(backoffAfter(due.attempts() + 1)));
@@ -61,5 +67,13 @@ public class WebhookDeliveryWorker {
 
   private Duration backoffAfter(int attempt) {
     return properties.backoffBase().multipliedBy((long) Math.pow(2, attempt));
+  }
+
+  /** Counted per HTTP attempt and its terminal outcomes; the local
+   *  resolutions that never reach the client (unsubscribed endpoint, unsafe
+   *  URL) are not delivery attempts and stay uncounted — Prometheus renders
+   *  the names as nummus_webhook_deliveries_total{outcome=...}. */
+  private void count(String name, String outcome) {
+    registry.counter(name, "outcome", outcome).increment();
   }
 }

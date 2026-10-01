@@ -26,6 +26,7 @@ import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.payments.domain.IntentStatus;
 import com.leandrossb.nummus.payments.domain.PaymentIntent;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -91,7 +92,8 @@ class PaymentsPublishRaceTest {
   }
 
   private PaymentsService paymentsWith(PaymentsRepository repository) {
-    return new PaymentsServiceImpl(ledger, accounts, network, repository, intentEvents, merchants);
+    return new PaymentsServiceImpl(ledger, accounts, network, repository, intentEvents, merchants,
+        new SimpleMeterRegistry());
   }
 
   private PaymentIntent createdIntent(PaymentsService payments) {
