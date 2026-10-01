@@ -80,6 +80,32 @@ public class JdbcClientRefundsRepository implements RefundsRepository {
   }
 
   @Override
+  public List<Refund> listByAccounts(List<UUID> accountPublicIds, String status,
+      UUID account, UUID after, int limit) {
+    return jdbc.sql("""
+        select r.public_id, r.intent_public_id, r.amount, r.status, r.network_refund_public_id,
+               r.expires_at, r.created_at, r.settled_at, r.hold_transaction_public_id,
+               r.execute_transaction_public_id, r.return_transaction_public_id
+        from payments.refund r
+        join payments.payment_intent i on i.public_id = r.intent_public_id
+        where i.account_public_id in (:accountPublicIds)
+          and (:status::text is null or r.status = :status)
+          and (:account::uuid is null or i.account_public_id = :account)
+          and (:after::uuid is null
+               or r.id < (select r2.id from payments.refund r2 where r2.public_id = :after))
+        order by r.id desc
+        limit :limit
+        """)
+        .param("accountPublicIds", accountPublicIds)
+        .param("status", status)
+        .param("account", account)
+        .param("after", after)
+        .param("limit", limit)
+        .query((rs, i) -> mapRefund(rs))
+        .list();
+  }
+
+  @Override
   public Money refundedTotal(UUID intentPublicId) {
     return jdbc.sql("""
         select coalesce(sum(amount), 0) from payments.refund

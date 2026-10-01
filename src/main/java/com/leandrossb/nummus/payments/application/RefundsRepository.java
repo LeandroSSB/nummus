@@ -36,4 +36,7 @@ public interface RefundsRepository {
 
   /** SETTLED rows with settled_at in [from, to), ordered by settled_at then id. */
   List<Refund> findSettledBetween(Instant from, Instant to);
+
+  List<Refund> listByAccounts(List<UUID> accountPublicIds, String status,
+      UUID account, UUID after, int limit);
 }

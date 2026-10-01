@@ -27,6 +27,9 @@ public interface RefundsService {
    *  without consulting the network. Terminal rows are returned untouched. */
   Refund get(UUID merchantPublicId, UUID publicId);
 
+  /** The merchant's refunds, newest first, keyset-paginated. */
+  List<Refund> list(UUID merchantPublicId, String status, UUID account, UUID after, int limit);
+
   /** Sum of the intent's holding (REQUESTED) and executed (SETTLED) refunds —
    *  the term every further refund request is capped against. FAILED and
    *  EXPIRED refunds released their share and drop out; an intent without
