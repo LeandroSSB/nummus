@@ -6,7 +6,7 @@ public enum ChargeStatus {
   SUCCEEDED,
   FAILED,
   /** Terminal withdrawal of an in-flight instruction before it executed —
-   * reached only by the expiry resolver or an operator cancel; charges never
-   * enter this state. */
+   * reached by the expiry resolver, an operator cancel, or a merchant voiding
+   * the intent before the payer pays. */
   CANCELLED
 }

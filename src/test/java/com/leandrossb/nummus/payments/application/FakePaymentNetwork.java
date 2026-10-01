@@ -29,6 +29,18 @@ public class FakePaymentNetwork implements PaymentNetwork {
     return charges.get(chargePublicId);
   }
 
+  /** Withdraws a pending charge; a terminal one is returned as observed —
+   * the post-attempt contract of the adapter's catch-and-reread, without
+   * race emulation. */
+  @Override
+  public NetworkCharge cancelCharge(UUID chargePublicId) {
+    charges.computeIfPresent(chargePublicId, (id, charge) ->
+        charge.status() == ChargeStatus.PENDING
+            ? new NetworkCharge(id, charge.amount(), ChargeStatus.CANCELLED)
+            : charge);
+    return charges.get(chargePublicId);
+  }
+
   /** Test driver: the payer pays. */
   public void succeed(UUID chargePublicId) {
     transition(chargePublicId, ChargeStatus.SUCCEEDED);

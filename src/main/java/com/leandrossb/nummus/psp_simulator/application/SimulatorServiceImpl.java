@@ -68,6 +68,12 @@ public class SimulatorServiceImpl implements SimulatorService {
   }
 
   @Override
+  @Transactional
+  public NetworkCharge cancelCharge(UUID publicId) {
+    return transition(publicId, ChargeStatus.CANCELLED);
+  }
+
+  @Override
   @Transactional(readOnly = true)
   public List<NetworkSettlement> settlementReport(Instant from, Instant to) {
     Objects.requireNonNull(from, "from must not be null");

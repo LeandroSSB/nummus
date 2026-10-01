@@ -14,6 +14,10 @@ public interface PaymentNetwork {
 
   NetworkCharge getCharge(UUID chargePublicId);
 
+  /** Cancels a pending charge; returns the post-attempt charge when the
+   *  cancel loses the status guard (the cancelChargeRefund contract). */
+  NetworkCharge cancelCharge(UUID chargePublicId);
+
   NetworkTransfer createPayoutTransfer(Money amount, String destinationBankKey);
 
   NetworkTransfer getPayoutTransfer(UUID transferPublicId);
