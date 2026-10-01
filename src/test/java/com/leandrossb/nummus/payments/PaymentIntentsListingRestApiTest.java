@@ -13,6 +13,7 @@ import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.payments.application.PaymentsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
+import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
