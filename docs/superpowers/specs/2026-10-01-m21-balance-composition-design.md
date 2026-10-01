@@ -68,14 +68,15 @@ and what is locked. Today that takes three mental joins the merchant cannot do.
 
 ```json
 {
-  "balance": "120.00",
+  "amount": "120.00",
   "pendingIncoming": "300.00",
   "reservedOutgoing": "50.00",
   "currency": "BRL"
 }
 ```
 
-`GET /v1/accounts/{id}/statement` gains `pendingIncoming` and
+(The booked figure keeps its shipped field name `amount`; the change is
+additive.) `GET /v1/accounts/{id}/statement` gains `pendingIncoming` and
 `reservedOutgoing` next to its existing `balance`.
 
 Semantics, stated once in the Javadoc and pinned by tests:
