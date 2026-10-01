@@ -167,12 +167,16 @@ class AccountsRestApiTest extends IntegrationTestBase {
             .header("Authorization", "Bearer " + merchantKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.amount").value(150.0000))
+        .andExpect(jsonPath("$.pendingIncoming").value(0.0000))
+        .andExpect(jsonPath("$.reservedOutgoing").value(0.0000))
         .andExpect(jsonPath("$.currency").value("BRL"));
 
     mockMvc.perform(get("/v1/accounts/{id}/statement", account.publicId())
             .header("Authorization", "Bearer " + merchantKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.balance").value(150.0000))
+        .andExpect(jsonPath("$.pendingIncoming").value(0.0000))
+        .andExpect(jsonPath("$.reservedOutgoing").value(0.0000))
         .andExpect(jsonPath("$.currency").value("BRL"))
         .andExpect(jsonPath("$.lines.length()").value(1))
         .andExpect(jsonPath("$.lines[0].direction").value("CREDIT"))

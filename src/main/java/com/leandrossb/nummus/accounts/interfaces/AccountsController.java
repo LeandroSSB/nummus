@@ -48,7 +48,7 @@ class AccountsController {
 
   @GetMapping("/{id}/balance")
   BalanceResponse balance(AuthenticatedMerchant merchant, @PathVariable UUID id) {
-    return BalanceResponse.from(accounts.balance(merchant.merchantPublicId(), id));
+    return BalanceResponse.from(accounts.composition(merchant.merchantPublicId(), id));
   }
 
   @GetMapping("/{id}/statement")

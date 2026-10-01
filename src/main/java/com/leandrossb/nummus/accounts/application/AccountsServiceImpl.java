@@ -7,7 +7,6 @@ import com.leandrossb.nummus.accounts.domain.PaymentAccountNotActiveException;
 import com.leandrossb.nummus.accounts.domain.PayoutsInFlightException;
 import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
 import com.leandrossb.nummus.ledger.application.Ledger;
-import com.leandrossb.nummus.ledger.domain.AccountStatement;
 import com.leandrossb.nummus.ledger.domain.AccountType;
 import com.leandrossb.nummus.ledger.domain.Direction;
 import com.leandrossb.nummus.ledger.domain.Money;
@@ -29,12 +28,14 @@ public class AccountsServiceImpl implements AccountsService {
   private final Ledger ledger;
   private final AccountsRepository repository;
   private final OutstandingHolds outstandingHolds;
+  private final MoneyInFlight moneyInFlight;
 
   public AccountsServiceImpl(Ledger ledger, AccountsRepository repository,
-      OutstandingHolds outstandingHolds) {
+      OutstandingHolds outstandingHolds, MoneyInFlight moneyInFlight) {
     this.ledger = ledger;
     this.repository = repository;
     this.outstandingHolds = outstandingHolds;
+    this.moneyInFlight = moneyInFlight;
   }
 
   @Override
@@ -93,11 +94,22 @@ public class AccountsServiceImpl implements AccountsService {
 
   @Override
   @Transactional(readOnly = true)
-  public AccountStatement statement(UUID merchantPublicId, UUID publicId, Page page) {
+  public BalanceComposition composition(UUID merchantPublicId, UUID publicId) {
+    var account = require(merchantPublicId, publicId);
+    var booked = naturalSigned(account, ledger.balance(account.ledgerAccountPublicId()));
+    var inFlight = moneyInFlight.sums(publicId);
+    return new BalanceComposition(booked, inFlight.pendingIncoming(), inFlight.reservedOutgoing());
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public ComposedStatement statement(UUID merchantPublicId, UUID publicId, Page page) {
     Objects.requireNonNull(page, "page must not be null");
     var account = require(merchantPublicId, publicId);
     var raw = ledger.statement(account.ledgerAccountPublicId(), page);
-    return new AccountStatement(raw.account(), naturalSigned(account, raw.balance()), raw.lines());
+    var inFlight = moneyInFlight.sums(publicId);
+    return new ComposedStatement(account, naturalSigned(account, raw.balance()),
+        inFlight.pendingIncoming(), inFlight.reservedOutgoing(), raw.lines());
   }
 
   private PaymentAccount require(UUID merchantPublicId, UUID publicId) {

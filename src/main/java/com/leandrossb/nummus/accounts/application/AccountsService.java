@@ -2,7 +2,6 @@ package com.leandrossb.nummus.accounts.application;
 
 import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
 import com.leandrossb.nummus.accounts.domain.PaymentAccount;
-import com.leandrossb.nummus.ledger.domain.AccountStatement;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.Page;
 import java.util.UUID;
@@ -29,6 +28,9 @@ public interface AccountsService {
   /** Derived balance in natural sign: available funds read positive. */
   Money balance(UUID merchantPublicId, UUID publicId);
 
-  /** Postings newest first with the natural-signed balance; lines stay as posted. */
-  AccountStatement statement(UUID merchantPublicId, UUID publicId, Page page);
+  /** Booked balance plus the in-flight sums around it (see BalanceComposition). */
+  BalanceComposition composition(UUID merchantPublicId, UUID publicId);
+
+  /** Postings newest first with the natural-signed balance and in-flight sums. */
+  ComposedStatement statement(UUID merchantPublicId, UUID publicId, Page page);
 }
