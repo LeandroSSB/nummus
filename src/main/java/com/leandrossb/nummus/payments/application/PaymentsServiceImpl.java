@@ -118,11 +118,16 @@ public class PaymentsServiceImpl implements PaymentsService {
   @Override
   @Transactional
   public PaymentIntent voidIntent(UUID merchantPublicId, UUID publicId) {
-    // Ownership precedes everything; the read's lazy expiry settles the
-    // expiry question before the void guard runs.
-    var intent = requireOwnedIntent(merchantPublicId, publicId);
+    // Ownership precedes everything; the guards reject on persisted state
+    // and the clock — never on writes this transaction would roll back.
+    var intent = requireOwnedIntentUnresolved(merchantPublicId, publicId);
     if (intent.status() != IntentStatus.CREATED) {
       throw new IntentNotVoidableException(publicId, intent.status());
+    }
+    // Past expiry is observable without writing it: reject with the clock's
+    // verdict; the row expires lazily on its next read as always.
+    if (Instant.now().isAfter(intent.expiresAt())) {
+      throw new IntentNotVoidableException(publicId, IntentStatus.EXPIRED);
     }
     // One attempt, post-attempt branching — the refund-resolver contract:
     // a cancel that loses to a parallel pay observes SUCCEEDED and settles.
@@ -172,10 +177,10 @@ public class PaymentsServiceImpl implements PaymentsService {
         .toList();
   }
 
-  /** The ownership-scoped read every merchant-facing intent operation starts
-   *  from: a foreign intent is indistinguishable from an unknown one, and the
-   *  read's lazy expiry settles the expiry question before any later guard
-   *  runs (the {@code get} preamble, extracted verbatim). */
+  /** The ownership-scoped read {@code get} starts from: a foreign intent is
+   *  indistinguishable from an unknown one, and the read's lazy expiry
+   *  settles the expiry question before any later guard runs (the
+   *  {@code get} preamble, extracted verbatim). */
   private PaymentIntent requireOwnedIntent(UUID merchantPublicId, UUID publicId) {
     var intent = repository.findByPublicId(publicId)
         .orElseThrow(() -> new UnknownPaymentIntentException(publicId));
@@ -201,6 +206,23 @@ public class PaymentsServiceImpl implements PaymentsService {
         return expired;
       }
       return repository.findByPublicId(publicId).orElseThrow();
+    }
+    return intent;
+  }
+
+  /** Ownership and persisted state only — no lazy transitions: the void's
+   *  rejections must never ride on writes this transaction would roll back. */
+  private PaymentIntent requireOwnedIntentUnresolved(UUID merchantPublicId, UUID publicId) {
+    var intent = repository.findByPublicId(publicId)
+        .orElseThrow(() -> new UnknownPaymentIntentException(publicId));
+    // Ownership precedes every lazy transition and the charge poll: never act
+    // on another merchant's intent — for them it is indistinguishable from
+    // an unknown one, down to the vocabulary: the 404 names the intent they
+    // addressed, never the owning account's id.
+    try {
+      accounts.get(merchantPublicId, intent.accountPublicId());
+    } catch (UnknownPaymentAccountException e) {
+      throw new UnknownPaymentIntentException(publicId);
     }
     return intent;
   }

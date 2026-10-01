@@ -150,6 +150,29 @@ class IntentVoidServiceTest extends IntegrationTestBase {
     assertEquals(IntentStatus.VOIDED, rejected.current());
   }
 
+  @Test
+  void voidingAPastExpiryIntentRejectsOnTheClockWithoutWriting() throws Exception {
+    var intent = createdIntent("40.0000");
+    // The only way a CREATED intent ages past expiry in-test: backdate the row.
+    try (var c = adminConnection(); var st = c.createStatement()) {
+      st.executeUpdate("UPDATE payments.payment_intent SET expires_at = now() - interval '1 second'"
+          + " WHERE public_id = '" + intent.publicId() + "'");
+    }
+
+    // The rejection rides on no writes: the expired counter must not move on
+    // the void attempt itself — only the follow-up read's won transition counts.
+    assertEquals(0.0, registry.counter("nummus.intents", "outcome", "expired").count());
+    var rejected = assertThrows(IntentNotVoidableException.class,
+        () -> payments.voidIntent(SeedMerchant.PUBLIC_ID, intent.publicId()));
+
+    assertEquals(IntentStatus.EXPIRED, rejected.current());
+    assertEquals(0.0, registry.counter("nummus.intents", "outcome", "expired").count());
+    // The row is still CREATED; the next read expires it lazily, as always.
+    assertEquals(IntentStatus.EXPIRED,
+        payments.get(SeedMerchant.PUBLIC_ID, intent.publicId()).status());
+    assertEquals(1.0, registry.counter("nummus.intents", "outcome", "expired").count());
+  }
+
   /**
    * The container is shared across classes and the conciliation suites
    * assert over now-relative windows. Push this class's settlement and

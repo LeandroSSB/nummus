@@ -5,8 +5,9 @@ import java.util.UUID;
 /**
  * Thrown when a void targets an intent that is not CREATED. Carries the
  * state that made the void impossible — the intent's persisted status for
- * terminal rows, or the post-attempt network outcome when a racing pay/fail
- * won the charge.
+ * terminal rows, the post-attempt network outcome when a racing pay/fail
+ * won the charge, or the clock's verdict for a past-expiry row not yet
+ * expired.
  */
 public class IntentNotVoidableException extends RuntimeException {
 
