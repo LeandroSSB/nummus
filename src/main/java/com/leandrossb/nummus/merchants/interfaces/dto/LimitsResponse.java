@@ -7,8 +7,6 @@ import java.math.BigDecimal;
 public record LimitsResponse(BigDecimal maxIntentAmount, BigDecimal maxPayoutAmount) {
 
   public static LimitsResponse from(PaymentLimits limits) {
-    return new LimitsResponse(
-        limits.maxIntentAmount() == null ? null : limits.maxIntentAmount().amount(),
-        limits.maxPayoutAmount() == null ? null : limits.maxPayoutAmount().amount());
+    return new LimitsResponse(limits.maxIntentAmount(), limits.maxPayoutAmount());
   }
 }

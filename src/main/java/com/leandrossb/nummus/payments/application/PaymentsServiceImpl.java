@@ -71,9 +71,9 @@ public class PaymentsServiceImpl implements PaymentsService {
     // inclusive — equal passes.
     var limits = merchants.findPaymentLimits(merchantPublicId).orElse(PaymentLimits.unlimited());
     if (limits.maxIntentAmount() != null
-        && cmd.amount().compareTo(limits.maxIntentAmount()) > 0) {
+        && cmd.amount().amount().compareTo(limits.maxIntentAmount()) > 0) {
       throw new PaymentLimitExceededException(merchantPublicId, cmd.amount(),
-          limits.maxIntentAmount());
+          Money.of(limits.maxIntentAmount(), cmd.amount().currency()));
     }
     var charge = network.createCharge(cmd.amount());
     return repository.insert(new PaymentIntent(UUID.randomUUID(), account.publicId(),

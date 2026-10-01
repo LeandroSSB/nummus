@@ -80,9 +80,9 @@ public class PayoutsServiceImpl implements PayoutsService {
     // passes.
     var limits = merchants.findPaymentLimits(merchantPublicId).orElse(PaymentLimits.unlimited());
     if (limits.maxPayoutAmount() != null
-        && cmd.amount().compareTo(limits.maxPayoutAmount()) > 0) {
+        && cmd.amount().amount().compareTo(limits.maxPayoutAmount()) > 0) {
       throw new PaymentLimitExceededException(merchantPublicId, cmd.amount(),
-          limits.maxPayoutAmount());
+          Money.of(limits.maxPayoutAmount(), cmd.amount().currency()));
     }
     // Check-then-reserve cannot race: the row lock on the merchant's ledger
     // account serializes every payout request against this account, and the

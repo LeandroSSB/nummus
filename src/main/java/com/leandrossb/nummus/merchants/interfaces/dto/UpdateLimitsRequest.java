@@ -1,6 +1,5 @@
 package com.leandrossb.nummus.merchants.interfaces.dto;
 
-import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.merchants.application.PaymentLimits;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -14,10 +13,6 @@ public record UpdateLimitsRequest(
     @Digits(integer = 15, fraction = 4) BigDecimal maxPayoutAmount) {
 
   public PaymentLimits limits() {
-    return new PaymentLimits(
-        maxIntentAmount == null ? null : Money.of(maxIntentAmount,
-            java.util.Currency.getInstance("BRL")),
-        maxPayoutAmount == null ? null : Money.of(maxPayoutAmount,
-            java.util.Currency.getInstance("BRL")));
+    return new PaymentLimits(maxIntentAmount, maxPayoutAmount);
   }
 }

@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.merchants.application.PaymentLimits;
@@ -59,13 +58,13 @@ class PaymentLimitsStoreTest extends IntegrationTestBase {
     assertNull(initial.maxPayoutAmount());
 
     merchants.updatePaymentLimits(merchantId,
-        new PaymentLimits(Money.ofBrl("5000.0000"), Money.ofBrl("2000.0000")), operatorKeyPublicId);
+        new PaymentLimits(new BigDecimal("5000.0000"), new BigDecimal("2000.0000")), operatorKeyPublicId);
     merchants.updatePaymentLimits(merchantId,
-        new PaymentLimits(null, Money.ofBrl("1500.0000")), operatorKeyPublicId);
+        new PaymentLimits(null, new BigDecimal("1500.0000")), operatorKeyPublicId);
 
     var current = merchants.findPaymentLimits(merchantId).orElseThrow();
     assertNull(current.maxIntentAmount());
-    assertEquals(0, current.maxPayoutAmount().compareTo(Money.ofBrl("1500.0000")));
+    assertEquals(0, current.maxPayoutAmount().compareTo(new BigDecimal("1500.0000")));
 
     var history = merchants.listPaymentLimitsHistory(merchantId, null, 50);
     assertEquals(2, history.size()); // newest first

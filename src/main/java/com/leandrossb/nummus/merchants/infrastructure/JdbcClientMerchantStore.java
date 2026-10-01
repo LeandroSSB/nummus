@@ -1,6 +1,5 @@
 package com.leandrossb.nummus.merchants.infrastructure;
 
-import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.merchants.application.FeeHistoryEntry;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantStore;
@@ -14,7 +13,6 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.util.Currency;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,8 +26,6 @@ import org.springframework.stereotype.Repository;
 public class JdbcClientMerchantStore implements MerchantStore {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(JdbcClientMerchantStore.class);
-
-  private static final Currency BRL = Currency.getInstance("BRL");
 
   private final JdbcClient jdbc;
 
@@ -134,11 +130,8 @@ public class JdbcClientMerchantStore implements MerchantStore {
     return jdbc.sql(
         "select max_intent_amount, max_payout_amount from merchants.merchant where public_id = :id")
         .param("id", merchantPublicId)
-        .query((rs, i) -> new PaymentLimits(
-            rs.getBigDecimal("max_intent_amount") == null ? null
-                : Money.of(rs.getBigDecimal("max_intent_amount"), BRL),
-            rs.getBigDecimal("max_payout_amount") == null ? null
-                : Money.of(rs.getBigDecimal("max_payout_amount"), BRL)))
+        .query((rs, i) -> new PaymentLimits(rs.getBigDecimal("max_intent_amount"),
+            rs.getBigDecimal("max_payout_amount")))
         .optional().orElse(PaymentLimits.unlimited());
   }
 
@@ -149,8 +142,8 @@ public class JdbcClientMerchantStore implements MerchantStore {
             set max_intent_amount = :maxIntent, max_payout_amount = :maxPayout
             where public_id = :id
             """)
-        .param("maxIntent", limits.maxIntentAmount() == null ? null : limits.maxIntentAmount().amount())
-        .param("maxPayout", limits.maxPayoutAmount() == null ? null : limits.maxPayoutAmount().amount())
+        .param("maxIntent", limits.maxIntentAmount())
+        .param("maxPayout", limits.maxPayoutAmount())
         .param("id", merchantPublicId)
         .update() == 1;
   }
@@ -163,8 +156,8 @@ public class JdbcClientMerchantStore implements MerchantStore {
         select m.id, :maxIntent, :maxPayout, :createdBy
         from merchants.merchant m where m.public_id = :id
         """)
-        .param("maxIntent", limits.maxIntentAmount() == null ? null : limits.maxIntentAmount().amount())
-        .param("maxPayout", limits.maxPayoutAmount() == null ? null : limits.maxPayoutAmount().amount())
+        .param("maxIntent", limits.maxIntentAmount())
+        .param("maxPayout", limits.maxPayoutAmount())
         .param("createdBy", createdBy)
         .param("id", merchantPublicId)
         .update();
