@@ -62,8 +62,9 @@ class PaymentsController {
 
   @Idempotent
   @PostMapping("/{id}/void")
-  IntentResponse voidIntent(AuthenticatedMerchant merchant, @PathVariable UUID id) {
-    return toResponse(merchant, payments.voidIntent(merchant.merchantPublicId(), id));
+  ResponseEntity<IntentResponse> voidIntent(AuthenticatedMerchant merchant, @PathVariable UUID id) {
+    return ResponseEntity
+        .ok(toResponse(merchant, payments.voidIntent(merchant.merchantPublicId(), id)));
   }
 
   @GetMapping
