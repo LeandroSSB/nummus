@@ -2,6 +2,7 @@ package com.leandrossb.nummus.merchants.application;
 
 import com.leandrossb.nummus.audit.application.OperatorAudit;
 import com.leandrossb.nummus.merchants.domain.Merchant;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -67,6 +68,15 @@ public class MerchantsServiceImpl implements MerchantsService {
   public void updatePaymentLimits(UUID publicId, PaymentLimits limits, UUID actingOperatorKey) {
     store.insertPaymentLimitsEntry(publicId, limits, actingOperatorKey);
     store.updatePaymentLimits(publicId, limits);
+    if (actingOperatorKey != null) {
+      audit.record(actingOperatorKey, "merchant.limits_updated", "merchant", publicId,
+          Map.of("maxIntentAmount", cap(limits.maxIntentAmount()),
+              "maxPayoutAmount", cap(limits.maxPayoutAmount())));
+    }
+  }
+
+  private static String cap(BigDecimal amount) {
+    return amount == null ? "unlimited" : amount.toPlainString();
   }
 
   @Override

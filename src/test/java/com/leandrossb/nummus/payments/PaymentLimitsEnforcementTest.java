@@ -12,9 +12,7 @@ import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.merchants.application.BankAccountsService;
 import com.leandrossb.nummus.merchants.application.OperatorKeysService;
 import com.leandrossb.nummus.payments.application.PaymentsService;
-import com.leandrossb.nummus.payments.application.PayoutsService;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
-import com.leandrossb.nummus.payments.domain.CreatePayoutCommand;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.testutils.ApiDrivers;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
@@ -44,9 +42,6 @@ class PaymentLimitsEnforcementTest extends IntegrationTestBase {
 
   @Autowired
   private PaymentsService payments;
-
-  @Autowired
-  private PayoutsService payouts;
 
   @Autowired
   private BankAccountsService bankAccounts;
