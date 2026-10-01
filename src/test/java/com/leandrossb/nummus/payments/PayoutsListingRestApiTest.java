@@ -89,6 +89,11 @@ class PayoutsListingRestApiTest extends IntegrationTestBase {
       payouts.create(merchantId, new CreatePayoutCommand(accountA, Money.ofBrl("50.0000"),
           destinationId, Duration.ofMinutes(10)));
     }
+    // Fund account B for its own payout (the account filter's asymmetry).
+    var fundingB = payments.create(merchantId,
+        new CreateIntentCommand(accountB, Money.ofBrl("50.0000"), Duration.ofMinutes(10)));
+    simulator.pay(fundingB.chargePublicId());
+    payments.get(merchantId, fundingB.publicId());
     payouts.create(merchantId, new CreatePayoutCommand(accountB, Money.ofBrl("20.0000"),
         destinationId, Duration.ofMinutes(10)));
   }
