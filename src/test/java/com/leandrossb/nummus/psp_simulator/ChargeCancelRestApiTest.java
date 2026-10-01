@@ -14,7 +14,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-/** A pending charge can be withdrawn on the network; a terminal one cannot. */
+/** A pending charge can be withdrawn on the network; a terminal one cannot —
+ *  and once withdrawn, a pay meets the same rejection. */
 @AutoConfigureMockMvc
 class ChargeCancelRestApiTest extends IntegrationTestBase {
 
@@ -33,6 +34,11 @@ class ChargeCancelRestApiTest extends IntegrationTestBase {
     mockMvc.perform(get("/simulator/charges/{id}", charge.publicId()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+    // Withdrawn money cannot come back: a pay after the cancel meets the
+    // same terminal rejection the cancel of a paid charge does.
+    mockMvc.perform(post("/simulator/charges/{id}/pay", charge.publicId()))
+        .andExpect(status().isConflict());
   }
 
   @Test

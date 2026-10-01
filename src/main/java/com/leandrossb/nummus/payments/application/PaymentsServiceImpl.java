@@ -130,7 +130,8 @@ public class PaymentsServiceImpl implements PaymentsService {
       throw new IntentNotVoidableException(publicId, IntentStatus.EXPIRED);
     }
     // One attempt, post-attempt branching — the refund-resolver contract:
-    // a cancel that loses to a parallel pay observes SUCCEEDED and settles.
+    // a cancel that loses to a parallel pay observes SUCCEEDED and rejects —
+    // settlement is lazy on the next read.
     var after = network.cancelCharge(intent.chargePublicId());
     return switch (after.status()) {
       case CANCELLED -> {

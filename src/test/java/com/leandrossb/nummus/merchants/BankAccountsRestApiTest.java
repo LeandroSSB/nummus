@@ -1,5 +1,6 @@
 package com.leandrossb.nummus.merchants;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -117,6 +118,38 @@ class BankAccountsRestApiTest extends IntegrationTestBase {
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"code\":\"nummus_bac_anything\"}"))
         .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void verifyReplaysTheStoredResponseForASameKeyRetry() throws Exception {
+    var created = register("77401-5");
+    String account = JsonPath.read(created.getResponse().getContentAsString(), "$.bankAccountId");
+    String code = JsonPath.read(created.getResponse().getContentAsString(), "$.verificationCode");
+    String key = UUID.randomUUID().toString();
+
+    var first = mockMvc.perform(post("/v1/bank-accounts/" + account + "/verify")
+            .header("Authorization", merchantAuth())
+            .header(KEY, key)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"code\":\"" + code + "\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("VERIFIED"))
+        .andReturn();
+
+    // The same-key retry never re-verifies (the code is spent): the stored
+    // 200 replays verbatim, flagged as a replay.
+    var replay = mockMvc.perform(post("/v1/bank-accounts/" + account + "/verify")
+            .header("Authorization", merchantAuth())
+            .header(KEY, key)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"code\":\"" + code + "\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("VERIFIED"))
+        .andReturn();
+    assertTrue(first.getResponse().getHeader("Idempotency-Replayed") == null);
+    assertEquals("true", replay.getResponse().getHeader("Idempotency-Replayed"));
+    assertEquals(first.getResponse().getContentAsString(),
+        replay.getResponse().getContentAsString());
   }
 
   @Test

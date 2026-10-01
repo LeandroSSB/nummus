@@ -37,9 +37,10 @@ import org.springframework.test.web.servlet.ResultActions;
  * The merchant REST surface for the intent void: POSTing the withdrawal of a
  * CREATED intent returns the VOIDED view and the listing carries it under its
  * own status filter; a pay that wins the charge rejects the void with the
- * observed state while the settle lands lazily on the next read; the stored
- * 200 replays for a same-key retry while a fresh key meets the terminal 409;
- * a foreign intent stays indistinguishable from an unknown one; and the
+ * observed state while the settle lands lazily on the next read; a charge the
+ * network withdrew on its own still leaves the merchant's void standing; the
+ * stored 200 replays for a same-key retry while a fresh key meets the terminal
+ * 409; a foreign intent stays indistinguishable from an unknown one; and the
  * withdrawal leaves its {@code payment_intent.voided} event in the outbox,
  * committed with the transition for the merchant's registered audience.
  */
@@ -151,6 +152,20 @@ class IntentVoidRestApiTest extends IntegrationTestBase {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.amount").value(40.0000));
     settledIntents.add(intent.publicId());
+  }
+
+  @Test
+  void voidingAnIntentWhoseChargeWasCancelledOutOfBandStands() throws Exception {
+    // The network withdrew the charge on its own (an out-of-band action this
+    // core must survive): the merchant's void must still complete — the
+    // withdrawal stands, performed network-side — and never 500.
+    var intent = createdIntent("40.0000");
+    mockMvc.perform(post("/simulator/charges/{id}/cancel", intent.chargePublicId()))
+        .andExpect(status().isOk());
+
+    voidCall(intent.publicId(), seedMerchantKey, UUID.randomUUID().toString())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("VOIDED"));
   }
 
   @Test
