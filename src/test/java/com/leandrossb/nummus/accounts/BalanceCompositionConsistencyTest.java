@@ -34,9 +34,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 /** Reservations are real postings: while money-out is REQUESTED, the payments
- *  domain sums the API reports must equal what the reserved ledger accounts
- *  actually hold. A future change that books legs inconsistently fails here
- *  instead of drifting silently. */
+ *  domain sums the API reports must equal how far the reserved ledger accounts'
+ *  pooled balance moved since this fixture captured its baseline. A future
+ *  change that books legs inconsistently fails here instead of drifting
+ *  silently. */
 @AutoConfigureMockMvc
 class BalanceCompositionConsistencyTest extends IntegrationTestBase {
 
@@ -72,6 +73,7 @@ class BalanceCompositionConsistencyTest extends IntegrationTestBase {
 
   private UUID merchantId;
   private PaymentAccount account;
+  private java.math.BigDecimal reserveBefore;
 
   @BeforeEach
   void createFundedFixtureWithReservations() throws Exception {
@@ -92,6 +94,8 @@ class BalanceCompositionConsistencyTest extends IntegrationTestBase {
     payments.get(merchantId, funded.publicId());
 
     var destination = ApiDrivers.registerVerifiedBankAccount(bankAccounts, merchantId);
+    reserveBefore = ledger.balance(PayoutReservedAccount.PUBLIC_ID).amount()
+        .add(ledger.balance(RefundReservedAccount.PUBLIC_ID).amount());
     payouts.create(merchantId, new CreatePayoutCommand(account.publicId(),
         Money.ofBrl("70.0000"), destination.publicId(), Duration.ofMinutes(10)));
     refunds.create(merchantId, funded.publicId(),
@@ -100,12 +104,12 @@ class BalanceCompositionConsistencyTest extends IntegrationTestBase {
 
   @Test
   void requestedReservationsMatchTheReservedLedgerAccounts() {
-    var reservedPostings = ledger.balance(PayoutReservedAccount.PUBLIC_ID).amount()
-        .add(ledger.balance(RefundReservedAccount.PUBLIC_ID).amount())
-        .negate();
+    var after = ledger.balance(PayoutReservedAccount.PUBLIC_ID).amount()
+        .add(ledger.balance(RefundReservedAccount.PUBLIC_ID).amount());
+    var reservedDelta = reserveBefore.subtract(after);
     var domainSums = moneyInFlight.sums(account.publicId()).reservedOutgoing().amount();
-    assertEquals(0, reservedPostings.compareTo(domainSums),
-        () -> "reserved ledger accounts hold " + reservedPostings
+    assertEquals(0, reservedDelta.compareTo(domainSums),
+        () -> "reserved ledger accounts moved " + reservedDelta
             + " but the payments domain reports " + domainSums);
   }
 }
