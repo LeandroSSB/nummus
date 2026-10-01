@@ -7,6 +7,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -51,6 +52,27 @@ public class MerchantsServiceImpl implements MerchantsService {
   public boolean updateFeeSchedule(UUID publicId, FeeSchedule fee, UUID actingOperatorKey) {
     store.insertFeeScheduleEntry(publicId, fee, actingOperatorKey);
     return store.updateFeeSchedule(publicId, fee);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Optional<PaymentLimits> findPaymentLimits(UUID publicId) {
+    // The store reads unlimited for any id; the Optional carries existence.
+    return store.findMerchant(publicId).isPresent()
+        ? Optional.of(store.findPaymentLimits(publicId)) : Optional.empty();
+  }
+
+  @Override
+  @Transactional
+  public void updatePaymentLimits(UUID publicId, PaymentLimits limits, UUID actingOperatorKey) {
+    store.insertPaymentLimitsEntry(publicId, limits, actingOperatorKey);
+    store.updatePaymentLimits(publicId, limits);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<PaymentLimitsEntry> listPaymentLimitsHistory(UUID publicId, UUID after, int limit) {
+    return store.listPaymentLimitsHistory(publicId, after, limit);
   }
 
   @Override

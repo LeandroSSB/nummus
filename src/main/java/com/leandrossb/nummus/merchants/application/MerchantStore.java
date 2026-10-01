@@ -31,6 +31,24 @@ public interface MerchantStore {
   /** @return false when the merchant is unknown. */
   boolean updateFeeSchedule(UUID merchantPublicId, FeeSchedule fee);
 
+  /** The merchant's current payment limits; every field null means unlimited. */
+  PaymentLimits findPaymentLimits(UUID merchantPublicId);
+
+  /** Appends one attributed payment-limits-history row for the merchant; the
+   *  cached current columns are updated separately, in the same transaction,
+   *  by the service. createdBy is the acting operator key's public id; the
+   *  service always passes a real key. */
+  void insertPaymentLimitsEntry(UUID merchantPublicId, PaymentLimits limits, UUID createdBy);
+
+  /** The merchant's payment-limits history entries, newest first — a keyset
+   *  walk on id: at most {@code limit} entries strictly older than
+   *  {@code after} (null starts at the newest). createdByLabel is null
+   *  exactly when createdBy is. */
+  List<PaymentLimitsEntry> listPaymentLimitsHistory(UUID merchantPublicId, UUID after, int limit);
+
+  /** @return false when the merchant is unknown. */
+  boolean updatePaymentLimits(UUID merchantPublicId, PaymentLimits limits);
+
   /** Stores hash + prefix; the secret never reaches the store. Null expiresIn
    *  means no expiry; the database clock owns expires_at. */
   void insertApiKey(UUID merchantPublicId, String keyHash, String prefix, Duration expiresIn);

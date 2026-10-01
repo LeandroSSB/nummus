@@ -1,8 +1,11 @@
 package com.leandrossb.nummus.merchants.infrastructure;
 
+import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.merchants.application.FeeHistoryEntry;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantStore;
+import com.leandrossb.nummus.merchants.application.PaymentLimits;
+import com.leandrossb.nummus.merchants.application.PaymentLimitsEntry;
 import com.leandrossb.nummus.merchants.application.ResolvedMerchantKey;
 import com.leandrossb.nummus.merchants.domain.ApiKey;
 import com.leandrossb.nummus.merchants.domain.Merchant;
@@ -11,6 +14,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Currency;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,6 +28,8 @@ import org.springframework.stereotype.Repository;
 public class JdbcClientMerchantStore implements MerchantStore {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(JdbcClientMerchantStore.class);
+
+  private static final Currency BRL = Currency.getInstance("BRL");
 
   private final JdbcClient jdbc;
 
@@ -121,6 +127,72 @@ public class JdbcClientMerchantStore implements MerchantStore {
         .param("payoutFixed", fee.payoutFixedAmount())
         .param("id", merchantPublicId)
         .update() == 1;
+  }
+
+  @Override
+  public PaymentLimits findPaymentLimits(UUID merchantPublicId) {
+    return jdbc.sql(
+        "select max_intent_amount, max_payout_amount from merchants.merchant where public_id = :id")
+        .param("id", merchantPublicId)
+        .query((rs, i) -> new PaymentLimits(
+            rs.getBigDecimal("max_intent_amount") == null ? null
+                : Money.of(rs.getBigDecimal("max_intent_amount"), BRL),
+            rs.getBigDecimal("max_payout_amount") == null ? null
+                : Money.of(rs.getBigDecimal("max_payout_amount"), BRL)))
+        .optional().orElse(PaymentLimits.unlimited());
+  }
+
+  @Override
+  public boolean updatePaymentLimits(UUID merchantPublicId, PaymentLimits limits) {
+    return jdbc.sql("""
+            update merchants.merchant
+            set max_intent_amount = :maxIntent, max_payout_amount = :maxPayout
+            where public_id = :id
+            """)
+        .param("maxIntent", limits.maxIntentAmount() == null ? null : limits.maxIntentAmount().amount())
+        .param("maxPayout", limits.maxPayoutAmount() == null ? null : limits.maxPayoutAmount().amount())
+        .param("id", merchantPublicId)
+        .update() == 1;
+  }
+
+  @Override
+  public void insertPaymentLimitsEntry(UUID merchantPublicId, PaymentLimits limits, UUID createdBy) {
+    jdbc.sql("""
+        insert into merchants.payment_limits_entry
+          (merchant_id, max_intent_amount, max_payout_amount, created_by)
+        select m.id, :maxIntent, :maxPayout, :createdBy
+        from merchants.merchant m where m.public_id = :id
+        """)
+        .param("maxIntent", limits.maxIntentAmount() == null ? null : limits.maxIntentAmount().amount())
+        .param("maxPayout", limits.maxPayoutAmount() == null ? null : limits.maxPayoutAmount().amount())
+        .param("createdBy", createdBy)
+        .param("id", merchantPublicId)
+        .update();
+  }
+
+  @Override
+  public List<PaymentLimitsEntry> listPaymentLimitsHistory(UUID merchantPublicId, UUID after, int limit) {
+    return jdbc.sql("""
+        select e.public_id, e.max_intent_amount, e.max_payout_amount, e.valid_from, e.created_by,
+          k.label as created_by_label
+        from merchants.payment_limits_entry e
+        join merchants.merchant m on m.id = e.merchant_id
+        left join merchants.operator_key k on k.public_id = e.created_by
+        where m.public_id = :merchantPublicId
+          and (:after::uuid is null
+               or e.id < (select f.id from merchants.payment_limits_entry f
+                          where f.public_id = :after))
+        order by e.id desc
+        limit :limit
+        """)
+        .param("merchantPublicId", merchantPublicId)
+        .param("after", after)
+        .param("limit", limit)
+        .query((rs, i) -> new PaymentLimitsEntry(rs.getObject("public_id", UUID.class),
+            rs.getBigDecimal("max_intent_amount"), rs.getBigDecimal("max_payout_amount"),
+            rs.getObject("valid_from", OffsetDateTime.class).toInstant(),
+            rs.getObject("created_by", UUID.class), rs.getString("created_by_label")))
+        .list();
   }
 
   @Override
