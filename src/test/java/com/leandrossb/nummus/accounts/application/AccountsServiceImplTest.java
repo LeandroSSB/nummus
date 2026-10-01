@@ -14,6 +14,7 @@ import com.leandrossb.nummus.accounts.domain.UnknownPaymentAccountException;
 import com.leandrossb.nummus.ledger.application.InMemoryLedgerRepository;
 import com.leandrossb.nummus.ledger.application.Ledger;
 import com.leandrossb.nummus.ledger.application.LedgerServiceImpl;
+import com.leandrossb.nummus.ledger.application.PostTransactionCommand;
 import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.ledger.domain.AccountType;
 import com.leandrossb.nummus.ledger.domain.Direction;
@@ -28,7 +29,8 @@ class AccountsServiceImplTest {
 
   private final Ledger ledger = new LedgerServiceImpl(new InMemoryLedgerRepository());
   private final AccountsService accounts =
-      new AccountsServiceImpl(ledger, new InMemoryAccountsRepository(), id -> false);
+      new AccountsServiceImpl(ledger, new InMemoryAccountsRepository(), id -> false,
+          id -> new MoneyInFlight.Sums(Money.ofBrl("7.0000"), Money.ofBrl("3.0000")));
 
   @Test
   void openCreatesActiveAccountWithBackingLiabilityLedgerAccount() {
@@ -107,6 +109,27 @@ class AccountsServiceImplTest {
     assertEquals(1, statement.lines().size());
     assertEquals(Direction.CREDIT, statement.lines().get(0).direction());
     assertEquals(0, statement.lines().get(0).amount().compareTo(Money.ofBrl("150.0000")));
+  }
+
+  @Test
+  void compositionCarriesBookedBalancePlusInFlightSums() {
+    var account = accounts.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("m"));
+    var house = ledger.openAccount(new com.leandrossb.nummus.ledger.application.OpenAccountCommand(
+        "composition house asset", AccountType.ASSET, java.util.Currency.getInstance("BRL")));
+    ledger.post(new PostTransactionCommand("composition funding", List.of(
+        new PostingDraft(house.publicId(), Direction.DEBIT, Money.ofBrl("150.0000")),
+        new PostingDraft(account.ledgerAccountPublicId(), Direction.CREDIT, Money.ofBrl("150.0000")))));
+
+    var composition = accounts.composition(SeedMerchant.PUBLIC_ID, account.publicId());
+    assertEquals(0, composition.balance().compareTo(Money.ofBrl("150.0000")));
+    assertEquals(0, composition.pendingIncoming().compareTo(Money.ofBrl("7.0000")));
+    assertEquals(0, composition.reservedOutgoing().compareTo(Money.ofBrl("3.0000")));
+  }
+
+  @Test
+  void compositionRejectsUnknownAccount() {
+    assertThrows(UnknownPaymentAccountException.class,
+        () -> accounts.composition(SeedMerchant.PUBLIC_ID, UUID.randomUUID()));
   }
 
   @Test
