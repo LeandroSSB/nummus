@@ -13,9 +13,11 @@ import com.leandrossb.nummus.ledger.domain.PostingDraft;
 import com.leandrossb.nummus.merchants.application.BankAccountsService;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
+import com.leandrossb.nummus.merchants.application.PaymentLimits;
 import com.leandrossb.nummus.payments.domain.ConcurrentPayoutException;
 import com.leandrossb.nummus.payments.domain.CreatePayoutCommand;
 import com.leandrossb.nummus.payments.domain.InsufficientFundsException;
+import com.leandrossb.nummus.payments.domain.PaymentLimitExceededException;
 import com.leandrossb.nummus.payments.domain.Payout;
 import com.leandrossb.nummus.payments.domain.PayoutStatus;
 import com.leandrossb.nummus.payments.domain.TransferAmountMismatchException;
@@ -72,6 +74,15 @@ public class PayoutsServiceImpl implements PayoutsService {
     var account = accounts.get(merchantPublicId, cmd.accountPublicId());
     if (account.status() != AccountStatus.ACTIVE) {
       throw new PaymentAccountNotActiveException(account.publicId(), account.status());
+    }
+    // Risk cap before the ledger lock and any reservation or network
+    // transfer: an over-cap request must leave no trace. Inclusive — equal
+    // passes.
+    var limits = merchants.findPaymentLimits(merchantPublicId).orElse(PaymentLimits.unlimited());
+    if (limits.maxPayoutAmount() != null
+        && cmd.amount().compareTo(limits.maxPayoutAmount()) > 0) {
+      throw new PaymentLimitExceededException(merchantPublicId, cmd.amount(),
+          limits.maxPayoutAmount());
     }
     // Check-then-reserve cannot race: the row lock on the merchant's ledger
     // account serializes every payout request against this account, and the

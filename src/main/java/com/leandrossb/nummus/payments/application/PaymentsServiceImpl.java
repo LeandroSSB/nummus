@@ -11,11 +11,13 @@ import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
 import com.leandrossb.nummus.merchants.application.FeeSchedule;
 import com.leandrossb.nummus.merchants.application.MerchantsService;
+import com.leandrossb.nummus.merchants.application.PaymentLimits;
 import com.leandrossb.nummus.payments.domain.ChargeAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.ConcurrentSettlementException;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.payments.domain.IntentStatus;
 import com.leandrossb.nummus.payments.domain.PaymentIntent;
+import com.leandrossb.nummus.payments.domain.PaymentLimitExceededException;
 import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
 import java.time.Duration;
 import java.time.Instant;
@@ -63,6 +65,15 @@ public class PaymentsServiceImpl implements PaymentsService {
     var account = accounts.get(merchantPublicId, cmd.accountPublicId());
     if (account.status() != AccountStatus.ACTIVE) {
       throw new PaymentAccountNotActiveException(account.publicId(), account.status());
+    }
+    // Risk cap before any external action: an over-cap request must not
+    // create a network charge. Unset limits are unlimited; the comparison is
+    // inclusive — equal passes.
+    var limits = merchants.findPaymentLimits(merchantPublicId).orElse(PaymentLimits.unlimited());
+    if (limits.maxIntentAmount() != null
+        && cmd.amount().compareTo(limits.maxIntentAmount()) > 0) {
+      throw new PaymentLimitExceededException(merchantPublicId, cmd.amount(),
+          limits.maxIntentAmount());
     }
     var charge = network.createCharge(cmd.amount());
     return repository.insert(new PaymentIntent(UUID.randomUUID(), account.publicId(),

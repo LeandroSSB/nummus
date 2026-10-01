@@ -36,6 +36,7 @@ import com.leandrossb.nummus.payments.domain.ConcurrentRefundException;
 import com.leandrossb.nummus.payments.domain.ConcurrentSettlementException;
 import com.leandrossb.nummus.payments.domain.InsufficientFundsException;
 import com.leandrossb.nummus.payments.domain.IntentNotRefundableException;
+import com.leandrossb.nummus.payments.domain.PaymentLimitExceededException;
 import com.leandrossb.nummus.payments.domain.RefundAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.RefundExceedsRemainingException;
 import com.leandrossb.nummus.payments.domain.TransferAmountMismatchException;
@@ -161,6 +162,11 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(InsufficientFundsException.class)
   ProblemDetail insufficientFunds(InsufficientFundsException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
+  }
+
+  @ExceptionHandler(PaymentLimitExceededException.class)
+  ProblemDetail paymentLimitExceeded(PaymentLimitExceededException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
   }
 
