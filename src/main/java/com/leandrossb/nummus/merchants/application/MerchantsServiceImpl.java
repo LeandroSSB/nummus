@@ -71,7 +71,8 @@ public class MerchantsServiceImpl implements MerchantsService {
     if (actingOperatorKey != null) {
       audit.record(actingOperatorKey, "merchant.limits_updated", "merchant", publicId,
           Map.of("maxIntentAmount", cap(limits.maxIntentAmount()),
-              "maxPayoutAmount", cap(limits.maxPayoutAmount())));
+              "maxPayoutAmount", cap(limits.maxPayoutAmount()),
+              "maxDailyIntentVolume", cap(limits.maxDailyIntentVolume())));
     }
   }
 
