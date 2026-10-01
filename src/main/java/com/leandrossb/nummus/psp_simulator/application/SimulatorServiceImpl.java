@@ -67,6 +67,15 @@ public class SimulatorServiceImpl implements SimulatorService {
     return transition(publicId, ChargeStatus.FAILED);
   }
 
+  // A not-pending rejection is a contract outcome, not a failure: it must not
+  // mark a participating caller's transaction rollback-only — the adapter
+  // catches it for post-attempt branching. Same for transfers and refunds.
+  @Override
+  @Transactional(noRollbackFor = ChargeNotPendingException.class)
+  public NetworkCharge cancelCharge(UUID publicId) {
+    return transition(publicId, ChargeStatus.CANCELLED);
+  }
+
   @Override
   @Transactional(readOnly = true)
   public List<NetworkSettlement> settlementReport(Instant from, Instant to) {
@@ -129,7 +138,7 @@ public class SimulatorServiceImpl implements SimulatorService {
   }
 
   @Override
-  @Transactional
+  @Transactional(noRollbackFor = TransferNotPendingException.class)
   public NetworkTransfer cancelTransfer(UUID publicId) {
     return transitionTransfer(publicId, ChargeStatus.CANCELLED);
   }
@@ -190,7 +199,7 @@ public class SimulatorServiceImpl implements SimulatorService {
   }
 
   @Override
-  @Transactional
+  @Transactional(noRollbackFor = RefundNotPendingException.class)
   public NetworkRefund cancelRefund(UUID publicId) {
     return transitionRefund(publicId, ChargeStatus.CANCELLED);
   }

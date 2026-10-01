@@ -40,6 +40,11 @@ class SimulatorController {
     return ChargeResponse.from(simulator.fail(id));
   }
 
+  @PostMapping("/charges/{id}/cancel")
+  ChargeResponse cancel(@PathVariable UUID id) {
+    return ChargeResponse.from(simulator.cancelCharge(id));
+  }
+
   @GetMapping("/transfers/{id}")
   TransferResponse getTransfer(@PathVariable UUID id) {
     return TransferResponse.from(simulator.getTransfer(id));

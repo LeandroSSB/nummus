@@ -6,6 +6,7 @@ import com.leandrossb.nummus.payments.application.NetworkRefund;
 import com.leandrossb.nummus.payments.application.NetworkTransfer;
 import com.leandrossb.nummus.payments.application.PaymentNetwork;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
+import com.leandrossb.nummus.psp_simulator.domain.ChargeNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.RefundNotPendingException;
 import com.leandrossb.nummus.psp_simulator.domain.TransferNotPendingException;
 import java.util.UUID;
@@ -32,6 +33,17 @@ public class SimulatorPaymentNetwork implements PaymentNetwork {
   @Override
   public NetworkCharge getCharge(UUID chargePublicId) {
     return simulator.get(chargePublicId);
+  }
+
+  @Override
+  public NetworkCharge cancelCharge(UUID chargePublicId) {
+    try {
+      return simulator.cancelCharge(chargePublicId);
+    } catch (ChargeNotPendingException e) {
+      // Post-attempt semantics as cancelChargeRefund — the observed state
+      // when the cancel did not win.
+      return simulator.get(chargePublicId);
+    }
   }
 
   @Override

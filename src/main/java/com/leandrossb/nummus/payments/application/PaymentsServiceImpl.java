@@ -15,6 +15,7 @@ import com.leandrossb.nummus.merchants.application.PaymentLimits;
 import com.leandrossb.nummus.payments.domain.ChargeAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.ConcurrentSettlementException;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
+import com.leandrossb.nummus.payments.domain.IntentNotVoidableException;
 import com.leandrossb.nummus.payments.domain.IntentStatus;
 import com.leandrossb.nummus.payments.domain.PaymentIntent;
 import com.leandrossb.nummus.payments.domain.PaymentLimitExceededException;
@@ -89,6 +90,99 @@ public class PaymentsServiceImpl implements PaymentsService {
   @Override
   @Transactional
   public PaymentIntent get(UUID merchantPublicId, UUID publicId) {
+    var intent = requireOwnedIntent(merchantPublicId, publicId);
+    if (intent.status() != IntentStatus.CREATED) {
+      return intent;
+    }
+    var charge = network.getCharge(intent.chargePublicId());
+    if (charge.amount().compareTo(intent.amount()) != 0) {
+      throw new ChargeAmountMismatchException(charge.publicId(), intent.amount(), charge.amount());
+    }
+    return switch (charge.status()) {
+      case PENDING -> intent;
+      case CANCELLED, FAILED -> {
+        // Publish only on a won transition; a racing winner already published
+        // its event for the terminal state — the loser returns it silently.
+        if (repository.transitionToFailed(publicId)) {
+          var failed = repository.findByPublicId(publicId).orElseThrow();
+          intentEvents.publish(toEvent(merchantPublicId, IntentEventTypes.FAILED, failed, null, null));
+          count("nummus.intents", "failed");
+          yield failed;
+        }
+        yield repository.findByPublicId(publicId).orElseThrow();
+      }
+      case SUCCEEDED -> settle(intent, merchantPublicId);
+    };
+  }
+
+  @Override
+  @Transactional
+  public PaymentIntent voidIntent(UUID merchantPublicId, UUID publicId) {
+    // Ownership precedes everything; the guards reject on persisted state
+    // and the clock — never on writes this transaction would roll back.
+    var intent = requireOwnedIntentUnresolved(merchantPublicId, publicId);
+    if (intent.status() != IntentStatus.CREATED) {
+      throw new IntentNotVoidableException(publicId, intent.status());
+    }
+    // Past expiry is observable without writing it: reject with the clock's
+    // verdict; the row expires lazily on its next read as always.
+    if (Instant.now().isAfter(intent.expiresAt())) {
+      throw new IntentNotVoidableException(publicId, IntentStatus.EXPIRED);
+    }
+    // One attempt, post-attempt branching — the refund-resolver contract:
+    // a cancel that loses to a parallel pay observes SUCCEEDED and rejects —
+    // settlement is lazy on the next read.
+    var after = network.cancelCharge(intent.chargePublicId());
+    return switch (after.status()) {
+      case CANCELLED -> {
+        if (repository.transitionToVoided(publicId)) {
+          var voided = repository.findByPublicId(publicId).orElseThrow();
+          intentEvents.publish(toEvent(merchantPublicId, IntentEventTypes.VOIDED, voided,
+              null, null));
+          count("nummus.intents", "voided");
+          yield voided;
+        }
+        yield repository.findByPublicId(publicId).orElseThrow();
+      }
+      // Money already moved or the payer failed it: the void loses, the
+      // intent's own state machine completes lazily on the next read (the
+      // codebase's convention) — this method rejects with what the network
+      // observed, never with a state it did not persist.
+      case SUCCEEDED -> throw new IntentNotVoidableException(publicId, IntentStatus.SETTLED);
+      case FAILED -> throw new IntentNotVoidableException(publicId, IntentStatus.FAILED);
+      // PENDING cannot be observed post-attempt: cancelCharge either won
+      // (CANCELLED) or lost to a terminal state.
+      default -> throw new IntentNotVoidableException(publicId, intent.status());
+    };
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<PaymentIntent> list(UUID merchantPublicId, String status, UUID account, UUID after, int limit) {
+    var accountIds = accounts.listPublicIds(merchantPublicId);
+    if (accountIds.isEmpty()) {
+      return List.of();
+    }
+    return repository.listByAccounts(accountIds, status, account, after, limit);
+  }
+
+  @Override
+  @Transactional
+  public List<SettlementView> listSettlements(Instant from, Instant to) {
+    Objects.requireNonNull(from, "from must not be null");
+    Objects.requireNonNull(to, "to must not be null");
+    return repository.findSettledBetween(from, to).stream()
+        .map(intent -> new SettlementView(intent.publicId(), intent.accountPublicId(),
+            intent.chargePublicId(), intent.amount(), intent.settledAt(),
+            intent.journalTransactionPublicId()))
+        .toList();
+  }
+
+  /** The ownership-scoped read {@code get} starts from: a foreign intent is
+   *  indistinguishable from an unknown one, and the read's lazy expiry
+   *  settles the expiry question before any later guard runs (the
+   *  {@code get} preamble, extracted verbatim). */
+  private PaymentIntent requireOwnedIntent(UUID merchantPublicId, UUID publicId) {
     var intent = repository.findByPublicId(publicId)
         .orElseThrow(() -> new UnknownPaymentIntentException(publicId));
     // Ownership precedes every lazy transition and the charge poll: never act
@@ -114,47 +208,24 @@ public class PaymentsServiceImpl implements PaymentsService {
       }
       return repository.findByPublicId(publicId).orElseThrow();
     }
-    var charge = network.getCharge(intent.chargePublicId());
-    if (charge.amount().compareTo(intent.amount()) != 0) {
-      throw new ChargeAmountMismatchException(charge.publicId(), intent.amount(), charge.amount());
-    }
-    return switch (charge.status()) {
-      case PENDING -> intent;
-      case CANCELLED, FAILED -> {
-        // Publish only on a won transition; a racing winner already published
-        // its event for the terminal state — the loser returns it silently.
-        if (repository.transitionToFailed(publicId)) {
-          var failed = repository.findByPublicId(publicId).orElseThrow();
-          intentEvents.publish(toEvent(merchantPublicId, IntentEventTypes.FAILED, failed, null, null));
-          count("nummus.intents", "failed");
-          yield failed;
-        }
-        yield repository.findByPublicId(publicId).orElseThrow();
-      }
-      case SUCCEEDED -> settle(intent, merchantPublicId);
-    };
+    return intent;
   }
 
-  @Override
-  @Transactional(readOnly = true)
-  public List<PaymentIntent> list(UUID merchantPublicId, String status, UUID account, UUID after, int limit) {
-    var accountIds = accounts.listPublicIds(merchantPublicId);
-    if (accountIds.isEmpty()) {
-      return List.of();
+  /** Ownership and persisted state only — no lazy transitions: the void's
+   *  rejections must never ride on writes this transaction would roll back. */
+  private PaymentIntent requireOwnedIntentUnresolved(UUID merchantPublicId, UUID publicId) {
+    var intent = repository.findByPublicId(publicId)
+        .orElseThrow(() -> new UnknownPaymentIntentException(publicId));
+    // Ownership precedes every lazy transition and the charge poll: never act
+    // on another merchant's intent — for them it is indistinguishable from
+    // an unknown one, down to the vocabulary: the 404 names the intent they
+    // addressed, never the owning account's id.
+    try {
+      accounts.get(merchantPublicId, intent.accountPublicId());
+    } catch (UnknownPaymentAccountException e) {
+      throw new UnknownPaymentIntentException(publicId);
     }
-    return repository.listByAccounts(accountIds, status, account, after, limit);
-  }
-
-  @Override
-  @Transactional
-  public List<SettlementView> listSettlements(Instant from, Instant to) {
-    Objects.requireNonNull(from, "from must not be null");
-    Objects.requireNonNull(to, "to must not be null");
-    return repository.findSettledBetween(from, to).stream()
-        .map(intent -> new SettlementView(intent.publicId(), intent.accountPublicId(),
-            intent.chargePublicId(), intent.amount(), intent.settledAt(),
-            intent.journalTransactionPublicId()))
-        .toList();
+    return intent;
   }
 
   private PaymentIntent settle(PaymentIntent intent, UUID merchantPublicId) {

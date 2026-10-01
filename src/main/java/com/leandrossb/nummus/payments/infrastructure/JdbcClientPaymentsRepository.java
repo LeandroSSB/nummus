@@ -101,6 +101,11 @@ public class JdbcClientPaymentsRepository implements PaymentsRepository {
   }
 
   @Override
+  public boolean transitionToVoided(UUID publicId) {
+    return guardedTransition(publicId, "VOIDED", null, null);
+  }
+
+  @Override
   public boolean transitionToFailed(UUID publicId) {
     return guardedTransition(publicId, "FAILED", null, null);
   }

@@ -21,6 +21,9 @@ public interface SimulatorService {
   /** Payer abandons/fails the charge: PENDING → FAILED (terminal). */
   NetworkCharge fail(UUID publicId);
 
+  /** The charge is withdrawn before the payer pays: PENDING → CANCELLED (terminal). */
+  NetworkCharge cancelCharge(UUID publicId);
+
   /** The network's settlement report: SUCCEEDED charges, payout transfers, and charge refunds in [from, to), each line carrying its kind. */
   List<NetworkSettlement> settlementReport(Instant from, Instant to);
 

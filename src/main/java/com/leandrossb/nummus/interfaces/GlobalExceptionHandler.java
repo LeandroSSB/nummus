@@ -36,6 +36,7 @@ import com.leandrossb.nummus.payments.domain.ConcurrentRefundException;
 import com.leandrossb.nummus.payments.domain.ConcurrentSettlementException;
 import com.leandrossb.nummus.payments.domain.InsufficientFundsException;
 import com.leandrossb.nummus.payments.domain.IntentNotRefundableException;
+import com.leandrossb.nummus.payments.domain.IntentNotVoidableException;
 import com.leandrossb.nummus.payments.domain.PaymentLimitExceededException;
 import com.leandrossb.nummus.payments.domain.RefundAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.RefundExceedsRemainingException;
@@ -119,6 +120,7 @@ public class GlobalExceptionHandler {
       TransactionAlreadyReversedException.class,
       ChargeNotPendingException.class, TransferNotPendingException.class,
       RefundNotPendingException.class, IntentNotRefundableException.class,
+      IntentNotVoidableException.class,
       ConcurrentSettlementException.class, ConcurrentPayoutException.class,
       ConcurrentRefundException.class})
   public ProblemDetail conflict(RuntimeException e) {

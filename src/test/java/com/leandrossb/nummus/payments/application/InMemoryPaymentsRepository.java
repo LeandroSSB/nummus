@@ -36,6 +36,11 @@ public class InMemoryPaymentsRepository implements PaymentsRepository {
   }
 
   @Override
+  public boolean transitionToVoided(UUID publicId) {
+    return guarded(publicId, IntentStatus.VOIDED, null, null, null);
+  }
+
+  @Override
   public boolean transitionToFailed(UUID publicId) {
     return guarded(publicId, IntentStatus.FAILED, null, null, null);
   }

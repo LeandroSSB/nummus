@@ -74,10 +74,10 @@ class BankAccountsController {
 
   @Idempotent
   @PostMapping("/{id}/verify")
-  BankAccountResponse verify(AuthenticatedMerchant merchant, @PathVariable UUID id,
+  ResponseEntity<BankAccountResponse> verify(AuthenticatedMerchant merchant, @PathVariable UUID id,
       @Valid @RequestBody VerifyBankAccountRequest request) {
-    return BankAccountResponse.from(
-        bankAccounts.verify(merchant.merchantPublicId(), id, request.code()));
+    return ResponseEntity.ok(BankAccountResponse.from(
+        bankAccounts.verify(merchant.merchantPublicId(), id, request.code())));
   }
 
   @DeleteMapping("/{id}")

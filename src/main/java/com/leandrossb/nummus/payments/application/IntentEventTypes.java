@@ -8,7 +8,8 @@ public final class IntentEventTypes {
   public static final String SETTLED = "payment_intent.settled";
   public static final String FAILED = "payment_intent.failed";
   public static final String EXPIRED = "payment_intent.expired";
-  public static final Set<String> ALL = Set.of(SETTLED, FAILED, EXPIRED);
+  public static final String VOIDED = "payment_intent.voided";
+  public static final Set<String> ALL = Set.of(SETTLED, FAILED, EXPIRED, VOIDED);
 
   private IntentEventTypes() {
   }
