@@ -17,8 +17,8 @@ public interface BankAccountsService {
   /** The merchant's account; empty for unknown or foreign ids. */
   Optional<BankAccount> find(UUID merchantPublicId, UUID publicId);
 
-  /** The merchant's accounts, most recent first (bounded). */
-  List<BankAccount> list(UUID merchantPublicId);
+  /** The merchant's registered bank accounts, newest first, keyset-paginated. */
+  List<BankAccount> list(UUID merchantPublicId, UUID after, int limit);
 
   /** Redeems the one-time code: PENDING_VERIFICATION → VERIFIED. */
   BankAccount verify(UUID merchantPublicId, UUID publicId, String rawCode);

@@ -13,7 +13,7 @@ public interface BankAccountStore {
 
   Optional<BankAccount> findByPublicIdAndMerchant(UUID merchantPublicId, UUID publicId);
 
-  List<BankAccount> listByMerchant(UUID merchantPublicId, int limit);
+  List<BankAccount> listByMerchant(UUID merchantPublicId, UUID after, int limit);
 
   /** Verifies in one guarded statement: wins only while the row is
    *  PENDING_VERIFICATION and the hash matches. */
