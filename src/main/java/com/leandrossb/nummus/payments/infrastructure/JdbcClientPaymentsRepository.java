@@ -72,6 +72,30 @@ public class JdbcClientPaymentsRepository implements PaymentsRepository {
   }
 
   @Override
+  public List<PaymentIntent> listByAccounts(List<UUID> accountPublicIds, String status,
+      UUID account, UUID after, int limit) {
+    return jdbc.sql("""
+        select public_id, account_public_id, amount, status, charge_public_id,
+               expires_at, created_at, settled_at, journal_transaction_public_id, fee_amount
+        from payments.payment_intent
+        where account_public_id in (:accountPublicIds)
+          and (:status::text is null or status = :status)
+          and (:account::uuid is null or account_public_id = :account)
+          and (:after::uuid is null
+               or id < (select i2.id from payments.payment_intent i2 where i2.public_id = :after))
+        order by id desc
+        limit :limit
+        """)
+        .param("accountPublicIds", accountPublicIds)
+        .param("status", status)
+        .param("account", account)
+        .param("after", after)
+        .param("limit", limit)
+        .query((rs, i) -> mapIntent(rs))
+        .list();
+  }
+
+  @Override
   public boolean transitionToExpired(UUID publicId) {
     return guardedTransition(publicId, "EXPIRED", null, null);
   }

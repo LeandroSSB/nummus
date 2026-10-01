@@ -118,6 +118,16 @@ public class PaymentsServiceImpl implements PaymentsService {
   }
 
   @Override
+  @Transactional(readOnly = true)
+  public List<PaymentIntent> list(UUID merchantPublicId, String status, UUID account, UUID after, int limit) {
+    var accountIds = accounts.listPublicIds(merchantPublicId);
+    if (accountIds.isEmpty()) {
+      return List.of();
+    }
+    return repository.listByAccounts(accountIds, status, account, after, limit);
+  }
+
+  @Override
   @Transactional
   public List<SettlementView> listSettlements(Instant from, Instant to) {
     Objects.requireNonNull(from, "from must not be null");
