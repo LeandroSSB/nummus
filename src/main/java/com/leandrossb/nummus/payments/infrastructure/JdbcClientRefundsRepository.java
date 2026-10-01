@@ -10,7 +10,9 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Currency;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -87,6 +89,28 @@ public class JdbcClientRefundsRepository implements RefundsRepository {
         .param("intentPublicId", intentPublicId)
         .query((rs, i) -> Money.of(rs.getBigDecimal(1), BRL))
         .single();
+  }
+
+  @Override
+  public Map<UUID, Money> findRefundedTotals(List<UUID> intentPublicIds) {
+    if (intentPublicIds.isEmpty()) {
+      return Map.of();
+    }
+    Map<UUID, Money> result = new HashMap<>();
+    jdbc.sql("""
+        select intent_public_id, sum(amount) from payments.refund
+        where intent_public_id in (:intentPublicIds)
+          and status in ('REQUESTED', 'SETTLED')
+        group by intent_public_id
+        """)
+        .param("intentPublicIds", intentPublicIds)
+        .query((rs, i) -> {
+          result.put(rs.getObject("intent_public_id", UUID.class),
+              Money.of(rs.getBigDecimal(2), BRL));
+          return (Money) null;
+        })
+        .list();
+    return result;
   }
 
   @Override

@@ -21,10 +21,14 @@ import com.leandrossb.nummus.payments.domain.RefundExceedsRemainingException;
 import com.leandrossb.nummus.payments.domain.RefundStatus;
 import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
 import com.leandrossb.nummus.payments.domain.UnknownRefundException;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Currency;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -36,6 +40,7 @@ public class RefundsServiceImpl implements RefundsService {
   static final Duration DEFAULT_TTL = Duration.ofSeconds(1800);
   private static final Duration MIN_TTL = Duration.ofSeconds(60);
   private static final Duration MAX_TTL = Duration.ofSeconds(86400);
+  private static final Currency BRL = Currency.getInstance("BRL");
 
   private final Ledger ledger;
   private final AccountsService accounts;
@@ -233,5 +238,17 @@ public class RefundsServiceImpl implements RefundsService {
   @Override
   public Money refundedTotal(UUID intentPublicId) {
     return repository.refundedTotal(intentPublicId);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Map<UUID, Money> refundedTotals(List<UUID> intentPublicIds) {
+    Objects.requireNonNull(intentPublicIds, "intentPublicIds must not be null");
+    var held = repository.findRefundedTotals(intentPublicIds);
+    var result = new HashMap<UUID, Money>(intentPublicIds.size());
+    for (UUID id : intentPublicIds) {
+      result.put(id, held.getOrDefault(id, Money.of(BigDecimal.ZERO, BRL)));
+    }
+    return result;
   }
 }

@@ -5,6 +5,7 @@ import com.leandrossb.nummus.payments.domain.CreateRefundCommand;
 import com.leandrossb.nummus.payments.domain.Refund;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -31,6 +32,10 @@ public interface RefundsService {
    *  EXPIRED refunds released their share and drop out; an intent without
    *  refunds sums to zero. */
   Money refundedTotal(UUID intentPublicId);
+
+  /** Refunded totals (held + settled refunds) for a page of intents; missing
+   *  intents map to zero. */
+  Map<UUID, Money> refundedTotals(List<UUID> intentPublicIds);
 
   /** Settled refunds in [from, to) — conciliation's view of internal money-out
    *  settlements, keyed by the network refund each settlement executed. */

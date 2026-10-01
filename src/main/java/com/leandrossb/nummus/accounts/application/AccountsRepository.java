@@ -3,6 +3,7 @@ package com.leandrossb.nummus.accounts.application;
 import com.leandrossb.nummus.accounts.domain.AccountStatus;
 import com.leandrossb.nummus.accounts.domain.PaymentAccount;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,4 +17,6 @@ public interface AccountsRepository {
 
   /** @return false when the account does not exist for this merchant. */
   boolean updateStatus(UUID merchantPublicId, UUID publicId, AccountStatus status, Instant closedAt);
+
+  List<UUID> findPublicIdsByMerchant(UUID merchantPublicId);
 }

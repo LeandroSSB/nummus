@@ -13,6 +13,7 @@ import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.Page;
 import java.time.Instant;
 import java.util.Currency;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -110,6 +111,12 @@ public class AccountsServiceImpl implements AccountsService {
     var inFlight = moneyInFlight.sums(publicId);
     return new ComposedStatement(account, naturalSigned(account, raw.balance()),
         inFlight.pendingIncoming(), inFlight.reservedOutgoing(), raw.lines());
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<UUID> listPublicIds(UUID merchantPublicId) {
+    return repository.findPublicIdsByMerchant(merchantPublicId);
   }
 
   private PaymentAccount require(UUID merchantPublicId, UUID publicId) {

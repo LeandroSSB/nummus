@@ -4,6 +4,7 @@ import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
 import com.leandrossb.nummus.accounts.domain.PaymentAccount;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.Page;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -33,4 +34,7 @@ public interface AccountsService {
 
   /** Postings newest first with the natural-signed balance and in-flight sums. */
   ComposedStatement statement(UUID merchantPublicId, UUID publicId, Page page);
+
+  /** Every account public id the merchant owns; listings scope by these. */
+  List<UUID> listPublicIds(UUID merchantPublicId);
 }

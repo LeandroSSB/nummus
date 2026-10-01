@@ -5,6 +5,7 @@ import com.leandrossb.nummus.payments.domain.Refund;
 import com.leandrossb.nummus.payments.domain.RefundStatus;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +37,21 @@ public class InMemoryRefundsRepository implements RefundsRepository {
         .map(Refund::amount)
         .reduce(Money::add)
         .orElseGet(() -> Money.ofBrl("0.0000"));
+  }
+
+  @Override
+  public Map<UUID, Money> findRefundedTotals(List<UUID> intentPublicIds) {
+    Map<UUID, Money> totals = new HashMap<>();
+    for (UUID intentPublicId : intentPublicIds) {
+      refunds.values().stream()
+          .filter(refund -> refund.intentPublicId().equals(intentPublicId))
+          .filter(refund -> refund.status() == RefundStatus.REQUESTED
+              || refund.status() == RefundStatus.SETTLED)
+          .map(Refund::amount)
+          .reduce(Money::add)
+          .ifPresent(total -> totals.put(intentPublicId, total));
+    }
+    return totals;
   }
 
   @Override

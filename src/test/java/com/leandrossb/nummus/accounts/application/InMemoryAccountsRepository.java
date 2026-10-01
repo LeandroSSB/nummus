@@ -3,6 +3,7 @@ package com.leandrossb.nummus.accounts.application;
 import com.leandrossb.nummus.accounts.domain.AccountStatus;
 import com.leandrossb.nummus.accounts.domain.PaymentAccount;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,5 +35,13 @@ public class InMemoryAccountsRepository implements AccountsRepository {
     accounts.put(publicId, new PaymentAccount(current.merchantPublicId(), current.publicId(),
         current.holderName(), status, current.openedAt(), closedAt, current.ledgerAccountPublicId()));
     return true;
+  }
+
+  @Override
+  public List<UUID> findPublicIdsByMerchant(UUID merchantPublicId) {
+    return accounts.values().stream()
+        .filter(a -> a.merchantPublicId().equals(merchantPublicId))
+        .map(PaymentAccount::publicId)
+        .toList();
   }
 }
