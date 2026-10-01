@@ -138,21 +138,12 @@ public class PaymentsServiceImpl implements PaymentsService {
         }
         yield repository.findByPublicId(publicId).orElseThrow();
       }
-      // Money already moved: settle through the existing path, then reject
-      // the void with the truth.
-      case SUCCEEDED -> {
-        settle(intent, merchantPublicId);
-        throw new IntentNotVoidableException(publicId, IntentStatus.SETTLED);
-      }
-      case FAILED -> {
-        if (repository.transitionToFailed(publicId)) {
-          var failed = repository.findByPublicId(publicId).orElseThrow();
-          intentEvents.publish(toEvent(merchantPublicId, IntentEventTypes.FAILED, failed,
-              null, null));
-          count("nummus.intents", "failed");
-        }
-        throw new IntentNotVoidableException(publicId, IntentStatus.FAILED);
-      }
+      // Money already moved or the payer failed it: the void loses, the
+      // intent's own state machine completes lazily on the next read (the
+      // codebase's convention) — this method rejects with what the network
+      // observed, never with a state it did not persist.
+      case SUCCEEDED -> throw new IntentNotVoidableException(publicId, IntentStatus.SETTLED);
+      case FAILED -> throw new IntentNotVoidableException(publicId, IntentStatus.FAILED);
       // PENDING cannot be observed post-attempt: cancelCharge either won
       // (CANCELLED) or lost to a terminal state.
       default -> throw new IntentNotVoidableException(publicId, intent.status());

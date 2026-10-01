@@ -33,8 +33,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 /**
  * The void state machine over the real context: one cancel attempt on the
  * network, then the branch on the post-attempt charge — a cancelled charge
- * voids, a parallel pay settles and rejects, a failed charge fails and
- * rejects. Every collaborator is the real bean (simulator, ledger, Postgres
+ * voids; a parallel pay or payer failure rejects with the observed state,
+ * and the intent's own state machine completes lazily on the next read.
+ * Every collaborator is the real bean (simulator, ledger, Postgres
  * repository) except the publisher: the outbox joins the caller's
  * transaction, which this hand-composed service deliberately opens none of,
  * so the no-op publisher the unit suites use stands in — event delivery is
@@ -115,9 +116,8 @@ class IntentVoidServiceTest extends IntegrationTestBase {
         () -> payments.voidIntent(SeedMerchant.PUBLIC_ID, intent.publicId()));
 
     assertEquals(IntentStatus.SETTLED, rejected.current());
-    // Money already moved: the intent really is SETTLED and the settled
-    // balance is intact — the read after the pay settles what the void
-    // refused to withdraw.
+    // The next read resolves the state the void observed: money already
+    // moved, so the settle lands and the balance carries the net.
     var settled = payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
     assertEquals(IntentStatus.SETTLED, settled.status());
     assertEquals(0, accountsService.balance(SeedMerchant.PUBLIC_ID, intent.accountPublicId())
@@ -134,6 +134,7 @@ class IntentVoidServiceTest extends IntegrationTestBase {
         () -> payments.voidIntent(SeedMerchant.PUBLIC_ID, intent.publicId()));
 
     assertEquals(IntentStatus.FAILED, rejected.current());
+    // The next read resolves the state the void observed.
     assertEquals(IntentStatus.FAILED,
         payments.get(SeedMerchant.PUBLIC_ID, intent.publicId()).status());
   }

@@ -4,8 +4,9 @@ import java.util.UUID;
 
 /**
  * Thrown when a void targets an intent that is not CREATED. Carries the
- * status the guard saw — only a CREATED intent can be withdrawn; money
- * already paid settles instead, and a terminal intent is beyond withdrawal.
+ * state that made the void impossible — the intent's persisted status for
+ * terminal rows, or the post-attempt network outcome when a racing pay/fail
+ * won the charge.
  */
 public class IntentNotVoidableException extends RuntimeException {
 
