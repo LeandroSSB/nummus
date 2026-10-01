@@ -23,6 +23,7 @@ import com.leandrossb.nummus.payments.domain.ChargeAmountMismatchException;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.payments.domain.IntentStatus;
 import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Currency;
@@ -41,7 +42,8 @@ class PaymentsServiceImplTest {
   private final MerchantsService merchants = new FakeMerchantsService();
   // Outbox publishing is covered by WebhookPublishTest; unit scope ignores events.
   private final PaymentsService payments =
-      new PaymentsServiceImpl(ledger, accounts, network, repo, event -> { }, merchants);
+      new PaymentsServiceImpl(ledger, accounts, network, repo, event -> { }, merchants,
+          new SimpleMeterRegistry());
 
   PaymentsServiceImplTest() {
     // Test-scope composition layer: mirror the V5 clearing-asset seed so the fixed

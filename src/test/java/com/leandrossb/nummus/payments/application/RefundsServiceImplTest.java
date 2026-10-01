@@ -22,6 +22,7 @@ import com.leandrossb.nummus.merchants.application.SeedMerchant;
 import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.payments.domain.CreateRefundCommand;
 import com.leandrossb.nummus.payments.domain.RefundStatus;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Instant;
 import java.util.Currency;
 import org.junit.jupiter.api.Test;
@@ -44,11 +45,13 @@ class RefundsServiceImplTest {
   private final InMemoryPaymentsRepository intentRepo = new InMemoryPaymentsRepository();
   private final MerchantsService merchants = new FakeMerchantsService();
   private final PaymentsService payments =
-      new PaymentsServiceImpl(ledger, accounts, network, intentRepo, event -> { }, merchants);
+      new PaymentsServiceImpl(ledger, accounts, network, intentRepo, event -> { }, merchants,
+          new SimpleMeterRegistry());
   private final InMemoryRefundsRepository refundRepo = new InMemoryRefundsRepository();
   // Outbox publishing is covered by the integration suites; unit scope ignores events.
   private final RefundsService refunds =
-      new RefundsServiceImpl(ledger, accounts, payments, network, refundRepo, event -> { });
+      new RefundsServiceImpl(ledger, accounts, payments, network, refundRepo, event -> { },
+          new SimpleMeterRegistry());
 
   RefundsServiceImplTest() {
     // Test-scope composition layer: mirror the V5/V19 seeds so the pooled

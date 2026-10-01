@@ -21,6 +21,7 @@ import com.leandrossb.nummus.payments.domain.RefundExceedsRemainingException;
 import com.leandrossb.nummus.payments.domain.RefundStatus;
 import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
 import com.leandrossb.nummus.payments.domain.UnknownRefundException;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -48,15 +49,18 @@ public class RefundsServiceImpl implements RefundsService {
   private final PaymentNetwork network;
   private final RefundsRepository repository;
   private final RefundLifecycleEvents refundEvents;
+  private final MeterRegistry registry;
 
   public RefundsServiceImpl(Ledger ledger, AccountsService accounts, PaymentsService payments,
-      PaymentNetwork network, RefundsRepository repository, RefundLifecycleEvents refundEvents) {
+      PaymentNetwork network, RefundsRepository repository, RefundLifecycleEvents refundEvents,
+      MeterRegistry registry) {
     this.ledger = ledger;
     this.accounts = accounts;
     this.payments = payments;
     this.network = network;
     this.repository = repository;
     this.refundEvents = refundEvents;
+    this.registry = registry;
   }
 
   @Override
@@ -95,9 +99,11 @@ public class RefundsServiceImpl implements RefundsService {
     var hold = ledger.post(new PostTransactionCommand("refund " + refundId + " request",
         List.of(new PostingDraft(account.ledgerAccountPublicId(), Direction.DEBIT, cmd.amount()),
             new PostingDraft(RefundReservedAccount.PUBLIC_ID, Direction.CREDIT, cmd.amount()))));
-    return repository.insert(new Refund(refundId, intent.publicId(), cmd.amount(),
+    var refund = repository.insert(new Refund(refundId, intent.publicId(), cmd.amount(),
         RefundStatus.REQUESTED, networkRefund.publicId(), Instant.now().plus(ttl),
         Instant.now(), null, hold.publicId(), null, null));
+    count("nummus.refunds", "requested");
+    return refund;
   }
 
   @Override
@@ -225,7 +231,14 @@ public class RefundsServiceImpl implements RefundsService {
     }
     var settled = repository.findByPublicId(refund.publicId()).orElseThrow();
     refundEvents.publish(toEvent(merchantPublicId, RefundEventTypes.SETTLED, settled));
+    count("nummus.refunds", "settled");
     return settled;
+  }
+
+  /** One line per won transition: the counter names carry the lifecycle,
+   *  Prometheus renders them as nummus_refunds_total{outcome=...}. */
+  private void count(String name, String outcome) {
+    registry.counter(name, "outcome", outcome).increment();
   }
 
   /** The event carries the intent's account — the refund row is intent-scoped,
