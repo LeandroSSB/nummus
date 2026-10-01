@@ -48,10 +48,11 @@ class RefundsServiceImplTest {
       new PaymentsServiceImpl(ledger, accounts, network, intentRepo, event -> { }, merchants,
           new SimpleMeterRegistry());
   private final InMemoryRefundsRepository refundRepo = new InMemoryRefundsRepository();
-  // Outbox publishing is covered by the integration suites; unit scope ignores events.
+  // The lifecycle counters are asserted here; unit scope ignores events.
+  private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
   private final RefundsService refunds =
       new RefundsServiceImpl(ledger, accounts, payments, network, refundRepo, event -> { },
-          new SimpleMeterRegistry());
+          registry);
 
   RefundsServiceImplTest() {
     // Test-scope composition layer: mirror the V5/V19 seeds so the pooled
@@ -95,5 +96,59 @@ class RefundsServiceImplTest {
         .compareTo(Money.ofBrl("0.0000")));
     assertEquals(0, accounts.balance(SeedMerchant.PUBLIC_ID, account.publicId())
         .compareTo(Money.ofBrl("70.0000")));
+  }
+
+  @Test
+  void expiredRefundComesHomeAndIsCounted() {
+    var account = accounts.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("merchant"));
+    var intent = payments.create(SeedMerchant.PUBLIC_ID,
+        new CreateIntentCommand(account.publicId(), Money.ofBrl("100.0000"), null));
+    network.succeed(intent.chargePublicId());
+    payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
+    var refund = refunds.create(SeedMerchant.PUBLIC_ID, intent.publicId(),
+        new CreateRefundCommand(Money.ofBrl("30.0000"), null));
+
+    // The read is past expiry while the instruction still polls PENDING; the
+    // withdraw succeeds, so the hold comes home instead of the money leaving.
+    refundRepo.agePastExpiry(refund.publicId());
+
+    var expired = refunds.get(SeedMerchant.PUBLIC_ID, refund.publicId());
+
+    assertEquals(RefundStatus.EXPIRED, expired.status());
+    assertNotNull(expired.returnTransactionPublicId());
+    assertNull(expired.executeTransactionPublicId());
+    assertEquals(0, ledger.balance(RefundReservedAccount.PUBLIC_ID)
+        .compareTo(Money.ofBrl("0.0000")));
+    assertEquals(0, accounts.balance(SeedMerchant.PUBLIC_ID, account.publicId())
+        .compareTo(Money.ofBrl("100.0000")));
+    assertEquals(1.0,
+        registry.get("nummus.refunds").tag("outcome", "expired").counter().count());
+  }
+
+  @Test
+  void failedRefundComesHomeAndIsCounted() {
+    var account = accounts.open(SeedMerchant.PUBLIC_ID, new OpenAccountCommand("merchant"));
+    var intent = payments.create(SeedMerchant.PUBLIC_ID,
+        new CreateIntentCommand(account.publicId(), Money.ofBrl("100.0000"), null));
+    network.succeed(intent.chargePublicId());
+    payments.get(SeedMerchant.PUBLIC_ID, intent.publicId());
+    var refund = refunds.create(SeedMerchant.PUBLIC_ID, intent.publicId(),
+        new CreateRefundCommand(Money.ofBrl("30.0000"), null));
+
+    // The network's verdict on the instruction arrives ahead of the expiry
+    // clock; the hold must still come home.
+    network.failRefund(refund.networkRefundPublicId());
+
+    var failed = refunds.get(SeedMerchant.PUBLIC_ID, refund.publicId());
+
+    assertEquals(RefundStatus.FAILED, failed.status());
+    assertNotNull(failed.returnTransactionPublicId());
+    assertNull(failed.executeTransactionPublicId());
+    assertEquals(0, ledger.balance(RefundReservedAccount.PUBLIC_ID)
+        .compareTo(Money.ofBrl("0.0000")));
+    assertEquals(0, accounts.balance(SeedMerchant.PUBLIC_ID, account.publicId())
+        .compareTo(Money.ofBrl("100.0000")));
+    assertEquals(1.0,
+        registry.get("nummus.refunds").tag("outcome", "failed").counter().count());
   }
 }

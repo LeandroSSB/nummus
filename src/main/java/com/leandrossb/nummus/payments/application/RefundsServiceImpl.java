@@ -189,6 +189,7 @@ public class RefundsServiceImpl implements RefundsService {
     }
     var expired = repository.findByPublicId(refund.publicId()).orElseThrow();
     refundEvents.publish(toEvent(merchantPublicId, RefundEventTypes.EXPIRED, expired));
+    count("nummus.refunds", "expired");
     return expired;
   }
 
@@ -203,6 +204,7 @@ public class RefundsServiceImpl implements RefundsService {
     }
     var failed = repository.findByPublicId(refund.publicId()).orElseThrow();
     refundEvents.publish(toEvent(merchantPublicId, RefundEventTypes.FAILED, failed));
+    count("nummus.refunds", "failed");
     return failed;
   }
 
