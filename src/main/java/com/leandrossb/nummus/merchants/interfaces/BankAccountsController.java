@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Self-serve registry surface: the authenticated merchant manages its own
@@ -47,9 +48,21 @@ class BankAccountsController {
   }
 
   @GetMapping
-  List<BankAccountResponse> list(AuthenticatedMerchant merchant) {
-    return bankAccounts.list(merchant.merchantPublicId()).stream()
-        .map(BankAccountResponse::from).toList();
+  ResponseEntity<List<BankAccountResponse>> list(AuthenticatedMerchant merchant,
+      @RequestParam(required = false) UUID after,
+      @RequestParam(defaultValue = "50") int limit) {
+    if (limit < 1 || limit > 100) {
+      throw new IllegalArgumentException("limit must be between 1 and 100: " + limit);
+    }
+    // Keyset pagination: fetch limit+1, hand back limit, and surface a Next-Cursor
+    // (the last returned account's public id) only when the probe found an extra row.
+    var page = bankAccounts.list(merchant.merchantPublicId(), after, limit + 1);
+    if (page.size() <= limit) {
+      return ResponseEntity.ok().body(page.stream().map(BankAccountResponse::from).toList());
+    }
+    var cursor = page.get(limit - 1).publicId();
+    return ResponseEntity.ok().header("Next-Cursor", cursor.toString())
+        .body(page.subList(0, limit).stream().map(BankAccountResponse::from).toList());
   }
 
   @GetMapping("/{id}")

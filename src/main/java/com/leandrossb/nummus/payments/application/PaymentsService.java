@@ -19,6 +19,9 @@ public interface PaymentsService {
   /** Applies lazy expiry and lazy settlement, then returns the current state. */
   PaymentIntent get(UUID merchantPublicId, UUID publicId);
 
+  /** The merchant's intents, newest first, keyset-paginated (see WebhookDeliveriesController). */
+  List<PaymentIntent> list(UUID merchantPublicId, String status, UUID account, UUID after, int limit);
+
   /** Settled intents in [from, to) — conciliation's view of internal settlements. */
   List<SettlementView> listSettlements(Instant from, Instant to);
 }

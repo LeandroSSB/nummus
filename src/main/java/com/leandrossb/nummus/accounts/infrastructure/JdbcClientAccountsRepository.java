@@ -8,6 +8,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -65,6 +66,14 @@ public class JdbcClientAccountsRepository implements AccountsRepository {
         .param("merchantPublicId", merchantPublicId)
         .update();
     return updated == 1;
+  }
+
+  @Override
+  public List<UUID> findPublicIdsByMerchant(UUID merchantPublicId) {
+    return jdbc.sql("select public_id from accounts.payment_account where merchant_public_id = :merchantPublicId")
+        .param("merchantPublicId", merchantPublicId)
+        .query((rs, i) -> rs.getObject("public_id", UUID.class))
+        .list();
   }
 
   private PaymentAccount mapPaymentAccount(ResultSet rs) throws SQLException {

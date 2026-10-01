@@ -5,20 +5,26 @@ import com.leandrossb.nummus.payments.domain.Refund;
 import com.leandrossb.nummus.payments.domain.RefundStatus;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** In-memory fake mirroring the refund repository's status-guarded transitions. */
 public class InMemoryRefundsRepository implements RefundsRepository {
 
   private final Map<UUID, Refund> refunds = new ConcurrentHashMap<>();
+  private final Map<UUID, UUID> intentAccounts = new ConcurrentHashMap<>();
+  private final Map<UUID, Long> sequence = new ConcurrentHashMap<>();
+  private final AtomicLong nextId = new AtomicLong();
 
   @Override
   public Refund insert(Refund refund) {
     refunds.put(refund.publicId(), refund);
+    sequence.putIfAbsent(refund.publicId(), nextId.incrementAndGet());
     return refund;
   }
 
@@ -36,6 +42,21 @@ public class InMemoryRefundsRepository implements RefundsRepository {
         .map(Refund::amount)
         .reduce(Money::add)
         .orElseGet(() -> Money.ofBrl("0.0000"));
+  }
+
+  @Override
+  public Map<UUID, Money> findRefundedTotals(List<UUID> intentPublicIds) {
+    Map<UUID, Money> totals = new HashMap<>();
+    for (UUID intentPublicId : intentPublicIds) {
+      refunds.values().stream()
+          .filter(refund -> refund.intentPublicId().equals(intentPublicId))
+          .filter(refund -> refund.status() == RefundStatus.REQUESTED
+              || refund.status() == RefundStatus.SETTLED)
+          .map(Refund::amount)
+          .reduce(Money::add)
+          .ifPresent(total -> totals.put(intentPublicId, total));
+    }
+    return totals;
   }
 
   @Override
@@ -62,6 +83,32 @@ public class InMemoryRefundsRepository implements RefundsRepository {
         .toList();
   }
 
+  @Override
+  public List<Refund> listByAccounts(List<UUID> accountPublicIds, String status,
+      UUID account, UUID after, int limit) {
+    Long afterId = after == null ? null : sequence.get(after);
+    if (after != null && afterId == null) {
+      // An unknown cursor matches nothing, exactly as the SQL subselect does.
+      return List.of();
+    }
+    return refunds.values().stream()
+        .filter(r -> accountOf(r) != null)
+        .filter(r -> accountPublicIds.contains(accountOf(r)))
+        .filter(r -> status == null || r.status().name().equals(status))
+        .filter(r -> account == null || account.equals(accountOf(r)))
+        .filter(r -> afterId == null || sequence.get(r.publicId()) < afterId)
+        .sorted(Comparator.comparingLong((Refund r) -> sequence.get(r.publicId())).reversed())
+        .limit(limit)
+        .toList();
+  }
+
+  /** The account the refund's owning intent belongs to — the hop the SQL
+   *  listing joins through; an intent the fake never learned about owns
+   *  nothing, exactly as the inner join drops it. */
+  private UUID accountOf(Refund refund) {
+    return intentAccounts.get(refund.intentPublicId());
+  }
+
   private synchronized boolean guarded(UUID publicId, RefundStatus target, UUID executeTx,
       Instant settledAt, UUID returnTx) {
     var current = refunds.get(publicId);
@@ -81,5 +128,12 @@ public class InMemoryRefundsRepository implements RefundsRepository {
         Instant.now().minusSeconds(1), refund.createdAt(), refund.settledAt(),
         refund.holdTransactionPublicId(), refund.executeTransactionPublicId(),
         refund.returnTransactionPublicId()));
+  }
+
+  /** Test driver: teach the fake which account an intent belongs to — the
+   *  listing's account scope rides this join; the SQL side resolves it from
+   *  the intent row itself. */
+  public void mapIntentAccount(UUID intentPublicId, UUID accountPublicId) {
+    intentAccounts.put(intentPublicId, accountPublicId);
   }
 }

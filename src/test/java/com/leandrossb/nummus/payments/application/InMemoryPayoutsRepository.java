@@ -10,15 +10,19 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** In-memory fake mirroring the payout repository's status-guarded transitions. */
 public class InMemoryPayoutsRepository implements PayoutsRepository {
 
   private final Map<UUID, Payout> payouts = new ConcurrentHashMap<>();
+  private final Map<UUID, Long> sequence = new ConcurrentHashMap<>();
+  private final AtomicLong nextId = new AtomicLong();
 
   @Override
   public Payout insert(Payout payout) {
     payouts.put(payout.publicId(), payout);
+    sequence.putIfAbsent(payout.publicId(), nextId.incrementAndGet());
     return payout;
   }
 
@@ -50,6 +54,24 @@ public class InMemoryPayoutsRepository implements PayoutsRepository {
         .filter(p -> p.status() == PayoutStatus.SETTLED)
         .filter(p -> !p.settledAt().isBefore(from) && p.settledAt().isBefore(to))
         .sorted(Comparator.comparing(Payout::settledAt))
+        .toList();
+  }
+
+  @Override
+  public List<Payout> listByAccounts(List<UUID> accountPublicIds, String status,
+      UUID account, UUID after, int limit) {
+    Long afterId = after == null ? null : sequence.get(after);
+    if (after != null && afterId == null) {
+      // An unknown cursor matches nothing, exactly as the SQL subselect does.
+      return List.of();
+    }
+    return payouts.values().stream()
+        .filter(p -> accountPublicIds.contains(p.accountPublicId()))
+        .filter(p -> status == null || p.status().name().equals(status))
+        .filter(p -> account == null || p.accountPublicId().equals(account))
+        .filter(p -> afterId == null || sequence.get(p.publicId()) < afterId)
+        .sorted(Comparator.comparingLong((Payout p) -> sequence.get(p.publicId())).reversed())
+        .limit(limit)
         .toList();
   }
 

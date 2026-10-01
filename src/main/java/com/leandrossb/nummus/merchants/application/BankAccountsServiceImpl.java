@@ -61,8 +61,8 @@ public class BankAccountsServiceImpl implements BankAccountsService {
 
   @Override
   @Transactional(readOnly = true)
-  public List<BankAccount> list(UUID merchantPublicId) {
-    return store.listByMerchant(merchantPublicId, 50);
+  public List<BankAccount> list(UUID merchantPublicId, UUID after, int limit) {
+    return store.listByMerchant(merchantPublicId, after, limit);
   }
 
   @Override

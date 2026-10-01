@@ -5,6 +5,7 @@ import com.leandrossb.nummus.payments.domain.CreateRefundCommand;
 import com.leandrossb.nummus.payments.domain.Refund;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -26,11 +27,18 @@ public interface RefundsService {
    *  without consulting the network. Terminal rows are returned untouched. */
   Refund get(UUID merchantPublicId, UUID publicId);
 
+  /** The merchant's refunds, newest first, keyset-paginated. */
+  List<Refund> list(UUID merchantPublicId, String status, UUID account, UUID after, int limit);
+
   /** Sum of the intent's holding (REQUESTED) and executed (SETTLED) refunds —
    *  the term every further refund request is capped against. FAILED and
    *  EXPIRED refunds released their share and drop out; an intent without
    *  refunds sums to zero. */
   Money refundedTotal(UUID intentPublicId);
+
+  /** Refunded totals (held + settled refunds) for a page of intents; missing
+   *  intents map to zero. */
+  Map<UUID, Money> refundedTotals(List<UUID> intentPublicIds);
 
   /** Settled refunds in [from, to) — conciliation's view of internal money-out
    *  settlements, keyed by the network refund each settlement executed. */

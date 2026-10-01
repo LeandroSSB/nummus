@@ -646,6 +646,7 @@ import com.leandrossb.nummus.payments.domain.CreateIntentCommand;
 import com.leandrossb.nummus.payments.domain.CreatePayoutCommand;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.testutils.ApiDrivers;
+import com.leandrossb.nummus.testutils.IntegrationTestBase;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;

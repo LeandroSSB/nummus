@@ -39,7 +39,7 @@ public class FakeBankAccountsService implements BankAccountsService {
   }
 
   @Override
-  public List<BankAccount> list(UUID m) {
+  public List<BankAccount> list(UUID m, UUID after, int limit) {
     return List.of();
   }
 

@@ -9,15 +9,19 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** In-memory fake mirroring the repository's status-guarded transitions. */
 public class InMemoryPaymentsRepository implements PaymentsRepository {
 
   private final Map<UUID, PaymentIntent> intents = new ConcurrentHashMap<>();
+  private final Map<UUID, Long> sequence = new ConcurrentHashMap<>();
+  private final AtomicLong nextId = new AtomicLong();
 
   @Override
   public PaymentIntent insert(PaymentIntent intent) {
     intents.put(intent.publicId(), intent);
+    sequence.putIfAbsent(intent.publicId(), nextId.incrementAndGet());
     return intent;
   }
 
@@ -48,6 +52,25 @@ public class InMemoryPaymentsRepository implements PaymentsRepository {
         .filter(i -> i.status() == IntentStatus.SETTLED)
         .filter(i -> !i.settledAt().isBefore(from) && i.settledAt().isBefore(to))
         .sorted(java.util.Comparator.comparing(PaymentIntent::settledAt))
+        .toList();
+  }
+
+  @Override
+  public List<PaymentIntent> listByAccounts(List<UUID> accountPublicIds, String status,
+      UUID account, UUID after, int limit) {
+    Long afterId = after == null ? null : sequence.get(after);
+    if (after != null && afterId == null) {
+      // An unknown cursor matches nothing, exactly as the SQL subselect does.
+      return List.of();
+    }
+    return intents.values().stream()
+        .filter(i -> accountPublicIds.contains(i.accountPublicId()))
+        .filter(i -> status == null || i.status().name().equals(status))
+        .filter(i -> account == null || i.accountPublicId().equals(account))
+        .filter(i -> afterId == null || sequence.get(i.publicId()) < afterId)
+        .sorted(java.util.Comparator
+            .comparingLong((PaymentIntent i) -> sequence.get(i.publicId())).reversed())
+        .limit(limit)
         .toList();
   }
 

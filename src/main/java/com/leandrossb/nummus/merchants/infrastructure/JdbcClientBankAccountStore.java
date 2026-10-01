@@ -60,10 +60,14 @@ public class JdbcClientBankAccountStore implements BankAccountStore {
   }
 
   @Override
-  public List<BankAccount> listByMerchant(UUID merchantPublicId, int limit) {
+  public List<BankAccount> listByMerchant(UUID merchantPublicId, UUID after, int limit) {
     return jdbc.sql("select " + COLUMNS + " from merchants.bank_account"
-        + " where merchant_public_id = :merchantPublicId order by id desc limit :limit")
+        + " where merchant_public_id = :merchantPublicId"
+        + " and (:after::uuid is null"
+        + "     or id < (select b2.id from merchants.bank_account b2 where b2.public_id = :after))"
+        + " order by id desc limit :limit")
         .param("merchantPublicId", merchantPublicId)
+        .param("after", after)
         .param("limit", limit)
         .query((rs, i) -> mapAccount(rs))
         .list();

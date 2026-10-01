@@ -26,4 +26,7 @@ public interface PaymentsRepository {
 
   /** SETTLED intents with settled_at in [from, to), ordered by settled_at then id. */
   List<PaymentIntent> findSettledBetween(Instant from, Instant to);
+
+  List<PaymentIntent> listByAccounts(List<UUID> accountPublicIds, String status,
+      UUID account, UUID after, int limit);
 }

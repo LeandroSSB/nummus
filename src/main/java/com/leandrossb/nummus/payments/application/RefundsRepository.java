@@ -4,6 +4,7 @@ import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.payments.domain.Refund;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,6 +18,8 @@ public interface RefundsRepository {
   /** Sum of the holding (REQUESTED) and executed (SETTLED) refunds of the
    *  intent — what the refundable remainder derives from. */
   Money refundedTotal(UUID intentPublicId);
+
+  Map<UUID, Money> findRefundedTotals(List<UUID> intentPublicIds);
 
   /** Settles a REQUESTED refund, stamping the execution link and the
    *  settled-at instant. False when the row is no longer REQUESTED — the
@@ -33,4 +36,7 @@ public interface RefundsRepository {
 
   /** SETTLED rows with settled_at in [from, to), ordered by settled_at then id. */
   List<Refund> findSettledBetween(Instant from, Instant to);
+
+  List<Refund> listByAccounts(List<UUID> accountPublicIds, String status,
+      UUID account, UUID after, int limit);
 }
