@@ -33,8 +33,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 /** The merchant's own refunds, newest first, chained by Next-Cursor; filters
- *  intersect (the account filter rides the owning intent); foreign cursors
- *  resolve to nothing. */
+ *  intersect (the account filter rides the owning intent); a foreign cursor
+ *  merely offsets — foreign rows never surface. */
 @AutoConfigureMockMvc
 class RefundsListingRestApiTest extends IntegrationTestBase {
 

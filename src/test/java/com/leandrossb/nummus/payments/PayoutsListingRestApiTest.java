@@ -34,7 +34,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 /** The merchant's own payouts, newest first, chained by Next-Cursor; filters
- *  intersect; foreign cursors resolve to nothing. */
+ *  intersect; a foreign cursor merely offsets — foreign rows never surface. */
 @AutoConfigureMockMvc
 class PayoutsListingRestApiTest extends IntegrationTestBase {
 

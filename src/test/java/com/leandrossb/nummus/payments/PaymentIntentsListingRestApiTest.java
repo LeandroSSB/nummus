@@ -29,7 +29,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 /** The merchant's own intents, newest first, chained by Next-Cursor without
- *  overlap or gaps; filters intersect; foreign cursors resolve to nothing. */
+ *  overlap or gaps; filters intersect; a foreign cursor merely offsets —
+ *  foreign rows never surface. */
 @AutoConfigureMockMvc
 class PaymentIntentsListingRestApiTest extends IntegrationTestBase {
 
@@ -130,6 +131,32 @@ class PaymentIntentsListingRestApiTest extends IntegrationTestBase {
             .header("Authorization", "Bearer " + merchantKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(0));
+  }
+
+  @Test
+  void foreignCursorOffsetsWithoutLeakingForeignRows() throws Exception {
+    // Another merchant's intent exists; using its id as a cursor resolves
+    // (the subselect is unscoped, matching the deliveries precedent) and
+    // merely offsets: this merchant's own older rows return, never his.
+    String operatorAuth = "Bearer " + operatorKeys.create("probe", null, null).secret();
+    MvcResult other = mockMvc.perform(post("/v1/merchants")
+            .header("Authorization", operatorAuth)
+            .header("Idempotency-Key", UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Intents Listing Foreign Cursor Merchant\"}"))
+        .andExpect(status().isCreated()).andReturn();
+    UUID otherId = UUID.fromString(JsonPath.read(other.getResponse().getContentAsString(), "$.merchantId"));
+    var otherAccount = accountsService.open(otherId, new OpenAccountCommand("Foreign Cursor Account"));
+    var foreign = payments.create(otherId,
+        new CreateIntentCommand(otherAccount.publicId(), Money.ofBrl("10.0000"), Duration.ofMinutes(10)));
+
+    mockMvc.perform(get("/v1/payment-intents").header("Authorization", "Bearer " + merchantKey)
+            .param("after", foreign.publicId().toString()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(4))
+        .andExpect(jsonPath("$[*].accountId",
+            org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers
+                .isOneOf(accountA.toString(), accountB.toString()))));
   }
 
   @Test
