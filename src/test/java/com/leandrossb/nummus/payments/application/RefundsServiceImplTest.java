@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import com.leandrossb.nummus.accounts.application.AccountsService;
 import com.leandrossb.nummus.accounts.application.AccountsServiceImpl;
 import com.leandrossb.nummus.accounts.application.InMemoryAccountsRepository;
+import com.leandrossb.nummus.accounts.application.MoneyInFlight;
 import com.leandrossb.nummus.accounts.domain.OpenAccountCommand;
 import com.leandrossb.nummus.ledger.application.InMemoryLedgerRepository;
 import com.leandrossb.nummus.ledger.application.Ledger;
@@ -37,7 +38,8 @@ class RefundsServiceImplTest {
   private final InMemoryLedgerRepository ledgerRepository = new InMemoryLedgerRepository();
   private final Ledger ledger = new LedgerServiceImpl(ledgerRepository);
   private final AccountsService accounts =
-      new AccountsServiceImpl(ledger, new InMemoryAccountsRepository(), id -> false);
+      new AccountsServiceImpl(ledger, new InMemoryAccountsRepository(), id -> false,
+          id -> new MoneyInFlight.Sums(Money.ofBrl("0.0000"), Money.ofBrl("0.0000")));
   private final FakePaymentNetwork network = new FakePaymentNetwork();
   private final InMemoryPaymentsRepository intentRepo = new InMemoryPaymentsRepository();
   private final MerchantsService merchants = new FakeMerchantsService();

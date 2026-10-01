@@ -29,12 +29,14 @@ public class AccountsServiceImpl implements AccountsService {
   private final Ledger ledger;
   private final AccountsRepository repository;
   private final OutstandingHolds outstandingHolds;
+  private final MoneyInFlight moneyInFlight;
 
   public AccountsServiceImpl(Ledger ledger, AccountsRepository repository,
-      OutstandingHolds outstandingHolds) {
+      OutstandingHolds outstandingHolds, MoneyInFlight moneyInFlight) {
     this.ledger = ledger;
     this.repository = repository;
     this.outstandingHolds = outstandingHolds;
+    this.moneyInFlight = moneyInFlight;
   }
 
   @Override
@@ -89,6 +91,15 @@ public class AccountsServiceImpl implements AccountsService {
   public Money balance(UUID merchantPublicId, UUID publicId) {
     var account = require(merchantPublicId, publicId);
     return naturalSigned(account, ledger.balance(account.ledgerAccountPublicId()));
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public BalanceComposition composition(UUID merchantPublicId, UUID publicId) {
+    var account = require(merchantPublicId, publicId);
+    var booked = naturalSigned(account, ledger.balance(account.ledgerAccountPublicId()));
+    var inFlight = moneyInFlight.sums(publicId);
+    return new BalanceComposition(booked, inFlight.pendingIncoming(), inFlight.reservedOutgoing());
   }
 
   @Override
