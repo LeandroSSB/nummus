@@ -2,11 +2,13 @@ package com.leandrossb.nummus.merchants.application;
 
 import com.leandrossb.nummus.audit.application.OperatorAudit;
 import com.leandrossb.nummus.merchants.domain.Merchant;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -51,6 +53,36 @@ public class MerchantsServiceImpl implements MerchantsService {
   public boolean updateFeeSchedule(UUID publicId, FeeSchedule fee, UUID actingOperatorKey) {
     store.insertFeeScheduleEntry(publicId, fee, actingOperatorKey);
     return store.updateFeeSchedule(publicId, fee);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Optional<PaymentLimits> findPaymentLimits(UUID publicId) {
+    // The store reads unlimited for any id; the Optional carries existence.
+    return store.findMerchant(publicId).isPresent()
+        ? Optional.of(store.findPaymentLimits(publicId)) : Optional.empty();
+  }
+
+  @Override
+  @Transactional
+  public void updatePaymentLimits(UUID publicId, PaymentLimits limits, UUID actingOperatorKey) {
+    store.insertPaymentLimitsEntry(publicId, limits, actingOperatorKey);
+    store.updatePaymentLimits(publicId, limits);
+    if (actingOperatorKey != null) {
+      audit.record(actingOperatorKey, "merchant.limits_updated", "merchant", publicId,
+          Map.of("maxIntentAmount", cap(limits.maxIntentAmount()),
+              "maxPayoutAmount", cap(limits.maxPayoutAmount())));
+    }
+  }
+
+  private static String cap(BigDecimal amount) {
+    return amount == null ? "unlimited" : amount.toPlainString();
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<PaymentLimitsEntry> listPaymentLimitsHistory(UUID publicId, UUID after, int limit) {
+    return store.listPaymentLimitsHistory(publicId, after, limit);
   }
 
   @Override

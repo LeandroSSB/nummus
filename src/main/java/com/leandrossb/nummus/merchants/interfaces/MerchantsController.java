@@ -9,8 +9,11 @@ import com.leandrossb.nummus.merchants.application.UnknownMerchantException;
 import com.leandrossb.nummus.merchants.interfaces.dto.CreateMerchantRequest;
 import com.leandrossb.nummus.merchants.interfaces.dto.CreateMerchantResponse;
 import com.leandrossb.nummus.merchants.interfaces.dto.FeeHistoryResponse;
+import com.leandrossb.nummus.merchants.interfaces.dto.LimitsHistoryResponse;
+import com.leandrossb.nummus.merchants.interfaces.dto.LimitsResponse;
 import com.leandrossb.nummus.merchants.interfaces.dto.MerchantResponse;
 import com.leandrossb.nummus.merchants.interfaces.dto.UpdateFeeRequest;
+import com.leandrossb.nummus.merchants.interfaces.dto.UpdateLimitsRequest;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -86,5 +89,39 @@ class MerchantsController {
     var cursor = page.get(limit - 1).entryId();
     return ResponseEntity.ok().header("Next-Cursor", cursor.toString())
         .body(page.subList(0, limit).stream().map(FeeHistoryResponse::from).toList());
+  }
+
+  @Idempotent
+  @PutMapping("/{id}/limits")
+  ResponseEntity<LimitsResponse> updateLimits(AuthenticatedOperator operator,
+      @PathVariable UUID id, @Valid @RequestBody UpdateLimitsRequest request) {
+    merchants.find(id).orElseThrow(() -> new UnknownMerchantException(id));
+    merchants.updatePaymentLimits(id, request.limits(), operator.keyPublicId());
+    return ResponseEntity.ok(LimitsResponse.from(merchants.findPaymentLimits(id).orElseThrow()));
+  }
+
+  @GetMapping("/{id}/limits")
+  LimitsResponse limits(AuthenticatedOperator operator, @PathVariable UUID id) {
+    merchants.find(id).orElseThrow(() -> new UnknownMerchantException(id));
+    return LimitsResponse.from(merchants.findPaymentLimits(id).orElseThrow());
+  }
+
+  @GetMapping("/{id}/limits-history")
+  ResponseEntity<List<LimitsHistoryResponse>> limitsHistory(AuthenticatedOperator operator,
+      @PathVariable UUID id, @RequestParam(required = false) UUID after,
+      @RequestParam(defaultValue = "50") int limit) {
+    if (limit < 1 || limit > 100) {
+      throw new IllegalArgumentException("limit must be between 1 and 100: " + limit);
+    }
+    merchants.find(id).orElseThrow(() -> new UnknownMerchantException(id));
+    // Keyset pagination: fetch limit+1, hand back limit, and surface a Next-Cursor
+    // (the last returned entry's public id) only when the probe found an extra row.
+    var page = merchants.listPaymentLimitsHistory(id, after, limit + 1);
+    if (page.size() <= limit) {
+      return ResponseEntity.ok().body(page.stream().map(LimitsHistoryResponse::from).toList());
+    }
+    var cursor = page.get(limit - 1).entryId();
+    return ResponseEntity.ok().header("Next-Cursor", cursor.toString())
+        .body(page.subList(0, limit).stream().map(LimitsHistoryResponse::from).toList());
   }
 }

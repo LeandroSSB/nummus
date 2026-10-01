@@ -60,12 +60,17 @@ and audit — exactly the governance shape fee schedules already have.
 
 ### Storage (`V24__payment_limits.sql`)
 
-- `merchants.payment_limits`: one row per merchant (`merchant_public_id`
-  unique), `max_intent_amount numeric(19,4) null`, `max_payout_amount
-  numeric(19,4) null` (both `check (amount > 0)` when present), `updated_at`.
-- `merchants.payment_limits_history`: append-only — `merchant_public_id`,
-  both amounts, `acting_operator_key_public_id`, `recorded_at`. Grants mirror
-  the fee tables'.
+The fee-schedule storage shape exactly: cached current values on the merchant
+row, attributed append-only history beside it.
+
+- `merchants.merchant` gains `max_intent_amount numeric(19,4) null` and
+  `max_payout_amount numeric(19,4) null` (both `check (amount > 0)` when
+  present) — the cached current caps; NULL means unlimited, the default for
+  every existing and new merchant.
+- `merchants.payment_limits_entry`: append-only — merchant reference (internal
+  id), both amounts, `valid_from`, `created_by` (the acting operator key),
+  `created_at`; index `(merchant_id, id desc)` for the newest-first keyset
+  walk. Grants mirror the fee tables'.
 
 ### Module boundaries
 
