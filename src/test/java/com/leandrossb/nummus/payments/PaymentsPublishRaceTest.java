@@ -121,6 +121,11 @@ class PaymentsPublishRaceTest {
     }
 
     @Override
+    public boolean transitionToVoided(UUID publicId) {
+      return loseRace();
+    }
+
+    @Override
     public boolean transitionToFailed(UUID publicId) {
       return loseRace();
     }

@@ -17,6 +17,9 @@ public interface PaymentsRepository {
   /** CREATED → EXPIRED. @return false when the intent is not CREATED. */
   boolean transitionToExpired(UUID publicId);
 
+  /** CREATED → VOIDED (merchant withdrawal). @return false when the intent is not CREATED. */
+  boolean transitionToVoided(UUID publicId);
+
   /** CREATED → FAILED. @return false when the intent is not CREATED. */
   boolean transitionToFailed(UUID publicId);
 

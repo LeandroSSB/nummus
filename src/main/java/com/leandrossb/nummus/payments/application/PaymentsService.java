@@ -19,6 +19,9 @@ public interface PaymentsService {
   /** Applies lazy expiry and lazy settlement, then returns the current state. */
   PaymentIntent get(UUID merchantPublicId, UUID publicId);
 
+  /** Withdraws a CREATED intent; money already paid settles instead. */
+  PaymentIntent voidIntent(UUID merchantPublicId, UUID publicId);
+
   /** The merchant's intents, newest first, keyset-paginated (see WebhookDeliveriesController). */
   List<PaymentIntent> list(UUID merchantPublicId, String status, UUID account, UUID after, int limit);
 
