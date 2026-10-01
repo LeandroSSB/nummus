@@ -58,9 +58,9 @@ class PaymentLimitsStoreTest extends IntegrationTestBase {
     assertNull(initial.maxPayoutAmount());
 
     merchants.updatePaymentLimits(merchantId,
-        new PaymentLimits(new BigDecimal("5000.0000"), new BigDecimal("2000.0000")), operatorKeyPublicId);
+        new PaymentLimits(new BigDecimal("5000.0000"), new BigDecimal("2000.0000"), null), operatorKeyPublicId);
     merchants.updatePaymentLimits(merchantId,
-        new PaymentLimits(null, new BigDecimal("1500.0000")), operatorKeyPublicId);
+        new PaymentLimits(null, new BigDecimal("1500.0000"), null), operatorKeyPublicId);
 
     var current = merchants.findPaymentLimits(merchantId).orElseThrow();
     assertNull(current.maxIntentAmount());

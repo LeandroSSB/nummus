@@ -9,5 +9,6 @@ import java.util.UUID;
  *  createdByLabel — is null only for a migration backfill (none exists at
  *  introduction; the field mirrors FeeHistoryEntry's sentinel semantics). */
 public record PaymentLimitsEntry(UUID entryId, BigDecimal maxIntentAmount,
-    BigDecimal maxPayoutAmount, Instant validFrom, UUID createdBy, String createdByLabel) {
+    BigDecimal maxPayoutAmount, BigDecimal maxDailyIntentVolume, Instant validFrom,
+    UUID createdBy, String createdByLabel) {
 }
