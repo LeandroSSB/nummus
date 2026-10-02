@@ -68,10 +68,20 @@ class AccountsController {
       // The probe rides the export cap clamped to Page's own ceiling (500) —
       // the statement's pagination primitive rejects anything larger, so the
       // export's effective row bound here is the tighter of the two.
-      var statement = accounts.statement(merchant.merchantPublicId(), id,
-          new Page(0, Math.min(exportMaxRows + 1, 500)));
-      var truncated = statement.lines().size() > exportMaxRows;
-      var lines = truncated ? statement.lines().subList(0, exportMaxRows) : statement.lines();
+      var probeLimit = Math.min(exportMaxRows + 1, 500);
+      var statement = accounts.statement(merchant.merchantPublicId(), id, new Page(0, probeLimit));
+      // Two arms: the property arm fires when the configured cap was exceeded;
+      // the probe-full arm fires when Page's 500 ceiling filled the probe —
+      // there may be more lines. A complete exactly-full export gets the
+      // marker too: errs safe over silently incomplete accounting output.
+      var truncated = statement.lines().size() > exportMaxRows
+          || (probeLimit <= exportMaxRows && statement.lines().size() == probeLimit);
+      // The probe-full arm can fire while the fetched page holds fewer lines
+      // than the configured cap (Page's ceiling is the tighter bound), so the
+      // slice clamps to what was actually fetched.
+      var lines = truncated
+          ? statement.lines().subList(0, Math.min(exportMaxRows, statement.lines().size()))
+          : statement.lines();
       var sb = new StringBuilder(Csv.render(
           List.of("balance", "pendingIncoming", "reservedOutgoing"),
           List.of(List.of(statement.balance().amount().toPlainString(),
@@ -84,8 +94,8 @@ class AccountsController {
             line.memo(), line.direction().name(), line.amount().amount().toPlainString(),
             line.amount().currency().getCurrencyCode()));
       }
-      sb.append(Csv.render(List.of("bookedAt", "transactionId", "memo", "direction", "amount",
-          "currency"), rows));
+      sb.append(Csv.render(List.of("bookedAt", "transactionPublicId", "memo", "direction",
+          "amount", "currency"), rows));
       if (truncated) {
         sb.append("# truncated: true\r\n");
       }

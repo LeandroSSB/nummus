@@ -62,6 +62,10 @@ class RemainingCsvExportTest extends IntegrationTestBase {
 
   private static final List<UUID> networkCharges = new ArrayList<>();
 
+  private static final List<UUID> payoutIds = new ArrayList<>();
+
+  private static final List<UUID> refundIds = new ArrayList<>();
+
   @Autowired
   private MockMvc mockMvc;
 
@@ -132,11 +136,15 @@ class RemainingCsvExportTest extends IntegrationTestBase {
         destinationId, Duration.ofMinutes(10)));
     newestPayout = payouts.create(merchantId, new CreatePayoutCommand(accountA, Money.ofBrl("20.0000"),
         destinationId, Duration.ofMinutes(10)));
+    payoutIds.add(firstPayout.publicId());
+    payoutIds.add(newestPayout.publicId());
     refundableIntent = createAndSettleIntent(accountB, "200.0000");
     firstRefund = refunds.create(merchantId, refundableIntent.publicId(),
         new CreateRefundCommand(Money.ofBrl("25.0000"), Duration.ofMinutes(10)));
     newestRefund = refunds.create(merchantId, refundableIntent.publicId(),
         new CreateRefundCommand(Money.ofBrl("10.0000"), Duration.ofMinutes(10)));
+    refundIds.add(firstRefund.publicId());
+    refundIds.add(newestRefund.publicId());
     firstTransfer = transfers.create(merchantId,
         new CreateTransferCommand(accountA, accountB, Money.ofBrl("5.0000")));
     newestTransfer = transfers.create(merchantId,
@@ -330,9 +338,10 @@ class RemainingCsvExportTest extends IntegrationTestBase {
 
   /**
    * The container is shared across classes and the conciliation suites
-   * assert over now-relative windows. Push this class's settlements and
-   * network rows two hours back — the same DB-side rewrite the sibling
-   * suites use — so they never fall inside another test's window.
+   * assert over now-relative windows. Push this class's settlements,
+   * network rows, and the payout/refund rows it requests two hours back —
+   * the same DB-side rewrite the sibling suites use — so they never fall
+   * inside another test's window.
    */
   @AfterAll
   static void moveFixturesOutOfNowWindows() throws Exception {
@@ -344,6 +353,20 @@ class RemainingCsvExportTest extends IntegrationTestBase {
       if (!networkCharges.isEmpty()) {
         st.executeUpdate("UPDATE psp_simulator.charge SET updated_at = now() - interval '2 hours'"
           + " WHERE public_id IN (" + quoted(networkCharges) + ")");
+      }
+      if (!payoutIds.isEmpty()) {
+        st.executeUpdate("UPDATE payments.payout SET created_at = now() - interval '2 hours',"
+            + " expires_at = expires_at - interval '2 hours'"
+            + " WHERE public_id IN (" + quoted(payoutIds) + ")");
+        st.executeUpdate("UPDATE payments.payout SET settled_at = settled_at - interval '2 hours'"
+            + " WHERE settled_at IS NOT NULL AND public_id IN (" + quoted(payoutIds) + ")");
+      }
+      if (!refundIds.isEmpty()) {
+        st.executeUpdate("UPDATE payments.refund SET created_at = now() - interval '2 hours',"
+            + " expires_at = expires_at - interval '2 hours'"
+            + " WHERE public_id IN (" + quoted(refundIds) + ")");
+        st.executeUpdate("UPDATE payments.refund SET settled_at = settled_at - interval '2 hours'"
+            + " WHERE settled_at IS NOT NULL AND public_id IN (" + quoted(refundIds) + ")");
       }
     }
   }

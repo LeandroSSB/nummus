@@ -100,7 +100,7 @@ class StatementCsvExportTest extends IntegrationTestBase {
     assertEquals("", lines[2]);
 
     // Section two: the postings table, all six columns of the one settlement.
-    assertEquals("bookedAt,transactionId,memo,direction,amount,currency", lines[3]);
+    assertEquals("bookedAt,transactionPublicId,memo,direction,amount,currency", lines[3]);
     String[] row = lines[4].split(",", -1);
     assertEquals(6, row.length);
     assertEquals(settled.journalTransactionPublicId().toString(), row[1]);
