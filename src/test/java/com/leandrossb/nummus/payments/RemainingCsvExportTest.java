@@ -47,11 +47,11 @@ import org.springframework.test.web.servlet.MvcResult;
 
 /** The remaining merchant listings as CSV — payouts, refunds, transfers:
  *  each header row is its response record's component names in declaration
- *  order, rows run newest first, the status filter narrows to the same zero
- *  settled rows the JSON listing returns, and the export cap truncates with a
- *  marker line instead of paging. No field here naturally carries the
- *  separator, so quoting itself is {@code CsvTest}'s to prove — these rows
- *  only pin that plain values pass through unwrapped. */
+ *  order, rows run newest first, the status filter narrows to zero rows
+ *  while nothing is settled, and the export cap truncates with a marker
+ *  line instead of paging. No field here naturally carries the separator,
+ *  so quoting itself is {@code CsvTest}'s to prove — these rows only pin
+ *  that plain values pass through unwrapped. */
 @AutoConfigureMockMvc
 @TestPropertySource(properties = "nummus.export.max-rows=3")
 class RemainingCsvExportTest extends IntegrationTestBase {
