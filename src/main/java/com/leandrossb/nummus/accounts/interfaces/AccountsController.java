@@ -65,23 +65,15 @@ class AccountsController {
       @RequestParam(defaultValue = "0") int offset,
       @RequestParam(defaultValue = "50") int limit) {
     if (Csv.wantsCsv(accept)) {
-      // The probe rides the export cap clamped to Page's own ceiling (500) —
-      // the statement's pagination primitive rejects anything larger, so the
-      // export's effective row bound here is the tighter of the two.
-      var probeLimit = Math.min(exportMaxRows + 1, 500);
-      var statement = accounts.statement(merchant.merchantPublicId(), id, new Page(0, probeLimit));
-      // Two arms: the property arm fires when the configured cap was exceeded;
-      // the probe-full arm fires when Page's 500 ceiling filled the probe —
-      // there may be more lines. A complete exactly-full export gets the
-      // marker too: errs safe over silently incomplete accounting output.
-      var truncated = statement.lines().size() > exportMaxRows
-          || (probeLimit <= exportMaxRows && statement.lines().size() == probeLimit);
-      // The probe-full arm can fire while the fetched page holds fewer lines
-      // than the configured cap (Page's ceiling is the tighter bound), so the
-      // slice clamps to what was actually fetched.
-      var lines = truncated
-          ? statement.lines().subList(0, Math.min(exportMaxRows, statement.lines().size()))
-          : statement.lines();
+      // The export read bypasses Page's ceiling, so the statement honors the
+      // same bound as the listings.
+      var statement = accounts.statement(merchant.merchantPublicId(), id, new Page(0, 1));
+      var lines = accounts.statementLinesForExport(merchant.merchantPublicId(), id,
+          exportMaxRows + 1);
+      var truncated = lines.size() > exportMaxRows;
+      if (truncated) {
+        lines = lines.subList(0, exportMaxRows);
+      }
       var sb = new StringBuilder(Csv.render(
           List.of("balance", "pendingIncoming", "reservedOutgoing"),
           List.of(List.of(statement.balance().amount().toPlainString(),

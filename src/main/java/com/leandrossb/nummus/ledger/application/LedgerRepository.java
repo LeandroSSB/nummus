@@ -43,4 +43,8 @@ public interface LedgerRepository {
 
   /** The account's postings newest first. */
   List<StatementLine> statementLines(UUID accountPublicId, int offset, int limit);
+
+  /** The account's postings newest first, up to {@code limit} rows — the
+   *  export-sized read, with no {@code Page} ceiling of its own. */
+  List<StatementLine> statementLinesUpTo(UUID accountPublicId, int limit);
 }

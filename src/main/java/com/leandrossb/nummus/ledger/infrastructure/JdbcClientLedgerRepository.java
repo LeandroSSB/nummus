@@ -211,16 +211,36 @@ public class JdbcClientLedgerRepository implements LedgerRepository {
         .param("publicId", accountPublicId)
         .param("limit", limit)
         .param("offset", offset)
-        .query((rs, i) -> new StatementLine(
-            rs.getObject("booked_at", OffsetDateTime.class).toInstant(),
-            rs.getObject("transaction_public_id", UUID.class),
-            rs.getString("memo"),
-            Direction.valueOf(rs.getString("direction")),
-            Money.of(rs.getBigDecimal("amount"), Currency.getInstance("BRL"))))
+        .query((rs, i) -> mapStatementLine(rs))
+        .list();
+  }
+
+  @Override
+  public List<StatementLine> statementLinesUpTo(UUID accountPublicId, int limit) {
+    return jdbc.sql("""
+        select t.booked_at, t.public_id as transaction_public_id, t.memo, p.direction, p.amount
+        from ledger.journal_posting p
+        join ledger.journal_transaction t on t.id = p.transaction_id
+        where p.account_id = (select id from ledger.ledger_account where public_id = :publicId)
+        order by t.booked_at desc, p.id desc
+        limit :limit
+        """)
+        .param("publicId", accountPublicId)
+        .param("limit", limit)
+        .query((rs, i) -> mapStatementLine(rs))
         .list();
   }
 
   // ------------------------------------------------------------------
+
+  private StatementLine mapStatementLine(ResultSet rs) throws SQLException {
+    return new StatementLine(
+        rs.getObject("booked_at", OffsetDateTime.class).toInstant(),
+        rs.getObject("transaction_public_id", UUID.class),
+        rs.getString("memo"),
+        Direction.valueOf(rs.getString("direction")),
+        Money.of(rs.getBigDecimal("amount"), Currency.getInstance("BRL")));
+  }
 
   private LedgerAccount mapAccount(ResultSet rs) throws SQLException {
     OffsetDateTime closedAt = rs.getObject("closed_at", OffsetDateTime.class);

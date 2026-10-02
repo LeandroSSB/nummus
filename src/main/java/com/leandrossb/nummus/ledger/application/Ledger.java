@@ -5,6 +5,8 @@ import com.leandrossb.nummus.ledger.domain.LedgerAccount;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.Page;
 import com.leandrossb.nummus.ledger.domain.PostedTransaction;
+import com.leandrossb.nummus.ledger.domain.StatementLine;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -45,6 +47,11 @@ public interface Ledger {
 
   /** The account's postings, newest first, with its derived balance. */
   AccountStatement statement(UUID accountPublicId, Page page);
+
+  /** The account's postings, newest first, up to {@code limit} rows — the
+   *  export-sized read, bounded only by the caller's export cap rather than
+   *  {@code Page}'s pagination ceiling. */
+  List<StatementLine> statementLinesUpTo(UUID accountPublicId, int limit);
 
   PostedTransaction getTransaction(UUID txPublicId);
 }
