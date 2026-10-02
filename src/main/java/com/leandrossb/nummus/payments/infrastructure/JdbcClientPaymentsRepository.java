@@ -127,6 +127,19 @@ public class JdbcClientPaymentsRepository implements PaymentsRepository {
     return updated == 1;
   }
 
+  @Override
+  public Money createdVolumeSince(List<UUID> accountPublicIds, Instant from) {
+    var sum = jdbc.sql("""
+        select coalesce(sum(amount), 0) from payments.payment_intent
+        where account_public_id in (:accountPublicIds) and created_at >= :from
+        """)
+        .param("accountPublicIds", accountPublicIds)
+        .param("from", toOffsetDateTime(from))
+        .query((rs, i) -> rs.getBigDecimal(1))
+        .single();
+    return Money.of(sum, Currency.getInstance("BRL"));
+  }
+
   private boolean guardedTransition(UUID publicId, String target, UUID journalTx, Instant at) {
     int updated = jdbc.sql("""
         update payments.payment_intent set status = :status
