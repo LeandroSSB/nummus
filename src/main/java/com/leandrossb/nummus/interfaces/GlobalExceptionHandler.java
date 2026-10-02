@@ -82,8 +82,9 @@ public class GlobalExceptionHandler {
       UnknownApiKeyException.class, UnknownBankAccountException.class,
       UnknownTransferException.class,
       UnknownRefundException.class,
-      // The payments-side twin shares the simulator's name, not its package.
+      // The payments-side twins share the simulator's names, not its package.
       com.leandrossb.nummus.payments.domain.UnknownRefundException.class,
+      com.leandrossb.nummus.payments.domain.UnknownTransferException.class,
       UnknownPayoutException.class})
   public ProblemDetail notFound(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
