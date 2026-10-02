@@ -257,8 +257,8 @@ class TransfersRestApiTest extends IntegrationTestBase {
   }
 
   /** The merchant's transfers, newest first, chained by Next-Cursor — every
-   *  cursor distinct, every row exactly once — and a cursor naming no row of
-   *  the merchant's yields the empty page: nothing to walk below it. */
+   *  cursor distinct, every row exactly once — and a cursor that names no
+   *  transfer at all yields the empty page: nothing to walk below it. */
   @Test
   void listingWalksNewestFirstExactlyOnceAndAnUnknownCursorIsEmpty() throws Exception {
     var from = fundedFromAccount("90.0000");

@@ -46,10 +46,11 @@ import org.springframework.test.web.servlet.MvcResult;
 /**
  * The internal transfer over the real context: one balanced journal entry —
  * debit from, credit to — moves booked funds between two of the merchant's
- * accounts, committed atomically with the transfer row under the from-account's
- * ledger row lock. Every collaborator is the real bean, outbox included: the
- * completion event rides the same commit as the row and its journal entry.
- * Service-level on purpose — the HTTP surface arrives with Task 2.
+ * accounts, committed atomically with the transfer row under both accounts'
+ * ledger row locks in canonical order. Every collaborator is the real bean,
+ * outbox included: the completion event rides the same commit as the row and
+ * its journal entry. Service-level on purpose — the HTTP surface arrives
+ * with Task 2.
  */
 @AutoConfigureMockMvc
 class TransfersServiceTest extends IntegrationTestBase {
