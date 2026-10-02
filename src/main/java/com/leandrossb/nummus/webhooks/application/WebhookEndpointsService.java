@@ -5,6 +5,7 @@ import com.leandrossb.nummus.conciliation.application.ConciliationEventTypes;
 import com.leandrossb.nummus.payments.application.IntentEventTypes;
 import com.leandrossb.nummus.payments.application.PayoutEventTypes;
 import com.leandrossb.nummus.payments.application.RefundEventTypes;
+import com.leandrossb.nummus.payments.application.TransferEventTypes;
 import com.leandrossb.nummus.webhooks.domain.EndpointStatus;
 import com.leandrossb.nummus.webhooks.domain.UnknownWebhookEndpointException;
 import com.leandrossb.nummus.webhooks.domain.WebhookEndpoint;
@@ -33,11 +34,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class WebhookEndpointsService {
 
   /** The merchant catalog: every lifecycle this audience can receive — the
-   *  intent (money-in), payout (money-out), and refund (money-back) event
-   *  types together. */
+   *  intent (money-in), payout (money-out), refund (money-back), and internal
+   *  transfer event types together. */
   private static final Set<String> MERCHANT_EVENT_TYPES = Stream.concat(
       Stream.concat(IntentEventTypes.ALL.stream(), PayoutEventTypes.ALL.stream()),
-      RefundEventTypes.ALL.stream())
+      Stream.concat(RefundEventTypes.ALL.stream(), TransferEventTypes.ALL.stream()))
       .collect(Collectors.toUnmodifiableSet());
 
   private final WebhookStore store;
