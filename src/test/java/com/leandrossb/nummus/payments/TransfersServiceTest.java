@@ -168,10 +168,19 @@ class TransfersServiceTest extends IntegrationTestBase {
 
   @Test
   void frozenFromAccountRejects() {
+    fund(from.publicId(), "50.0000");
     accountsService.freeze(merchantId, from.publicId());
 
     assertThrows(PaymentAccountNotActiveException.class,
         () -> transferOf(from.publicId(), to.publicId(), "10.0000"));
+
+    // The freeze guard fires before any money moves: no row, both balances
+    // unchanged.
+    assertTrue(transfers.list(merchantId, null, 100).isEmpty());
+    assertEquals(0, accountsService.balance(merchantId, from.publicId())
+        .compareTo(Money.ofBrl("50.0000")));
+    assertEquals(0, accountsService.balance(merchantId, to.publicId())
+        .compareTo(Money.ofBrl("0.0000")));
   }
 
   @Test

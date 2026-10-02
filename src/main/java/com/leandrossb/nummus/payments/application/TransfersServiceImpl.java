@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,10 +49,14 @@ public class TransfersServiceImpl implements TransfersService {
     }
     var from = requireActive(merchantPublicId, cmd.fromAccountPublicId());
     var to = requireActive(merchantPublicId, cmd.toAccountPublicId());
-    // Check-then-post under the from-account's row lock — the payout
-    // reservation precedent minus the network legs. The lock serializes
-    // concurrent transfers and payouts against the same account.
-    ledger.lockAccount(from.ledgerAccountPublicId());
+    // Check-then-post under both accounts' row locks — the payout
+    // reservation precedent minus the network legs. Canonical lock order —
+    // both accounts, sorted by ledger id: a transfer A→B holds FOR UPDATE on
+    // A then needs an FK key-share on B; a concurrent B→A would invert that
+    // and deadlock. One global order closes the cycle.
+    var lockOrder = Stream.of(from.ledgerAccountPublicId(), to.ledgerAccountPublicId())
+        .sorted().toList();
+    lockOrder.forEach(ledger::lockAccount);
     var available = accounts.balance(merchantPublicId, from.publicId());
     if (available.compareTo(cmd.amount()) < 0) {
       throw new InsufficientFundsException(from.publicId(), available, cmd.amount());
