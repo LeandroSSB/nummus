@@ -7,16 +7,20 @@ import com.leandrossb.nummus.accounts.interfaces.dto.BalanceResponse;
 import com.leandrossb.nummus.accounts.interfaces.dto.OpenAccountRequest;
 import com.leandrossb.nummus.accounts.interfaces.dto.StatementResponse;
 import com.leandrossb.nummus.interfaces.auth.AuthenticatedMerchant;
+import com.leandrossb.nummus.interfaces.csv.Csv;
 import com.leandrossb.nummus.interfaces.idempotency.Idempotent;
 import com.leandrossb.nummus.ledger.domain.Page;
 import jakarta.validation.Valid;
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,6 +30,9 @@ import org.springframework.web.bind.annotation.RestController;
 class AccountsController {
 
   private final AccountsService accounts;
+
+  @Value("${nummus.export.max-rows:10000}")
+  private int exportMaxRows;
 
   AccountsController(AccountsService accounts) {
     this.accounts = accounts;
@@ -52,11 +59,44 @@ class AccountsController {
   }
 
   @GetMapping("/{id}/statement")
-  StatementResponse statement(AuthenticatedMerchant merchant, @PathVariable UUID id,
+  ResponseEntity<?> statement(AuthenticatedMerchant merchant,
+      @RequestHeader(value = "Accept", required = false) String accept,
+      @PathVariable UUID id,
       @RequestParam(defaultValue = "0") int offset,
       @RequestParam(defaultValue = "50") int limit) {
-    return StatementResponse.from(
-        accounts.statement(merchant.merchantPublicId(), id, new Page(offset, limit)));
+    if (Csv.wantsCsv(accept)) {
+      // The probe rides the export cap clamped to Page's own ceiling (500) —
+      // the statement's pagination primitive rejects anything larger, so the
+      // export's effective row bound here is the tighter of the two.
+      var statement = accounts.statement(merchant.merchantPublicId(), id,
+          new Page(0, Math.min(exportMaxRows + 1, 500)));
+      var truncated = statement.lines().size() > exportMaxRows;
+      var lines = truncated ? statement.lines().subList(0, exportMaxRows) : statement.lines();
+      var sb = new StringBuilder(Csv.render(
+          List.of("balance", "pendingIncoming", "reservedOutgoing"),
+          List.of(List.of(statement.balance().amount().toPlainString(),
+              statement.pendingIncoming().amount().toPlainString(),
+              statement.reservedOutgoing().amount().toPlainString()))));
+      sb.append("\r\n");
+      var rows = new java.util.ArrayList<List<String>>(lines.size());
+      for (var line : lines) {
+        rows.add(List.of(String.valueOf(line.bookedAt()), String.valueOf(line.transactionPublicId()),
+            line.memo(), line.direction().name(), line.amount().amount().toPlainString(),
+            line.amount().currency().getCurrencyCode()));
+      }
+      sb.append(Csv.render(List.of("bookedAt", "transactionId", "memo", "direction", "amount",
+          "currency"), rows));
+      if (truncated) {
+        sb.append("# truncated: true\r\n");
+      }
+      return ResponseEntity.ok()
+          .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "text/csv;charset=UTF-8")
+          .header("Content-Disposition", "attachment; filename=\"statement-"
+              + merchant.merchantPublicId().toString().substring(0, 8) + ".csv\"")
+          .body(sb.toString());
+    }
+    return ResponseEntity.ok().body(StatementResponse.from(
+        accounts.statement(merchant.merchantPublicId(), id, new Page(offset, limit))));
   }
 
   @Idempotent
