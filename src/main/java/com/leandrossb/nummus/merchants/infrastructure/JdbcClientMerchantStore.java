@@ -127,11 +127,13 @@ public class JdbcClientMerchantStore implements MerchantStore {
 
   @Override
   public PaymentLimits findPaymentLimits(UUID merchantPublicId) {
-    return jdbc.sql(
-        "select max_intent_amount, max_payout_amount from merchants.merchant where public_id = :id")
+    return jdbc.sql("""
+        select max_intent_amount, max_payout_amount, max_daily_intent_volume
+        from merchants.merchant where public_id = :id
+        """)
         .param("id", merchantPublicId)
         .query((rs, i) -> new PaymentLimits(rs.getBigDecimal("max_intent_amount"),
-            rs.getBigDecimal("max_payout_amount")))
+            rs.getBigDecimal("max_payout_amount"), rs.getBigDecimal("max_daily_intent_volume")))
         .optional().orElse(PaymentLimits.unlimited());
   }
 
@@ -139,11 +141,13 @@ public class JdbcClientMerchantStore implements MerchantStore {
   public boolean updatePaymentLimits(UUID merchantPublicId, PaymentLimits limits) {
     return jdbc.sql("""
             update merchants.merchant
-            set max_intent_amount = :maxIntent, max_payout_amount = :maxPayout
+            set max_intent_amount = :maxIntent, max_payout_amount = :maxPayout,
+                max_daily_intent_volume = :maxDailyVolume
             where public_id = :id
             """)
         .param("maxIntent", limits.maxIntentAmount())
         .param("maxPayout", limits.maxPayoutAmount())
+        .param("maxDailyVolume", limits.maxDailyIntentVolume())
         .param("id", merchantPublicId)
         .update() == 1;
   }
@@ -152,12 +156,13 @@ public class JdbcClientMerchantStore implements MerchantStore {
   public void insertPaymentLimitsEntry(UUID merchantPublicId, PaymentLimits limits, UUID createdBy) {
     jdbc.sql("""
         insert into merchants.payment_limits_entry
-          (merchant_id, max_intent_amount, max_payout_amount, created_by)
-        select m.id, :maxIntent, :maxPayout, :createdBy
+          (merchant_id, max_intent_amount, max_payout_amount, max_daily_intent_volume, created_by)
+        select m.id, :maxIntent, :maxPayout, :maxDailyVolume, :createdBy
         from merchants.merchant m where m.public_id = :id
         """)
         .param("maxIntent", limits.maxIntentAmount())
         .param("maxPayout", limits.maxPayoutAmount())
+        .param("maxDailyVolume", limits.maxDailyIntentVolume())
         .param("createdBy", createdBy)
         .param("id", merchantPublicId)
         .update();
@@ -166,7 +171,8 @@ public class JdbcClientMerchantStore implements MerchantStore {
   @Override
   public List<PaymentLimitsEntry> listPaymentLimitsHistory(UUID merchantPublicId, UUID after, int limit) {
     return jdbc.sql("""
-        select e.public_id, e.max_intent_amount, e.max_payout_amount, e.valid_from, e.created_by,
+        select e.public_id, e.max_intent_amount, e.max_payout_amount,
+          e.max_daily_intent_volume, e.valid_from, e.created_by,
           k.label as created_by_label
         from merchants.payment_limits_entry e
         join merchants.merchant m on m.id = e.merchant_id
@@ -183,6 +189,7 @@ public class JdbcClientMerchantStore implements MerchantStore {
         .param("limit", limit)
         .query((rs, i) -> new PaymentLimitsEntry(rs.getObject("public_id", UUID.class),
             rs.getBigDecimal("max_intent_amount"), rs.getBigDecimal("max_payout_amount"),
+            rs.getBigDecimal("max_daily_intent_volume"),
             rs.getObject("valid_from", OffsetDateTime.class).toInstant(),
             rs.getObject("created_by", UUID.class), rs.getString("created_by_label")))
         .list();

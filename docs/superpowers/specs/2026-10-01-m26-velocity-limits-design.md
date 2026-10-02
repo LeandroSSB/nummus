@@ -50,6 +50,13 @@ ATTEMPT per rolling day — enforced at the same write M23 guards.
 
 ### Enforcement
 
+Advisory semantics (accepted, per the M23 static-cap precedent): the check
+reads committed state and precedes the insert, so a burst of concurrent
+requests can transiently exceed the cap by roughly (in-flight count − 1) ×
+amounts. The bound is governance, not an accounting invariant; serialization
+(per-merchant advisory lock) is the upgrade path if a hard bound is ever
+required.
+
 `PaymentsServiceImpl.create`, directly after the static cap check:
 
 ```java

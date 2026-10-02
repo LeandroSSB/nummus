@@ -79,6 +79,17 @@ public class InMemoryPaymentsRepository implements PaymentsRepository {
         .toList();
   }
 
+  @Override
+  public Money createdVolumeSince(List<UUID> accountPublicIds, Instant from) {
+    // Mirrors the SQL: coalesced sum over every attempt regardless of status,
+    // membership-scoped, with the boundary inclusive.
+    return intents.values().stream()
+        .filter(i -> accountPublicIds.contains(i.accountPublicId()))
+        .filter(i -> !i.createdAt().isBefore(from))
+        .map(PaymentIntent::amount)
+        .reduce(Money.ofBrl("0.0000"), Money::add);
+  }
+
   private synchronized boolean guarded(UUID publicId, IntentStatus target, UUID journalTx,
       Instant at, Money feeAmount) {
     var current = intents.get(publicId);

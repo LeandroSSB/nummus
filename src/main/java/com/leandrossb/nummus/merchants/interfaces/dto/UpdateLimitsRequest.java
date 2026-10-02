@@ -10,9 +10,11 @@ public record UpdateLimitsRequest(
     @DecimalMin(value = "0", inclusive = false, message = "maxIntentAmount must be > 0")
     @Digits(integer = 15, fraction = 4) BigDecimal maxIntentAmount,
     @DecimalMin(value = "0", inclusive = false, message = "maxPayoutAmount must be > 0")
-    @Digits(integer = 15, fraction = 4) BigDecimal maxPayoutAmount) {
+    @Digits(integer = 15, fraction = 4) BigDecimal maxPayoutAmount,
+    @DecimalMin(value = "0", inclusive = false, message = "maxDailyIntentVolume must be > 0")
+    @Digits(integer = 15, fraction = 4) BigDecimal maxDailyIntentVolume) {
 
   public PaymentLimits limits() {
-    return new PaymentLimits(maxIntentAmount, maxPayoutAmount);
+    return new PaymentLimits(maxIntentAmount, maxPayoutAmount, maxDailyIntentVolume);
   }
 }

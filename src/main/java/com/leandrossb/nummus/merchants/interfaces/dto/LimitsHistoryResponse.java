@@ -7,10 +7,12 @@ import java.util.UUID;
 
 /** One attributed limits change, exactly as recorded. */
 public record LimitsHistoryResponse(UUID entryId, BigDecimal maxIntentAmount,
-    BigDecimal maxPayoutAmount, Instant validFrom, UUID createdBy, String createdByLabel) {
+    BigDecimal maxPayoutAmount, BigDecimal maxDailyIntentVolume, Instant validFrom,
+    UUID createdBy, String createdByLabel) {
 
   public static LimitsHistoryResponse from(PaymentLimitsEntry entry) {
     return new LimitsHistoryResponse(entry.entryId(), entry.maxIntentAmount(),
-        entry.maxPayoutAmount(), entry.validFrom(), entry.createdBy(), entry.createdByLabel());
+        entry.maxPayoutAmount(), entry.maxDailyIntentVolume(), entry.validFrom(),
+        entry.createdBy(), entry.createdByLabel());
   }
 }

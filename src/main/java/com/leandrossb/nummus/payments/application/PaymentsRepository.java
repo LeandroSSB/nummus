@@ -32,4 +32,8 @@ public interface PaymentsRepository {
 
   List<PaymentIntent> listByAccounts(List<UUID> accountPublicIds, String status,
       UUID account, UUID after, int limit);
+
+  /** Gross amount of intents created at or after the instant, across the
+   *  given accounts — the velocity window's usage (attempts of any status). */
+  Money createdVolumeSince(List<UUID> accountPublicIds, Instant from);
 }

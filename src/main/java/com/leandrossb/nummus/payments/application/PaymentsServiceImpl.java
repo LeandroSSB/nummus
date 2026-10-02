@@ -19,6 +19,7 @@ import com.leandrossb.nummus.payments.domain.IntentNotVoidableException;
 import com.leandrossb.nummus.payments.domain.IntentStatus;
 import com.leandrossb.nummus.payments.domain.PaymentIntent;
 import com.leandrossb.nummus.payments.domain.PaymentLimitExceededException;
+import com.leandrossb.nummus.payments.domain.PaymentVelocityExceededException;
 import com.leandrossb.nummus.payments.domain.UnknownPaymentIntentException;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
@@ -78,6 +79,22 @@ public class PaymentsServiceImpl implements PaymentsService {
         && cmd.amount().amount().compareTo(limits.maxIntentAmount()) > 0) {
       throw new PaymentLimitExceededException(merchantPublicId, cmd.amount(),
           Money.of(limits.maxIntentAmount(), cmd.amount().currency()));
+    }
+    // Velocity: the rolling 24h attempt volume plus this request must stay
+    // within the daily cap. Every status counts — attempts are attempts.
+    // Unset is unlimited; the comparison is inclusive.
+    var daily = limits.maxDailyIntentVolume();
+    if (daily != null) {
+      var accountIds = accounts.listPublicIds(merchantPublicId);
+      if (!accountIds.isEmpty()) {
+        var windowUsage = repository.createdVolumeSince(accountIds,
+            Instant.now().minus(Duration.ofHours(24)));
+        var capAsMoney = Money.of(daily, cmd.amount().currency());
+        if (windowUsage.add(cmd.amount()).compareTo(capAsMoney) > 0) {
+          throw new PaymentVelocityExceededException(merchantPublicId, windowUsage,
+              cmd.amount(), capAsMoney);
+        }
+      }
     }
     var charge = network.createCharge(cmd.amount());
     var intent = repository.insert(new PaymentIntent(UUID.randomUUID(), account.publicId(),
