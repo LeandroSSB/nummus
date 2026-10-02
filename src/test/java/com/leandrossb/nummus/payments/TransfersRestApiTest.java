@@ -338,13 +338,18 @@ class TransfersRestApiTest extends IntegrationTestBase {
   void completedEventLandsInTheOutboxForTheRegisteredAudience() throws Exception {
     var from = fundedFromAccount("25.0000");
     var to = targetAccount();
-    // Deliverable needs an audience: register an endpoint for the merchant.
+    // Deliverable needs an audience — one scoped to exactly transfer.completed:
+    // the 201 itself is the catalog pin (a type outside the merchant catalog
+    // answers 400), and the probe below then rides selective fan-out rather
+    // than subscribe-all.
     mockMvc.perform(post("/v1/webhook-endpoints")
             .header("Authorization", "Bearer " + merchantKey)
             .header(KEY, UUID.randomUUID().toString())
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"url\":\"" + ApiDrivers.loopbackUrl("transfer-completed") + "\"}"))
-        .andExpect(status().isCreated());
+            .content("{\"url\":\"" + ApiDrivers.loopbackUrl("transfer-completed")
+                + "\",\"eventTypes\":[\"transfer.completed\"]}"))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.eventTypes[0]").value("transfer.completed"));
 
     String body = createTransfer(from.publicId().toString(), to.publicId().toString(), "25.0000")
         .getResponse().getContentAsString();

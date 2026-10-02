@@ -27,6 +27,7 @@ import com.leandrossb.nummus.payments.domain.Transfer;
 import com.leandrossb.nummus.payments.domain.UnknownTransferException;
 import com.leandrossb.nummus.psp_simulator.application.SimulatorService;
 import com.leandrossb.nummus.testutils.IntegrationTestBase;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -81,6 +82,12 @@ class TransfersServiceTest extends IntegrationTestBase {
   @Autowired
   private Ledger ledger;
 
+  /** The context's own registry — shared with every suite driving the real
+   *  beans, so counter pins here are before/after deltas, never absolute
+   *  values (the unit suites' private {@code SimpleMeterRegistry} luxury). */
+  @Autowired
+  private MeterRegistry registry;
+
   private UUID merchantId;
   private PaymentAccount from;
   private PaymentAccount to;
@@ -131,6 +138,10 @@ class TransfersServiceTest extends IntegrationTestBase {
     assertEquals(0, accountsService.balance(merchantId, to.publicId())
         .compareTo(Money.ofBrl("0.0000")));
 
+    // The shared registry's pre-value: the counter pin is the delta below.
+    double completedBefore =
+        registry.counter("nummus.transfers", "outcome", "completed").count();
+
     var transfer = transferOf(from.publicId(), to.publicId(), "30.0000");
 
     // Booked balances move by exactly the amount, in opposite directions.
@@ -150,6 +161,11 @@ class TransfersServiceTest extends IntegrationTestBase {
       assertTrue(payload.contains(
           "\"journalTransactionId\":\"" + transfer.journalTransactionPublicId() + "\""), payload);
     }
+    // The registry pin: this one completed transfer counts its line on
+    // nummus.transfers{outcome=completed} — a delta, because the registry is
+    // the shared context's, not a private SimpleMeterRegistry.
+    assertTrue(registry.counter("nummus.transfers", "outcome", "completed").count()
+        - completedBefore >= 1.0);
   }
 
   @Test
