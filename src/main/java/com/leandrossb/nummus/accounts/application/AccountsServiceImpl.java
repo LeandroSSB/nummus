@@ -11,6 +11,7 @@ import com.leandrossb.nummus.ledger.domain.AccountType;
 import com.leandrossb.nummus.ledger.domain.Direction;
 import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.Page;
+import com.leandrossb.nummus.ledger.domain.StatementLine;
 import java.time.Instant;
 import java.util.Currency;
 import java.util.List;
@@ -111,6 +112,14 @@ public class AccountsServiceImpl implements AccountsService {
     var inFlight = moneyInFlight.sums(publicId);
     return new ComposedStatement(account, naturalSigned(account, raw.balance()),
         inFlight.pendingIncoming(), inFlight.reservedOutgoing(), raw.lines());
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<StatementLine> statementLinesForExport(UUID merchantPublicId, UUID publicId,
+      int limit) {
+    var account = require(merchantPublicId, publicId);
+    return ledger.statementLinesUpTo(account.ledgerAccountPublicId(), limit);
   }
 
   @Override

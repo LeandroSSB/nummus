@@ -77,3 +77,4 @@ In active development. Current milestones:
 - [x] M26 — Velocity limits (rolling daily volume)
 - [x] M27 — Internal transfers (intra-merchant)
 - [x] M28 — Merchant data export (CSV)
+- [x] M29 — Statement export completeness

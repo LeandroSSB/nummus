@@ -10,6 +10,7 @@ import com.leandrossb.nummus.ledger.domain.Money;
 import com.leandrossb.nummus.ledger.domain.Page;
 import com.leandrossb.nummus.ledger.domain.PostedTransaction;
 import com.leandrossb.nummus.ledger.domain.PostingDraft;
+import com.leandrossb.nummus.ledger.domain.StatementLine;
 import com.leandrossb.nummus.ledger.domain.TooFewPostingsException;
 import com.leandrossb.nummus.ledger.domain.TransactionAlreadyReversedException;
 import com.leandrossb.nummus.ledger.domain.UnbalancedTransactionException;
@@ -134,6 +135,13 @@ public class LedgerServiceImpl implements Ledger {
     return new AccountStatement(account,
         Money.of(repository.rawBalance(accountPublicId), account.currency()),
         repository.statementLines(accountPublicId, page.offset(), page.limit()));
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<StatementLine> statementLinesUpTo(UUID accountPublicId, int limit) {
+    requireAccount(accountPublicId);
+    return repository.statementLinesUpTo(accountPublicId, limit);
   }
 
   @Override

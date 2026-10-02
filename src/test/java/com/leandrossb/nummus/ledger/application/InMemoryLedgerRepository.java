@@ -96,4 +96,9 @@ public class InMemoryLedgerRepository implements LedgerRepository {
         .limit(limit)
         .toList();
   }
+
+  @Override
+  public List<StatementLine> statementLinesUpTo(UUID accountPublicId, int limit) {
+    return statementLines(accountPublicId, 0, limit);
+  }
 }
